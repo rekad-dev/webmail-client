@@ -12,6 +12,14 @@
   PostgreSQL, an eight-hour maximum lifetime, refresh serialization, and local
   deletion on logout. The browser receives only the encrypted Auth.js session
   cookie, not Stalwart tokens.
+- Refresh transport/server/malformed-response failures preserve the session
+  for retry; an explicit OAuth `invalid_grant` deletes it. Basic client
+  credentials are form-encoded before Base64. Expired rows are removed during
+  sign-in and session checks, but there is no scheduled cleanup runner.
+- Logout still has a failure edge: Auth.js clears its cookie even when the
+  sign-out event fails, so a copied cookie can remain usable if PostgreSQL
+  could not delete the server row. A retry-safe sign-out route needs a separate
+  design.
 - Local route checks passed: provider discovery returned `stalwart` with the
   expected callback shape; session returned `null`; unauthenticated mailbox
   status returned `401`.
@@ -19,6 +27,8 @@
   token-encryption key, but `DATABASE_URL` and the existing client's token
   authentication settings are not configured. The local callback is not
   registered with Stalwart.
+- Latest review-fix verification passed: 14 tests, `pnpm typecheck`, and
+  `pnpm build`. No database-backed operation or browser login was run.
 - The existing `webmail` client and server-wide registration policy were not
   changed. `requireClientRegistration` and `anonymousClientRegistration` remain
   unchanged; the missing `stalwart-webui` record is deferred hardening, not an

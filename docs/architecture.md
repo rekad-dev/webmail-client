@@ -60,6 +60,13 @@ storage, or client-visible session values. `DATABASE_URL` must point to a
 shared durable PostgreSQL service for deployment; function memory and local
 disk are not session stores.
 
+Refresh keeps the session on network, server, or malformed-response failures
+so a later request can retry; only an explicit OAuth `invalid_grant` removes the
+session. Expired rows are opportunistically swept during sign-in and session
+checks; no scheduled cleanup runner is configured. A database failure during
+the Auth.js sign-out event remains a known risk because Auth.js clears the
+browser cookie even if that event fails.
+
 The user confirmed that the existing `webmail` client is the app client; its
 registered callback matches this implementation. The audit did not find
 `stalwart-webui`, which remains a future hardening prerequisite and does not

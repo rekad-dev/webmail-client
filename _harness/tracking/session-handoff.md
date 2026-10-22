@@ -15,6 +15,15 @@ nonce checks, validates the OIDC identity, verifies OAuth-token JMAP mailbox
 access, and stores encrypted tokens in PostgreSQL behind an encrypted Auth.js
 session cookie.
 
+After the implementation review, refresh now preserves the application session
+for transport, server, and malformed-response failures; an explicit
+`invalid_grant` revokes it. Basic client credentials are form-encoded before
+Base64 encoding. Expired rows are opportunistically removed on sign-in and
+session lookups. This sweep has no scheduled runner yet, so dormant expired
+rows can remain until the database is accessed again. Auth.js clears its cookie
+even when the sign-out event fails; the replayable-row failure path still needs
+a dedicated design and remains unverified.
+
 No Stalwart OAuth client or global setting was changed. Keep
 `requireClientRegistration` and `anonymousClientRegistration` unchanged. The
 missing `stalwart-webui` record is a future hardening prerequisite and not an
