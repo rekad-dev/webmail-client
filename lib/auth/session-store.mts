@@ -8,6 +8,7 @@ import {
   encryptOAuthTokens,
   type StoredOAuthTokens,
 } from "./token-crypto.mts";
+import { encodeOAuthClientBasicCredentials } from "./oauth-client-auth.mts";
 
 const APP_SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
 const ACCESS_TOKEN_REFRESH_SKEW_MS = 45_000;
@@ -187,10 +188,10 @@ async function refreshOAuthTokens(
   if (authentication.method === "client_secret_basic" && authentication.secret) {
     headers.set(
       "authorization",
-      `Basic ${Buffer.from(
-        `${authentication.clientId}:${authentication.secret}`,
-        "utf8",
-      ).toString("base64")}`,
+      `Basic ${encodeOAuthClientBasicCredentials(
+        authentication.clientId,
+        authentication.secret,
+      )}`,
     );
   } else if (
     authentication.method === "client_secret_post" &&
