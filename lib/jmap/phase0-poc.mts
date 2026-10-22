@@ -342,6 +342,23 @@ function mailboxGetRequest(accountId: string) {
   };
 }
 
+function getPrimaryMailAccountId(sessionValue: unknown): string {
+  const session = sessionValue as JmapSession;
+  const accountId = session.primaryAccounts?.[MAIL_CAPABILITY];
+  const account =
+    typeof accountId === "string" ? session.accounts?.[accountId] : undefined;
+  if (
+    !accountId ||
+    !account ||
+    !account.accountCapabilities?.[MAIL_CAPABILITY]
+  ) {
+    throw new JmapPocError(
+      "The authenticated JMAP session did not provide a primary mail account.",
+    );
+  }
+  return accountId;
+}
+
 function summarizeMailboxResponse(responseJson: unknown): {
   mailboxCount: number;
   roles: string[];
@@ -391,6 +408,55 @@ function summarizeMailboxResponse(responseJson: unknown): {
   }
 
   return { mailboxCount: payload.list.length, roles: [...roleSet].sort() };
+}
+
+async function fetchMailboxSummary({
+  apiUrl,
+  accountId,
+  authorization,
+  fetchImpl,
+}: {
+  apiUrl: URL;
+  accountId: string;
+  authorization: string;
+  fetchImpl: typeof fetch;
+}): Promise<{ mailboxCount: number; roles: string[] }> {
+  let response;
+  try {
+    response = await fetchImpl(apiUrl, {
+      method: "POST",
+      headers: {
+        authorization,
+        accept: "application/json",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(mailboxGetRequest(accountId)),
+      redirect: "manual",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch {
+    throw new JmapPocError(
+      "Could not reach the configured JMAP API endpoint (network or TLS failure).",
+    );
+  }
+
+  if ([301, 302, 303, 307, 308].includes(response.status)) {
+    throw new JmapPocError(
+      "The advertised JMAP API endpoint redirected. Update trusted endpoint configuration and rediscover the session.",
+    );
+  }
+  if (!response.ok) {
+    throw new JmapPocError(`JMAP Mailbox/get returned HTTP ${response.status}.`);
+  }
+
+  let responseJson: unknown;
+  try {
+    responseJson = await response.json();
+  } catch {
+    throw new JmapPocError("JMAP Mailbox/get returned invalid JSON.");
+  }
+
+  return summarizeMailboxResponse(responseJson);
 }
 
 /**
@@ -458,56 +524,73 @@ export async function runJmapPoc({
     );
   }
 
-  const accountId = session.primaryAccounts?.[MAIL_CAPABILITY];
-  const account =
-    typeof accountId === "string" ? session.accounts?.[accountId] : undefined;
-  if (
-    !accountId ||
-    !account ||
-    !account.accountCapabilities?.[MAIL_CAPABILITY]
-  ) {
-    throw new JmapPocError(
-      "The authenticated JMAP session did not provide a primary mail account.",
-    );
-  }
-
-  let response;
-  try {
-    response = await fetchImpl(endpointUrls.apiUrl, {
-      method: "POST",
-      headers: {
-        authorization,
-        accept: "application/json",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(mailboxGetRequest(accountId)),
-      redirect: "manual",
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-  } catch {
-    throw new JmapPocError(
-      "Could not reach the configured JMAP API endpoint (network or TLS failure).",
-    );
-  }
-
-  if ([301, 302, 303, 307, 308].includes(response.status)) {
-    throw new JmapPocError(
-      "The advertised JMAP API endpoint redirected. Update trusted endpoint configuration and rediscover the session.",
-    );
-  }
-  if (!response.ok) {
-    throw new JmapPocError(`JMAP Mailbox/get returned HTTP ${response.status}.`);
-  }
-
-  let responseJson: unknown;
-  try {
-    responseJson = await response.json();
-  } catch {
-    throw new JmapPocError("JMAP Mailbox/get returned invalid JSON.");
-  }
-
+  const accountId = getPrimaryMailAccountId(session);
+  const mailboxSummary = await fetchMailboxSummary({
+    apiUrl: endpointUrls.apiUrl,
+    accountId,
+    authorization,
+    fetchImpl,
+  });
   return {
     authenticated: true,
-    ...summarizeMailboxResponse(responseJson),
+    ...mailboxSummary,
   };
+}
+
+export async function runJmapOAuthAccessCheck({
+  accessToken,
+  sessionUrl = "https://mail.rekad.id/.well-known/jmap",
+  trustedOrigins = ["https://mail.rekad.id"],
+  allowInsecureHttp = false,
+  fetchImpl = fetch,
+}: {
+  accessToken: string;
+  sessionUrl?: string;
+  trustedOrigins?: string[];
+  allowInsecureHttp?: boolean;
+  fetchImpl?: typeof fetch;
+}): Promise<{ accountId: string }> {
+  if (
+    typeof accessToken !== "string" ||
+    !/^[A-Za-z0-9\-._~+/]+=*$/.test(accessToken)
+  ) {
+    throw new JmapPocError("The OAuth access token is invalid.");
+  }
+
+  const parsedSessionUrl = parseUrl(sessionUrl, undefined, allowInsecureHttp);
+  if (parsedSessionUrl.search) {
+    throw new JmapPocError(
+      "STALWART_JMAP_SESSION_URL cannot include a query string.",
+    );
+  }
+
+  const allowedOrigins = parseTrustedOrigins(
+    trustedOrigins,
+    parsedSessionUrl,
+    allowInsecureHttp,
+  );
+  const authorization = `Bearer ${accessToken}`;
+  const { session, sessionUrl: resolvedSessionUrl } = await fetchSession({
+    sessionUrl: parsedSessionUrl,
+    trustedOrigins: allowedOrigins,
+    allowInsecureHttp,
+    authorization,
+    fetchImpl,
+  });
+  const endpoints = validateSession(
+    session,
+    resolvedSessionUrl,
+    allowedOrigins,
+    allowInsecureHttp,
+  );
+  const accountId = getPrimaryMailAccountId(session);
+
+  await fetchMailboxSummary({
+    apiUrl: endpoints.apiUrl,
+    accountId,
+    authorization,
+    fetchImpl,
+  });
+
+  return { accountId };
 }

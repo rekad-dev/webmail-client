@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import test from "node:test";
 
-import { runJmapPoc } from "../lib/jmap/phase0-poc.mts";
+import {
+  runJmapOAuthAccessCheck,
+  runJmapPoc,
+} from "../lib/jmap/phase0-poc.mts";
 
 const CORE = "urn:ietf:params:jmap:core";
 const MAIL = "urn:ietf:params:jmap:mail";
@@ -234,4 +237,46 @@ test("requires both credentials for the authenticated smoke check", async () => 
     }),
     /Set both JMAP_TEST_USERNAME and JMAP_TEST_PASSWORD/,
   );
+});
+
+test("verifies OAuth mailbox access with a user bearer token without returning mailbox data", async () => {
+  const { fetchImpl, calls } = makeFetch();
+  const accessToken = randomBytes(32).toString("base64url");
+
+  const result = await runJmapOAuthAccessCheck({
+    accessToken,
+    sessionUrl: `${TEST_ORIGIN}/.well-known/jmap`,
+    fetchImpl,
+  });
+
+  assert.deepEqual(result, { accountId: "test-account" });
+  assert.equal(calls.length, 3);
+  for (const call of calls) {
+    assert.equal(
+      new Headers(call.options.headers).get("authorization"),
+      `Bearer ${accessToken}`,
+    );
+  }
+  const apiRequest = JSON.parse(String(calls[2].options.body));
+  assert.deepEqual(apiRequest.methodCalls, [
+    ["Mailbox/get", { accountId: "test-account", ids: null }, "phase0-mailboxes"],
+  ]);
+  assert.equal(calls[2].options.redirect, "manual");
+});
+
+test("rejects malformed OAuth bearer tokens before making a JMAP request", async () => {
+  let fetchCount = 0;
+
+  await assert.rejects(
+    runJmapOAuthAccessCheck({
+      accessToken: "token\r\nAuthorization: Basic attacker",
+      sessionUrl: `${TEST_ORIGIN}/.well-known/jmap`,
+      fetchImpl: async () => {
+        fetchCount += 1;
+        throw new Error("fetch should not run");
+      },
+    }),
+    /OAuth access token is invalid/,
+  );
+  assert.equal(fetchCount, 0);
 });
