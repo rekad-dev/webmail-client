@@ -9,6 +9,10 @@ import {
   type StoredOAuthTokens,
 } from "./token-crypto.mts";
 import { encodeOAuthClientBasicCredentials } from "./oauth-client-auth.mts";
+import {
+  isInvalidGrantOAuthError,
+  OAuthTokenRefreshError,
+} from "./oauth-refresh-errors.mts";
 
 const APP_SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
 const ACCESS_TOKEN_REFRESH_SKEW_MS = 45_000;
@@ -210,20 +214,30 @@ async function refreshOAuthTokens(
       signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS),
     });
   } catch {
-    throw new Error("Stalwart OAuth token refresh failed.");
+    throw new OAuthTokenRefreshError(false);
   }
 
   if (!response.ok || [301, 302, 303, 307, 308].includes(response.status)) {
-    throw new Error("Stalwart OAuth token refresh failed.");
+    let error: unknown;
+    try {
+      error = await response.json();
+    } catch {
+      error = undefined;
+    }
+    throw new OAuthTokenRefreshError(isInvalidGrantOAuthError(error));
   }
 
   let value: unknown;
   try {
     value = await response.json();
   } catch {
-    throw new Error("Stalwart returned an invalid OAuth token response.");
+    throw new OAuthTokenRefreshError(false);
   }
-  return validateRefreshedToken(value);
+  try {
+    return validateRefreshedToken(value);
+  } catch {
+    throw new OAuthTokenRefreshError(false);
+  }
 }
 
 export async function createOAuthSession({
@@ -352,7 +366,10 @@ export async function getAuthenticatedOAuthSession(
     let refreshed: RefreshedTokenResponse;
     try {
       refreshed = await refreshOAuthTokens(tokens.refreshToken);
-    } catch {
+    } catch (error) {
+      if (!(error instanceof OAuthTokenRefreshError)) throw error;
+      if (!error.shouldRevokeSession) throw error;
+
       await transaction`
         DELETE FROM app_oauth_sessions
         WHERE session_hash = ${sessionHash}
