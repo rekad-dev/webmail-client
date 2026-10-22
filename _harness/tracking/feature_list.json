@@ -1,0 +1,68 @@
+{
+  "features": [
+    {
+      "id": "phase-0",
+      "name": "Project discovery and JMAP proof of concept",
+      "description": "Confirm repository state, current documentation, secure Stalwart connectivity, session discovery, required capabilities, and read-only mailbox metadata.",
+      "dependencies": [],
+      "status": "complete"
+    },
+    {
+      "id": "phase-1",
+      "name": "Secure authentication",
+      "description": "Authenticate existing Stalwart users and provide secure, isolated application sessions.",
+      "dependencies": ["phase-0"],
+      "status": "pending"
+    },
+    {
+      "id": "phase-2",
+      "name": "Inbox and mailbox listing",
+      "description": "Show the authenticated user's real mailbox and messages with pagination, refresh, and clear states.",
+      "dependencies": ["phase-1"],
+      "status": "pending"
+    },
+    {
+      "id": "phase-3",
+      "name": "Safe email reading",
+      "description": "Display plain-text and safely isolated HTML email, metadata, read state, and attachment metadata.",
+      "dependencies": ["phase-2"],
+      "status": "pending"
+    },
+    {
+      "id": "phase-4",
+      "name": "Compose and send",
+      "description": "Implement the first end-to-end send workflow through JMAP and Stalwart without adding an SMTP client.",
+      "dependencies": ["phase-3"],
+      "status": "pending"
+    },
+    {
+      "id": "phase-5",
+      "name": "Essential mailbox actions",
+      "description": "Add reply, forward, read state, star, move, archive, trash, search, threading, and drafts as accepted.",
+      "dependencies": ["phase-4"],
+      "status": "pending"
+    },
+    {
+      "id": "phase-6",
+      "name": "Attachments and UX refinement",
+      "description": "Add secure attachment handling, keyboard support, responsive layouts, accessibility, and UX refinements.",
+      "dependencies": ["phase-5"],
+      "status": "pending"
+    },
+    {
+      "id": "phase-7",
+      "name": "Limited offline storage and synchronization",
+      "description": "Optional bounded mail caching and JMAP state synchronization after online flows are stable.",
+      "dependencies": ["phase-6"],
+      "status": "pending"
+    },
+    {
+      "id": "phase-8",
+      "name": "Notifications and real-time updates",
+      "description": "Optional polling, JMAP event updates, browser notifications, and background push only when justified.",
+      "dependencies": ["phase-6"],
+      "status": "pending"
+    }
+  ]
+}
+
