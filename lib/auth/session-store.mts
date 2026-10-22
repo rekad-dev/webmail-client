@@ -314,7 +314,12 @@ export async function getOAuthSessionSummary(
   sessionId: string,
 ): Promise<{ expiresAt: Date } | null> {
   const sessionHash = hashSessionId(sessionId);
-  const rows = await getSql()<SessionRow[]>`
+  const sql = getSql();
+  await sql`
+    DELETE FROM app_oauth_sessions
+    WHERE expires_at <= now()
+  `;
+  const rows = await sql<SessionRow[]>`
     SELECT session_hash, subject, encrypted_tokens, expires_at
     FROM app_oauth_sessions
     WHERE session_hash = ${sessionHash}
@@ -330,6 +335,10 @@ export async function getAuthenticatedOAuthSession(
 ): Promise<AuthenticatedOAuthSession | null> {
   const sessionHash = hashSessionId(sessionId);
   const sql = getSql();
+  await sql`
+    DELETE FROM app_oauth_sessions
+    WHERE expires_at <= now()
+  `;
 
   return sql.begin(async (transaction) => {
     const rows = await transaction<SessionRow[]>`
