@@ -5,43 +5,32 @@ scope: progress
 
 # Progress
 
-## Current state
+## Phase 1 authentication in progress
 
-- Phase 0 is complete. The minimal Next.js App Router shell and local JMAP
-  proof of concept are implemented.
-- Public JMAP session discovery succeeds and validates the advertised API,
-  upload, download, and event-source origins.
-- Automated checks passed: 7 focused tests, typecheck, and production build.
-- Authenticated `Mailbox/get` passed against Stalwart using the dedicated local
-  test account and returned 5 mailboxes (`drafts`, `inbox`, `junk`, `sent`,
-  `trash`).
-- The repository has no Git metadata; the harness instructions say not to
-  initialize Git solely to make micro-commits.
+- Auth.js OIDC login is implemented for the existing Stalwart client `webmail`.
+- The callback is the registered exact URI
+  `https://webmail.rekad.id/api/auth/callback/stalwart`.
+- The callback requires PKCE, state, and nonce checks, validates the OIDC
+  subject, and performs OAuth-token JMAP `Mailbox/get` before creating a
+  session.
+- PostgreSQL stores a hash of each opaque app-session identifier and AES-GCM
+  encrypted access/refresh tokens. The browser session cookie is Auth.js's
+  encrypted JWE cookie; no Stalwart token is returned to client JavaScript.
+- Local route checks passed: provider discovery reports `stalwart` and the
+  expected callback shape; the empty session is `null`; unauthenticated status
+  is `401`.
+- Full browser login is not verified. Local `DATABASE_URL` and existing client
+  token authentication configuration (method and secret, if required) are
+  missing, and localhost callback URIs are not registered.
+- No Stalwart client or server-wide setting has been changed. Keep
+  `requireClientRegistration` and `anonymousClientRegistration` unchanged.
+  `stalwart-webui` registration remains a future hardening prerequisite, not
+  an MVP blocker.
 
 ## Next
 
-Phase 0's real-server acceptance check is reviewed and complete. The Phase 1
-Authorization Code + PKCE plan is drafted in the Traycer artifact. Public
-metadata and the expected admin/account callback routes have been checked. The
-live `requireClientRegistration` and `anonymousClientRegistration` values and
-global registration policy remains unknown. No Stalwart OAuth client or global
-setting has been changed. The newly configured admin key authenticates, but it
-is not read-only: its effective permissions include `sysOAuthClientGet`,
-`sysOAuthClientCreate`, and `sysOAuthClientUpdate`, but not
-`sysOidcProviderGet`. Its account flags report `sysOAuthClientList=false`,
-although the documented read-only `x:OAuthClient/query` call succeeded. The
-unfiltered query returned one ID; fetching it returned the `webmail` record
-with callback
-`https://webmail.rekad.id/api/auth/callback/stalwart`; it did not include
-`stalwart-webui`. This callback does not match the planned route, and the repo
-has no Auth.js callback implementation. No write method was called.
-
-Next, replace or restrict the admin key to read-only permissions
-(`authenticate`, `sysOidcProviderGet`, `sysOAuthClientQuery`,
-`sysOAuthClientGet`) and remove client-create/update. Finish the provider
-settings audit, then confirm whether `webmail` is the intended app client
-before creating or changing any client record. Implement and verify
-the working authentication flow with global policy unchanged. Consider optional
-`requireClientRegistration` hardening only after the flow works and the user
-explicitly approves a reviewed server-wide change.
-
+Configure the shared PostgreSQL URL and the existing `webmail` client's token
+authentication method/secret if required. Then complete browser-based login at
+the registered production callback and verify session persistence, refresh or
+bounded access-token expiry, logout, and OAuth-token `Mailbox/get`. Do not begin
+Phase 2 before successful end-to-end authentication.

@@ -1,32 +1,48 @@
 # Progress
 
-## Current milestone: Phase 0 complete
+## Current milestone: Phase 1 authentication in progress
+
+- Added Auth.js Stalwart OIDC Authorization Code + PKCE using the existing
+  `webmail` client and registered callback
+  `https://webmail.rekad.id/api/auth/callback/stalwart`.
+- Auth.js verifies PKCE, state, and nonce; callback handling verifies the
+  OIDC identity, then requires authenticated JMAP `Mailbox/get` before creating
+  an application session.
+- App sessions use a hashed opaque identifier, encrypted token payloads in
+  PostgreSQL, an eight-hour maximum lifetime, refresh serialization, and local
+  deletion on logout. The browser receives only the encrypted Auth.js session
+  cookie, not Stalwart tokens.
+- Local route checks passed: provider discovery returned `stalwart` with the
+  expected callback shape; session returned `null`; unauthenticated mailbox
+  status returned `401`.
+- End-to-end login remains unverified. `.env.local` has `AUTH_SECRET` and the
+  token-encryption key, but `DATABASE_URL` and the existing client's token
+  authentication settings are not configured. The local callback is not
+  registered with Stalwart.
+- The existing `webmail` client and server-wide registration policy were not
+  changed. `requireClientRegistration` and `anonymousClientRegistration` remain
+  unchanged; the missing `stalwart-webui` record is deferred hardening, not an
+  MVP blocker.
+
+## Phase 0 record
 
 - The workspace had the project brief and harness instructions, but no app
   scaffold, package manifest, environment template, Git metadata, or existing
   deployment configuration.
 - Node.js `v24.14.0`, npm `11.9.0`, and pnpm `10.33.0` are available.
-- `https://mail.rekad.id/.well-known/jmap` returned a same-origin `307` to
-  `/jmap/session`; the session request returned `200` with JMAP Core, JMAP Mail,
-  JMAP Submission, and other capabilities. The unauthenticated session had no
-  account entries.
-- `https://mail.rekad.id/.well-known/oauth-authorization-server` returned
-  `200` and advertises Authorization Code, refresh tokens, `openid`, and PKCE
-  `S256`. OAuth Authorization Code + PKCE is the recommended Phase 1 direction;
-  client registration and callback requirements remain to be checked.
-- Added the minimal Next.js 16.4.2 / React 19.3.1 shell, strict TypeScript
-  configuration, safe `.env.example`, and local JMAP discovery/`Mailbox/get`
-  commands. Authenticated mailbox access is verified with the dedicated test
-  account configured in `.env.local`.
-- Verification passed: 7 focused Node tests, `pnpm typecheck`, `pnpm build`,
-  `pnpm jmap:discover`, and authenticated `pnpm jmap:smoke`. The real smoke
-  check returned 5 mailboxes with roles `drafts`, `inbox`, `junk`, `sent`, and
-  `trash`.
+- JMAP discovery succeeded at `https://mail.rekad.id/.well-known/jmap`, and
+  authenticated `Mailbox/get` passed against the dedicated local test account
+  with five mailbox roles: `drafts`, `inbox`, `junk`, `sent`, and `trash`.
+- Existing Phase 0 verification passed: 7 focused tests, `pnpm typecheck`,
+  `pnpm build`, `pnpm jmap:discover`, and `pnpm jmap:smoke`.
 - No external service or mail-server configuration was changed, and no message
   was sent or mutated.
 
-## Remaining follow-up before Phase 1
+## Remaining Phase 1 follow-up
 
-The application's private-network route to Stalwart has not been verified, and
-OAuth client registration/callback requirements remain to be checked before
-Phase 1 implementation.
+Configure the shared PostgreSQL database and the existing `webmail` client's
+token-auth method and secret if applicable. Then exercise the registered
+production callback in a browser and verify login, session persistence, refresh
+or bounded expiration, logout, and OAuth-token `Mailbox/get`. Keep all global
+Stalwart registration settings unchanged and do not begin Phase 2 before this
+verification succeeds.

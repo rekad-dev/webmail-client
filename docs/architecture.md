@@ -41,32 +41,39 @@ infrastructure has been changed.
 
 ## Authentication direction
 
-Phase 1 will use Stalwart Authorization Code + PKCE S256. The public webmail
+Phase 1 uses Stalwart Authorization Code + PKCE S256. The public webmail
 origin is `https://webmail.rekad.id`, and the Stalwart issuer is
-`https://mail.rekad.id`; the app callback is
-`https://webmail.rekad.id/auth/callback`. The browser authenticates at Stalwart
-and the Next.js BFF exchanges the authorization code server-side. The app does
-not receive or retain the user's Stalwart password. See the Phase 1 OAuth plan
-artifact for the flow, registration, and preflight details.
+`https://mail.rekad.id`. Auth.js uses provider ID `stalwart`, so the callback
+is the existing registered URI
+`https://webmail.rekad.id/api/auth/callback/stalwart`. The existing Stalwart
+client ID `webmail` is reused; no client was created or changed. Auth.js
+handles the server-side code exchange and PKCE, state, and nonce checks. The
+app does not receive or retain the user's Stalwart password. See the Phase 1
+OAuth plan artifact for the flow, registration, and preflight details.
 
-The application session should use an opaque identifier in a secure,
-HTTP-only, same-site cookie. OAuth access and refresh tokens must remain in a
-server-side session store and be protected at rest. Do not place Stalwart
-credentials or tokens in browser JavaScript, local storage, or client-visible
-cookies. Vercel is the target host, so OAuth transactions and sessions require
-a shared durable store rather than function memory or local disk. PostgreSQL
-is the current default candidate; the provider remains configurable.
+Auth.js sets an encrypted, HTTP-only, same-site cookie containing only an
+opaque application session reference. OAuth access and refresh tokens remain
+server-side in PostgreSQL and are protected at rest with AES-256-GCM. The
+server stores only a hash of the session reference and encrypted token data.
+Do not place Stalwart credentials or tokens in browser JavaScript, local
+storage, or client-visible session values. `DATABASE_URL` must point to a
+shared durable PostgreSQL service for deployment; function memory and local
+disk are not session stores.
 
-The live unfiltered OAuth client query returned one existing `webmail` record
-with `https://webmail.rekad.id/api/auth/callback/stalwart`; this repo has no
-matching Auth.js callback implementation. Preserve that record until its
-ownership and intended callback are confirmed. The query result did not include
-`stalwart-webui`. The current key cannot read OIDC provider settings and has
-client create/update permissions despite being supplied for a read-only audit.
-`requireClientRegistration` is optional server-wide hardening: do not change it
-until the app flow works, current settings and clients are audited, and the
-user explicitly approves the exact change. Also inspect the live
-`anonymousClientRegistration` value before recommending hardening.
+The user confirmed that the existing `webmail` client is the app client; its
+registered callback matches this implementation. The audit did not find
+`stalwart-webui`, which remains a future hardening prerequisite and does not
+block the webmail MVP. The live values of `requireClientRegistration` and
+`anonymousClientRegistration` have not been re-read in this implementation
+milestone; both remain unchanged. Do not change either setting without a
+separate review and the user's explicit approval. The admin API key is not used
+by application authentication or mailbox access.
+
+The implementation is in place and the local Auth.js provider/session/status
+routes have been checked. A real login is still pending: local configuration
+does not contain `DATABASE_URL` or the existing client's token-auth method and
+secret (if required), and local callback URLs are not registered with Stalwart.
+The production callback above is the one to use for end-to-end verification.
 
 ## Phase 0 proof of concept
 
