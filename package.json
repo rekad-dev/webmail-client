@@ -12,6 +12,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.test.mts",
+    "db:migrate": "node scripts/db-migrate.mts",
     "jmap:discover": "node scripts/jmap-smoke.mts --discover-only",
     "jmap:smoke": "node scripts/jmap-smoke.mts"
   },
