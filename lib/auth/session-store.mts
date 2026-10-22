@@ -124,7 +124,7 @@ function getClientAuthentication(): {
   method: "none" | "client_secret_basic" | "client_secret_post";
   secret?: string;
 } {
-  const clientId = process.env.AUTH_STALWART_ID ?? DEFAULT_CLIENT_ID;
+  const clientId = DEFAULT_CLIENT_ID;
   const methodValue =
     process.env.AUTH_STALWART_TOKEN_AUTH_METHOD ?? "client_secret_basic";
   const secret = process.env.AUTH_STALWART_SECRET;
