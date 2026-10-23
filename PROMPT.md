@@ -18,6 +18,11 @@ Do not build unnecessary abstractions, infrastructure, or speculative features.
 
 I'm building a webmail application for rekad, an organization with its own email domain.
 
+### Brand style
+
+Always write the organization and product brand as lowercase `rekad`, including
+in headings, interface copy, and documentation.
+
 ### Existing infrastructure
 
 - Domain: `rekad.id`
