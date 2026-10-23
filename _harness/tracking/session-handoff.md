@@ -19,18 +19,38 @@ OAuth-backed `Mailbox/get`, an expiry within the eight-hour app limit, and
 logout that cleared the browser session and deleted the recent PostgreSQL
 session row. No mailbox contents were returned or mutated.
 
+On 2026-10-24, guarded production logout was verified from a signed-in session:
+`/api/auth/session` was populated and `/api/auth/status` returned
+`authenticated: true` and `mailboxAccess: true`; after the CSRF-protected
+same-origin Auth.js sign-out POST, the session endpoint returned `null` and
+status returned `401`. The built-in Auth.js confirmation form POST had
+`Origin: null` in ego-browser and was correctly rejected with `403`; that
+request left the session unchanged. The standard same-origin client flow
+passed without relaxing the origin guard. The browser was left signed out.
+
 The Phase 1 home page now starts the existing `stalwart` OAuth flow with a
 server-side sign-in action and shows an active-session confirmation after
-callback. The updated page is deployed as
-`dpl_6qeqHit7E4jQEYKDv2ejF7yYRwts` at `https://webmail.rekad.id`; read-only
+callback. The sign-in-page update was first deployed as
+`dpl_6qeqHit7E4jQEYKDv2ejF7yYRwts`; the current release is
+`dpl_5JWtuf37v19z7CAiUoUSr38nkgar` at `https://webmail.rekad.id`. Read-only
 HTTP verification confirmed the anonymous page contains the sign-in button and
 returns `200`. Mailbox browsing remains Phase 2.
 
+The signed-in home state now includes an accessible CSRF-protected sign-out
+button. Commit `c9d8511` passed 22 tests, `pnpm typecheck`, and `pnpm build`;
+production deploy `dpl_5JWtuf37v19z7CAiUoUSr38nkgar` is ready at
+`https://webmail.rekad.id`. After deployment, the anonymous home page returned
+`200`, the sign-in button was present, `/api/auth/session` returned `null`, and
+`/api/auth/status` returned `401`. The new button has not yet been clicked on
+this latest deployment because the browser is signed out.
+
 For future Vercel CLI deployments, this repository is linked to the existing
 `rekad/webmail-client` project. The first deployment attempt created a separate
-`rekad/mail-client` project because the directory was not linked yet; it does
-not own `webmail.rekad.id`, has the `mail-client-nine.vercel.app` alias, and has
-not been removed.
+`rekad/mail-client` project because the directory was not linked yet. On
+2026-10-24, that extra project was deleted. Vercel's project and alias listings
+now show only `rekad/webmail-client` and its aliases, including
+`webmail.rekad.id`; neither `mail-client-nine.vercel.app` nor the extra
+project's generated alias remains.
 
 After the implementation review, refresh now preserves the application session
 for transport, server, and malformed-response failures; an explicit
@@ -43,9 +63,9 @@ the request to Auth.js. Session-ID lookup or deletion failures return `503`
 without clearing the cookie, and cross-origin requests return `403`. Local
 tests cover these behaviors. The guarded logout change was deployed as
 `dpl_CAdcJ8jV2a7aozyYrEAfaVEQviyS`; the current page release is
-`dpl_6qeqHit7E4jQEYKDv2ejF7yYRwts` at `https://webmail.rekad.id`; the browser is
-currently anonymous, so the normal production logout check awaits a fresh
-test-account sign-in. A production database outage was not simulated.
+`dpl_5JWtuf37v19z7CAiUoUSr38nkgar` at `https://webmail.rekad.id`. The guarded
+logout flow passed end to end on production; a production database outage was
+not simulated.
 
 No Stalwart OAuth client or global setting was changed. Keep
 `requireClientRegistration` and `anonymousClientRegistration` unchanged. The
@@ -56,9 +76,9 @@ access. The provider-settings audit can remain deferred.
 ## Next safe step
 
 The core production login, session persistence, OAuth-backed read-only mailbox
-access, bounded expiry, and normal logout paths now pass. Phase 1 remains open
+access, bounded expiry, and guarded logout route now pass. Phase 1 remains open
 for invalid-credential handling, multi-account isolation, forced refresh
-behavior, and the normal production logout check after sign-in. Wait for the
+behavior, and a post-deployment click of the new sign-out button. Wait for the
 second dedicated test account before account-isolation testing. Do not start
 Phase 2 automatically. Keep `requireClientRegistration` and
 `anonymousClientRegistration` unchanged; do not use the admin API key for app
