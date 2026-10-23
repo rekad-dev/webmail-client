@@ -79,13 +79,16 @@ by application authentication or mailbox access.
 The local Auth.js provider/session/status routes have been checked. The local
 environment now contains the existing `webmail` client ID and token-auth
 settings plus `DATABASE_URL`; the application session table/index migration
-has been applied. The production hostname now resolves. Production provider,
-session, CSRF, generic sign-in, and Stalwart OIDC discovery checks returned
-`200`; unauthenticated status returned `401`. The provider-specific sign-in
-route returned an empty `500` before the browser reached Stalwart. The Vercel
-CLI could not map the hostname to a project in its active scope, so production
-function logs remain unavailable. No credentials were entered, no mailbox
-request was made, and no Stalwart client or global setting was changed.
+has been applied. In production, provider, session, CSRF, generic sign-in, and
+Stalwart OIDC discovery checks returned `200`; unauthenticated status returned
+`401`. The user signed in at Stalwart and returned to the registered callback.
+Auth.js reached its JWT callback, confirming code exchange and OIDC profile
+processing, but the callback returned `500` and the app session is anonymous.
+Vercel logs show `CallbackRouteError` and an underlying `TypeError: immutable`;
+the deployed handler does not identify the failing finalization stage. The
+local reviewed diagnostics patch logs a bounded stage and allowlisted error
+class, but is not deployed. Do not deploy it without the user's explicit
+approval. No Stalwart client or global setting was changed.
 
 ## Phase 0 proof of concept
 

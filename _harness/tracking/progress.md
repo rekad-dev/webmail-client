@@ -29,18 +29,23 @@ scope: progress
 - `AUTH_STALWART_ID`, the existing client's secret and token-auth method, and
   `DATABASE_URL` are now configured locally. The ID matches `webmail`; the
   idempotent migration created the application session table and expiry index.
-- Latest verification: 15 unit tests, `pnpm typecheck`, `pnpm build`, and local
-  production route checks passed. On 2026-10-23, production providers, session,
-  generic sign-in, CSRF, and Stalwart OIDC discovery returned `200`; anonymous
-  status returned `401`. The provider-specific sign-in route returned an empty
-  `500` before redirecting to Stalwart. No credentials or mailbox access were
-  used.
-- The production hostname now resolves, but Vercel CLI cannot map it to a
-  project in its active scope, and this checkout has no linked project. Runtime
-  logs for the provider sign-in failure remain inaccessible.
-- The user-provided project ID is not found under the CLI's active team; the
-  CLI lists only `crlnravels-projects`. The correct Vercel account/team scope is
-  still needed to retrieve the route log.
+- Latest local verification: 15 unit tests, `pnpm typecheck`, `pnpm build`, and
+  local production route checks passed. The callback diagnostics are reviewed
+  but have not been deployed.
+- On 2026-10-23, the user completed Stalwart sign-in and returned to the exact
+  registered callback. Auth.js reached the JWT callback, confirming the code
+  exchange and OIDC profile processing completed, but the callback returned
+  `500`. The production browser session endpoint then returned `200` with no
+  authenticated session.
+- Vercel production logs are available. They show Auth.js `CallbackRouteError`
+  during the JWT callback with an underlying `TypeError: immutable`; the
+  deployed callback does not log the finalization stage. Production auth
+  configuration and PostgreSQL session schema/permissions were checked
+  read-only. No mailbox result or successful app session has been verified.
+- The new local diagnostic log records only a stage, an allowlisted error
+  class, and a constrained SQLSTATE/static reason when applicable. Deploying
+  it to production requires the user's explicit approval; after deployment,
+  retry sign-in to identify and fix the failing stage.
 - No Stalwart client or server-wide setting has been changed. Keep
   `requireClientRegistration` and `anonymousClientRegistration` unchanged.
   `stalwart-webui` registration remains a future hardening prerequisite, not
@@ -48,8 +53,7 @@ scope: progress
 
 ## Next
 
-Inspect the provider sign-in function error after this checkout is linked to the
-correct Vercel project/scope, fix the cause, then complete the already approved
-browser login at the registered callback and verify session persistence,
-refresh or bounded access-token expiry, logout, and OAuth-token `Mailbox/get`.
-Do not begin Phase 2 before successful end-to-end authentication.
+After approval, deploy the reviewed diagnostics, retry the existing browser
+sign-in, fix the callback failure, then verify session persistence, refresh or
+bounded access-token expiry, logout, and OAuth-token `Mailbox/get`. Do not begin
+Phase 2 before successful end-to-end authentication.

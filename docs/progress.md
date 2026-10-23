@@ -29,17 +29,20 @@
   expiry index in PostgreSQL.
 - Production route checks on 2026-10-23 returned providers `200`, anonymous
   session `200`, unauthenticated status `401`, generic sign-in `200`, and CSRF
-  `200`. Stalwart's public OIDC discovery document also returned `200` from the
-  shell. The provider-specific sign-in route returned an empty `500` before
-  redirecting to Stalwart, so no credentials or mailbox data were accessed.
-- The production hostname resolves, but the Vercel CLI cannot map it to a
-  project in its active scope and no project is linked in this checkout. The
-  function log for the failing route is therefore unavailable; end-to-end
-  login remains blocked pending project access and diagnosis.
-- The supplied project ID is not found under the CLI's active team; the CLI
-  lists only `crlnravels-projects`. The owning account/team scope or a redacted
-  runtime log is needed to continue diagnosis.
-- Latest verification passed: 15 tests, `pnpm typecheck`, and `pnpm build`.
+  `200`. The user then signed in at Stalwart and returned to the registered
+  callback. Auth.js reached its JWT callback, so code exchange and OIDC profile
+  processing completed, but the callback returned `500`; the subsequent
+  session check returned `200` without an authenticated session.
+- Vercel logs show an Auth.js `CallbackRouteError` during the JWT callback and
+  an underlying `TypeError: immutable`. The currently deployed handler logs
+  only a generic error, so the failing finalization stage remains unknown.
+  Production auth environment metadata and the app session table/permissions
+  were checked read-only. No successful app-level mailbox check has been
+  verified.
+- A reviewed local diagnostics change adds stage and allowlisted error-class
+  logging while omitting raw errors, identities, and credentials. It has passed
+  15 tests, `pnpm typecheck`, and `pnpm build`; it is not deployed. Explicit
+  approval is required before publishing it to production.
 - The existing `webmail` client and server-wide registration policy were not
   changed. `requireClientRegistration` and `anonymousClientRegistration` remain
   unchanged; the missing `stalwart-webui` record is deferred hardening, not an
@@ -62,8 +65,8 @@
 
 ## Remaining Phase 1 follow-up
 
-Resolve the Vercel provider sign-in `500` using the function log, then repeat
-the approved isolated login flow at the registered production callback and
-verify session persistence, refresh or bounded expiration, logout, and
-OAuth-token `Mailbox/get`. Keep all global Stalwart registration settings
-unchanged and do not begin Phase 2 before this verification succeeds.
+After approval to deploy the diagnostics, retry the approved browser login,
+identify and fix the callback failure, then verify session persistence, refresh
+or bounded access-token expiry, logout, and OAuth-token `Mailbox/get`. Keep all
+global Stalwart registration settings unchanged and do not begin Phase 2 before
+this verification succeeds.

@@ -8,8 +8,8 @@ scope: session-handoff
 ## Current status
 
 Phase 0 is complete. Phase 1 has a working implementation checkpoint but is
-not complete because end-to-end login has not been tested. Auth.js uses the
-existing `webmail` client and exact registered callback
+not complete because end-to-end login failed during callback finalization.
+Auth.js uses the existing `webmail` client and exact registered callback
 `https://webmail.rekad.id/api/auth/callback/stalwart`. It performs PKCE/state/
 nonce checks, validates the OIDC identity, verifies OAuth-token JMAP mailbox
 access, and stores encrypted tokens in PostgreSQL behind an encrypted Auth.js
@@ -32,24 +32,24 @@ access. The provider-settings audit can remain deferred.
 
 ## Next safe step
 
-The local environment now has `AUTH_STALWART_ID=webmail`, the existing client's
-token-auth settings, and `DATABASE_URL`. The idempotent migration applied the
-application-owned session table and expiry index. Production now resolves:
-providers, anonymous session, generic sign-in, CSRF, and public OIDC discovery
-checks succeeded, while unauthenticated status returned `401`. The
-provider-specific sign-in route returned an empty `500` before OAuth began. No
-credentials were entered and no mailbox request was made. The Vercel CLI cannot
-map the hostname to a project in its active scope, and this checkout has no
-linked project. The user supplied a project ID, but Vercel reports it is not
-found under the active team; the CLI lists only `crlnravels-projects`. Get the
-owning account/team scope or a redacted function log, inspect the failure, then
-retry the same approved isolated flow and verify session persistence, refresh
-or bounded expiry, logout, and OAuth-token `Mailbox/get`. Do not start Phase 2
-until the end-to-end login succeeds.
+On 2026-10-23, the user signed in at Stalwart and the browser returned to the
+registered callback. Auth.js reached its JWT callback, so the authorization
+code exchange and OIDC profile processing completed. The callback returned
+HTTP `500`; the browser then reported no app session. A production Vercel log
+shows `CallbackRouteError` during the JWT callback with an underlying
+`TypeError: immutable`, but the deployed handler replaces the cause with a
+generic error and does not identify which finalization stage failed. Production
+environment and database-session schema/permissions were checked read-only.
 
-Ego Lite reported an available update. Do not run `ego-browser upgrade` unless
-the user approves it. No login credentials were entered and no mailbox data was
-accessed during the failed browser attempt.
+The local callback now logs a bounded stage and allowlisted error class without
+credentials, identities, or server-supplied error text. The change passed 15
+tests, typecheck, and production build, and has been reviewed. It is not yet
+deployed. Ask for explicit approval before deploying this production
+diagnostics change; after deployment, retry the already approved sign-in,
+inspect the stage, fix the cause, then verify session persistence, OAuth-token
+`Mailbox/get`, refresh or bounded expiry, and logout. Do not start Phase 2
+until end-to-end authentication succeeds. Keep all Stalwart global settings
+unchanged.
 
 ## Skill installation note
 
