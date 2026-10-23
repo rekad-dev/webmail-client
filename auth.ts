@@ -96,7 +96,7 @@ const auth = NextAuth({
     },
   },
   callbacks: {
-    async jwt({ token, account, user }) {
+    async jwt({ token, account }) {
       if (!account) return token;
 
       let stage = "validate_oauth_response";
@@ -105,8 +105,6 @@ const auth = NextAuth({
           account.provider !== "stalwart" ||
           typeof account.providerAccountId !== "string" ||
           account.providerAccountId.length === 0 ||
-          typeof user?.id !== "string" ||
-          user.id !== account.providerAccountId ||
           typeof account.access_token !== "string" ||
           typeof account.expires_at !== "number"
         ) {
@@ -114,6 +112,7 @@ const auth = NextAuth({
         }
 
         const accessTokenExpiresAt = account.expires_at * 1000;
+        // Auth.js gives user.id an app ID; providerAccountId is the OIDC subject.
         stage = "jmap_access_check";
         const jmapOptions = {
           accessToken: account.access_token,
