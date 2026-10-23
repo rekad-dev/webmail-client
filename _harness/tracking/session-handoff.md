@@ -21,7 +21,16 @@ session row. No mailbox contents were returned or mutated.
 
 The Phase 1 home page now starts the existing `stalwart` OAuth flow with a
 server-side sign-in action and shows an active-session confirmation after
-callback. Mailbox browsing remains Phase 2.
+callback. The updated page is deployed as
+`dpl_6qeqHit7E4jQEYKDv2ejF7yYRwts` at `https://webmail.rekad.id`; read-only
+HTTP verification confirmed the anonymous page contains the sign-in button and
+returns `200`. Mailbox browsing remains Phase 2.
+
+For future Vercel CLI deployments, this repository is linked to the existing
+`rekad/webmail-client` project. The first deployment attempt created a separate
+`rekad/mail-client` project because the directory was not linked yet; it does
+not own `webmail.rekad.id`, has the `mail-client-nine.vercel.app` alias, and has
+not been removed.
 
 After the implementation review, refresh now preserves the application session
 for transport, server, and malformed-response failures; an explicit
@@ -32,8 +41,9 @@ rows can remain until the database is accessed again. The Auth.js sign-out POST
 now checks the trusted app origin and revokes the app session before handing
 the request to Auth.js. Session-ID lookup or deletion failures return `503`
 without clearing the cookie, and cross-origin requests return `403`. Local
-tests cover these behaviors. The change is deployed as
-`dpl_CAdcJ8jV2a7aozyYrEAfaVEQviyS` at `https://webmail.rekad.id`; the browser is
+tests cover these behaviors. The guarded logout change was deployed as
+`dpl_CAdcJ8jV2a7aozyYrEAfaVEQviyS`; the current page release is
+`dpl_6qeqHit7E4jQEYKDv2ejF7yYRwts` at `https://webmail.rekad.id`; the browser is
 currently anonymous, so the normal production logout check awaits a fresh
 test-account sign-in. A production database outage was not simulated.
 

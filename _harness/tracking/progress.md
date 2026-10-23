@@ -26,8 +26,11 @@ scope: progress
   server-side session before delegating to Auth.js to clear the cookie. A
   session-ID lookup or database failure returns `503` without invoking Auth.js;
   cross-origin requests return `403`. Local tests cover ordering and failure
-  behavior. The code is deployed as `dpl_CAdcJ8jV2a7aozyYrEAfaVEQviyS` at
-  `https://webmail.rekad.id`. The browser is anonymous; normal production
+  behavior. The guarded logout code was deployed as
+  `dpl_CAdcJ8jV2a7aozyYrEAfaVEQviyS`. The current production deployment,
+  including the home-page sign-in action, is
+  `dpl_6qeqHit7E4jQEYKDv2ejF7yYRwts` at `https://webmail.rekad.id`. The browser
+  is anonymous; normal production
   logout verification awaits a fresh test-account sign-in. No production
   database outage was simulated.
 - Local route checks passed: provider discovery reports `stalwart` and the
