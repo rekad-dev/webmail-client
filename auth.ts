@@ -21,6 +21,14 @@ const AUTH_METHODS = new Set([
   "client_secret_basic",
   "client_secret_post",
 ]);
+const SAFE_CALLBACK_ERROR_NAMES = new Set([
+  "Error",
+  "TypeError",
+  "RangeError",
+  "SyntaxError",
+  "PostgresError",
+  "JmapPocError",
+]);
 
 function getIssuer(): string {
   const issuer = process.env.AUTH_STALWART_ISSUER ?? STALWART_ISSUER;
@@ -91,6 +99,7 @@ const auth = NextAuth({
     async jwt({ token, account, user }) {
       if (!account) return token;
 
+      let stage = "validate_oauth_response";
       try {
         if (
           account.provider !== "stalwart" ||
@@ -105,6 +114,7 @@ const auth = NextAuth({
         }
 
         const accessTokenExpiresAt = account.expires_at * 1000;
+        stage = "jmap_access_check";
         const jmapOptions = {
           accessToken: account.access_token,
           sessionUrl:
@@ -115,6 +125,7 @@ const auth = NextAuth({
             process.env.STALWART_JMAP_ALLOW_INSECURE_HTTP === "true",
         };
         const { accountId } = await runJmapOAuthAccessCheck(jmapOptions);
+        stage = "persist_session";
         const { sessionId } = await createOAuthSession({
           subject: account.providerAccountId,
           accountId,
@@ -125,9 +136,34 @@ const auth = NextAuth({
           accessTokenExpiresAt,
         });
 
+        stage = "attach_app_session";
         token.sid = sessionId;
         return token;
-      } catch {
+      } catch (error) {
+        const errorName =
+          error instanceof Error && SAFE_CALLBACK_ERROR_NAMES.has(error.name)
+            ? error.name
+            : "UnknownError";
+        const sqlState =
+          typeof error === "object" &&
+          error !== null &&
+          errorName === "PostgresError" &&
+          "code" in error &&
+          typeof error.code === "string" &&
+          /^[A-Z0-9]{5}$/.test(error.code)
+            ? error.code
+            : undefined;
+        const safeReason =
+          error instanceof Error &&
+          error.message === "The Stalwart OAuth response is incomplete."
+            ? error.message
+            : undefined;
+        console.error("[auth][stalwart] sign-in finalization failed", {
+          stage,
+          errorName,
+          ...(sqlState ? { sqlState } : {}),
+          ...(safeReason ? { safeReason } : {}),
+        });
         throw new Error("The Stalwart sign-in could not be completed.");
       }
     },
