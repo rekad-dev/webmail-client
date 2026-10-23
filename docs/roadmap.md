@@ -7,7 +7,7 @@ phases remain sequential.
 | Phase | Scope | Priority | Status |
 | --- | --- | --- | --- |
 | 0 | Project discovery and JMAP proof of concept | P0 | Complete: discovery and authenticated `Mailbox/get` verified |
-| 1 | Secure authentication using Stalwart OAuth where available | P0 | In progress; production OAuth callback returns HTTP 500 during JWT finalization, so no app session is established |
+| 1 | Secure authentication using Stalwart OAuth where available | P0 | Production login, app session, read-only mailbox access, bounded expiry, and normal logout verified; Phase 1 security follow-ups remain |
 | 2 | Real inbox and mailbox listing | P0 | Pending |
 | 3 | Safe email reading and HTML isolation | P0 | Pending |
 | 4 | Compose and send through JMAP | P0 | Pending |
@@ -19,17 +19,15 @@ phases remain sequential.
 Phase 4 is the first usable MVP boundary. Phase 1 reuses the existing `webmail`
 client and exact callback
 `https://webmail.rekad.id/api/auth/callback/stalwart`, with no client or server
-setting changes. Local provider/session/status checks pass. In production, the
-user signed in at Stalwart and returned to the registered callback, confirming
-the authorization-code exchange and OIDC profile processing completed. The
-callback then returned HTTP `500` during Auth.js JWT finalization, and the
-browser has no app session. Vercel logs show `CallbackRouteError` and an
-underlying `TypeError: immutable`. The diagnostics identified a false identity
-check: Auth.js's `user.id` is a random app ID, while `account.providerAccountId`
-holds the OIDC subject. The check was removed in reviewed commit `58f5ccd` and
-deployed as `dpl_D8oi6i3YB1iwfvF1bUcXBbb7eYaY`; a fresh OAuth attempt is waiting
-at Stalwart's username/password form for the user to sign in again. Do not
-start Phase 2 until Phase 1 login has been tested successfully. The missing
+setting changes. The production login completed, the app session persisted,
+and `/api/auth/status` confirmed read-only OAuth-token `Mailbox/get`. The
+session expiry was future-dated and within the eight-hour app cap. Normal
+logout cleared the browser session and deleted the app session row, verified
+with a read-only database count. Reviewed commit `58f5ccd` fixed Auth.js subject
+validation and is deployed as `dpl_D8oi6i3YB1iwfvF1bUcXBbb7eYaY`. Phase 1
+remains active for invalid-credential handling, multi-account isolation,
+forced refresh behavior, and the logout database-failure path. Do not start
+Phase 2 automatically. The missing
 `stalwart-webui` registration is a future hardening prerequisite, not an MVP
 blocker. Optional `requireClientRegistration` hardening remains separate and
 requires the user's explicit approval after a current settings/client review.

@@ -27,33 +27,27 @@
   and token-auth method, and `DATABASE_URL`. The configured client ID matches
   `webmail`; the idempotent migration created the app-owned session table and
   expiry index in PostgreSQL.
-- Production route checks on 2026-10-23 returned providers `200`, anonymous
-  session `200`, unauthenticated status `401`, generic sign-in `200`, and CSRF
-  `200`. The user then signed in at Stalwart and returned to the registered
-  callback. Auth.js reached its JWT callback, so code exchange and OIDC profile
-  processing completed, but the callback returned `500`; the subsequent
-  session check returned `200` without an authenticated session.
-- Vercel logs show an Auth.js `CallbackRouteError` during the JWT callback and
-  an underlying `TypeError: immutable`. The currently deployed handler logs
-  only a generic error, so the failing finalization stage remains unknown.
-  Production auth environment metadata and the app session table/permissions
-  were checked read-only. No successful app-level mailbox check has been
-  verified.
-- A reviewed diagnostics change adds stage and allowlisted error-class logging
-  while omitting raw errors, identities, and credentials. It passed 15 tests,
-  `pnpm typecheck`, and `pnpm build`; after explicit approval it was deployed
-  to production as `dpl_A3TtY6Duyt6FLqbk6TPhtodq1Re9`, aliased to
-  `https://webmail.rekad.id`.
-- The retry currently shows Stalwart's username/password form in the existing
-  browser page. The user must sign in before the callback and new diagnostic
-  stage can be inspected; the agent did not enter credentials.
-- The first diagnostic run identified the `validate_oauth_response` stage and
-  fixed incomplete-response reason. Auth.js source shows `user.id` is a random
-  app ID while `account.providerAccountId` is the OIDC subject, so the
-  implementation's equality check was invalid. Reviewed commit `58f5ccd`
-  removes that check; it passed 15 tests, typecheck, and build, then deployed
-  to production as `dpl_D8oi6i3YB1iwfvF1bUcXBbb7eYaY`. A new OAuth attempt now
-  waits at the Stalwart sign-in form for the user to reauthenticate.
+- Production Vercel deployment `dpl_D8oi6i3YB1iwfvF1bUcXBbb7eYaY` is aliased
+  to `https://webmail.rekad.id`. Its callback diagnostics exposed the
+  `validate_oauth_response` stage. Installed Auth.js source showed that
+  `user.id` is a generated app ID while `account.providerAccountId` is the OIDC
+  subject; reviewed commit `58f5ccd` removed the invalid equality check.
+- End-to-end production verification passed on 2026-10-23. The browser returned
+  to the app with an active session; `/api/auth/status` returned `200` with
+  `authenticated: true` and `mailboxAccess: true`, confirming OAuth-token
+  read-only `Mailbox/get`. The session expiry was in the future and within the
+  eight-hour app limit.
+- Before logout, a read-only production database aggregate found one recent
+  active session row. Auth.js sign-out returned the browser to anonymous state:
+  `/api/auth/session` returned `200` with no session, `/api/auth/status`
+  returned `401`, and the same aggregate found zero recent session rows.
+  No mailbox data was returned or mutated.
+- `pnpm test` (15 passing), `pnpm typecheck`, and `pnpm build` passed. No
+  Stalwart client/global registration setting changed, and the admin API key
+  was not used for application authentication or mailbox access.
+- Phase 1 remains active for invalid-credential handling, multi-account
+  isolation, forced refresh behavior, and the known logout database-failure
+  path. Do not begin Phase 2 automatically.
 - The existing `webmail` client and server-wide registration policy were not
   changed. `requireClientRegistration` and `anonymousClientRegistration` remain
   unchanged; the missing `stalwart-webui` record is deferred hardening, not an
@@ -76,7 +70,6 @@
 
 ## Remaining Phase 1 follow-up
 
-After the user completes sign-in in the existing browser page, verify the
-callback and app session, then verify OAuth-token `Mailbox/get`, refresh or
-bounded access-token expiry, and logout. Keep all global Stalwart registration
-settings unchanged and do not begin Phase 2 before this verification succeeds.
+Complete invalid-credential and multi-account isolation checks, then address
+the known logout database-failure path. Keep Phase 2 pending and all global
+Stalwart registration settings unchanged until Phase 1 is closed.

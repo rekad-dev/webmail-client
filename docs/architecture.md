@@ -76,22 +76,22 @@ milestone; both remain unchanged. Do not change either setting without a
 separate review and the user's explicit approval. The admin API key is not used
 by application authentication or mailbox access.
 
-The local Auth.js provider/session/status routes have been checked. The local
-environment now contains the existing `webmail` client ID and token-auth
-settings plus `DATABASE_URL`; the application session table/index migration
-has been applied. In production, provider, session, CSRF, generic sign-in, and
-Stalwart OIDC discovery checks returned `200`; unauthenticated status returned
-`401`. The user signed in at Stalwart and returned to the registered callback.
-Auth.js reached its JWT callback, confirming code exchange and OIDC profile
-processing, but the callback returned `500` and the app session is anonymous.
-Vercel logs showed `CallbackRouteError` and `TypeError: immutable`. The deployed
-diagnostics then identified the `validate_oauth_response` stage. Auth.js assigns
-the callback's `user.id` a random app ID and its `account.providerAccountId`
-the OIDC subject; code incorrectly required the two to match. Commit `58f5ccd`
-removes that check and is deployed as `dpl_D8oi6i3YB1iwfvF1bUcXBbb7eYaY`, now
-aliased to `https://webmail.rekad.id`. A new OAuth attempt is waiting at
-Stalwart's username/password form for the user to sign in again. No Stalwart
-client or global setting was changed.
+The local Auth.js provider/session/status routes have been checked. In
+production, Auth.js completed the registered OAuth callback, `/api/auth/session`
+returned an active session, and `/api/auth/status` returned `200` with
+`authenticated: true` and `mailboxAccess: true`; the status check performs
+read-only OAuth-token `Mailbox/get`. The returned session expiry was in the
+future and within the eight-hour app cap. After normal sign-out, the session
+endpoint returned `200` anonymously, status returned `401`, and a read-only
+database aggregate confirmed the recent app session row was deleted.
+
+The first callback diagnostic identified a bad identity comparison: Auth.js
+generates `user.id` as an app identifier while `account.providerAccountId`
+contains the OIDC subject. Reviewed commit `58f5ccd` removed that check and is
+deployed as `dpl_D8oi6i3YB1iwfvF1bUcXBbb7eYaY`. No mailbox data was returned or
+mutated. Phase 1 remains active for invalid-credential handling, multi-account
+isolation, forced refresh behavior, and the known logout database-failure path.
+No Stalwart client or global registration setting was changed.
 
 ## Phase 0 proof of concept
 

@@ -7,13 +7,17 @@ scope: session-handoff
 
 ## Current status
 
-Phase 0 is complete. Phase 1 has a working implementation checkpoint but is
-not complete because end-to-end login failed during callback finalization.
-Auth.js uses the existing `webmail` client and exact registered callback
+Phase 0 is complete. Production Authorization Code + PKCE sign-in now succeeds
+with the existing `webmail` client and exact registered callback
 `https://webmail.rekad.id/api/auth/callback/stalwart`. It performs PKCE/state/
 nonce checks, validates the OIDC identity, verifies OAuth-token JMAP mailbox
 access, and stores encrypted tokens in PostgreSQL behind an encrypted Auth.js
 session cookie.
+
+On 2026-10-23, production verification confirmed an authenticated app session,
+OAuth-backed `Mailbox/get`, an expiry within the eight-hour app limit, and
+logout that cleared the browser session and deleted the recent PostgreSQL
+session row. No mailbox contents were returned or mutated.
 
 After the implementation review, refresh now preserves the application session
 for transport, server, and malformed-response failures; an explicit
@@ -32,30 +36,13 @@ access. The provider-settings audit can remain deferred.
 
 ## Next safe step
 
-On 2026-10-23, the user signed in at Stalwart and the browser returned to the
-registered callback. Auth.js reached its JWT callback, so the authorization
-code exchange and OIDC profile processing completed. The callback returned
-HTTP `500`; the browser then reported no app session. A production Vercel log
-shows `CallbackRouteError` during the JWT callback with an underlying
-`TypeError: immutable`, but the deployed handler replaces the cause with a
-generic error and does not identify which finalization stage failed. Production
-environment and database-session schema/permissions were checked read-only.
-
-The callback diagnostics passed 15 tests, typecheck, and production build, were
-reviewed, and were deployed to production on 2026-10-23 as
-`dpl_A3TtY6Duyt6FLqbk6TPhtodq1Re9`, aliased to `https://webmail.rekad.id`.
-They log a bounded stage and allowlisted error class without credentials,
-identities, or server-supplied error text. The production log identified the
-`validate_oauth_response` stage. Installed Auth.js source showed our code was
-comparing its generated app `user.id` to `account.providerAccountId`, the OIDC
-subject. That check was removed in reviewed commit `58f5ccd`; the fix passed 15
-tests, typecheck, and production build, and was deployed as
-`dpl_D8oi6i3YB1iwfvF1bUcXBbb7eYaY`, aliased to `https://webmail.rekad.id`.
-The fresh OAuth attempt now waits at Stalwart's username/password form. The user
-must sign in again from the existing browser page. After callback, verify app
-session persistence, OAuth-token `Mailbox/get`, refresh or bounded expiry, and
-logout. Do not start Phase 2 until end-to-end authentication succeeds. Keep all
-Stalwart global settings unchanged.
+The core production login, session persistence, OAuth-backed read-only mailbox
+access, bounded expiry, and normal logout paths now pass. Phase 1 remains open
+for invalid-credential handling, multi-account isolation, forced refresh
+behavior, and the known logout database-failure path. Do not start Phase 2
+automatically. Keep `requireClientRegistration` and
+`anonymousClientRegistration` unchanged; do not use the admin API key for app
+authentication or mailbox access.
 
 ## Skill installation note
 
