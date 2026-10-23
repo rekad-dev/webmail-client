@@ -19,6 +19,10 @@ OAuth-backed `Mailbox/get`, an expiry within the eight-hour app limit, and
 logout that cleared the browser session and deleted the recent PostgreSQL
 session row. No mailbox contents were returned or mutated.
 
+The Phase 1 home page now starts the existing `stalwart` OAuth flow with a
+server-side sign-in action and shows an active-session confirmation after
+callback. Mailbox browsing remains Phase 2.
+
 After the implementation review, refresh now preserves the application session
 for transport, server, and malformed-response failures; an explicit
 `invalid_grant` revokes it. Basic client credentials are form-encoded before

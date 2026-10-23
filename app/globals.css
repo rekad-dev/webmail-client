@@ -51,11 +51,29 @@ h1 {
   line-height: 1.6;
 }
 
-.status-note {
+.status-card form {
   margin-top: 24px;
-  padding-top: 18px;
-  border-top: 1px solid #e8ebef;
-  font-size: 0.9rem;
+}
+
+.sign-in-button {
+  min-height: 48px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 8px;
+  background: #182230;
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sign-in-button:hover {
+  background: #2c3a4d;
+}
+
+.sign-in-button:focus-visible {
+  outline: 3px solid #4569a8;
+  outline-offset: 3px;
 }
 
 @media (max-width: 480px) {

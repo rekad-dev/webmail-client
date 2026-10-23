@@ -8,6 +8,8 @@ scope: progress
 ## Phase 1 authentication in progress
 
 - Auth.js OIDC login is implemented for the existing Stalwart client `webmail`.
+- The home page now has a server-side “Sign in with Stalwart” action and shows
+  a signed-in state after the OAuth callback; mailbox browsing remains Phase 2.
 - The callback is the registered exact URI
   `https://webmail.rekad.id/api/auth/callback/stalwart`.
 - The callback requires PKCE, state, and nonce checks, validates the OIDC
