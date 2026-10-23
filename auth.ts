@@ -188,11 +188,11 @@ const auth = NextAuth({
         try {
           await revokeOAuthSession(message.token.sid);
         } catch {
-          // Auth.js still clears the browser cookie; the DB row expires after 8 hours.
+          // The route revokes before delegating; this is an idempotent fallback.
         }
       }
     },
   },
 });
 
-export const { handlers, auth: getAuthSession, signIn, signOut } = auth;
+export const { handlers, auth: getAuthSession, signIn } = auth;
