@@ -1,4 +1,4 @@
-# Rekad Mail
+# rekad Mail
 
 A lightweight webmail client for the existing Stalwart server. Stalwart remains
 responsible for accounts, message storage, and sending; this repository builds
