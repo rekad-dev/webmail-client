@@ -24,11 +24,10 @@ user signed in at Stalwart and returned to the registered callback, confirming
 the authorization-code exchange and OIDC profile processing completed. The
 callback then returned HTTP `500` during Auth.js JWT finalization, and the
 browser has no app session. Vercel logs show `CallbackRouteError` and an
-underlying `TypeError: immutable`; the current deployed handler does not expose
-which finalization stage failed. A reviewed, locally verified diagnostics
-change can identify that stage, but needs explicit approval before production
-deployment. Do not start Phase 2 until Phase 1 login has been tested
-successfully. The missing
+underlying `TypeError: immutable`. The reviewed diagnostics change has been
+deployed to production; on retry, Stalwart displayed its username/password form
+and needs the user to sign in before the callback stage can be inspected. Do
+not start Phase 2 until Phase 1 login has been tested successfully. The missing
 `stalwart-webui` registration is a future hardening prerequisite, not an MVP
 blocker. Optional `requireClientRegistration` hardening remains separate and
 requires the user's explicit approval after a current settings/client review.

@@ -39,10 +39,14 @@
   Production auth environment metadata and the app session table/permissions
   were checked read-only. No successful app-level mailbox check has been
   verified.
-- A reviewed local diagnostics change adds stage and allowlisted error-class
-  logging while omitting raw errors, identities, and credentials. It has passed
-  15 tests, `pnpm typecheck`, and `pnpm build`; it is not deployed. Explicit
-  approval is required before publishing it to production.
+- A reviewed diagnostics change adds stage and allowlisted error-class logging
+  while omitting raw errors, identities, and credentials. It passed 15 tests,
+  `pnpm typecheck`, and `pnpm build`; after explicit approval it was deployed
+  to production as `dpl_A3TtY6Duyt6FLqbk6TPhtodq1Re9`, aliased to
+  `https://webmail.rekad.id`.
+- The retry currently shows Stalwart's username/password form in the existing
+  browser page. The user must sign in before the callback and new diagnostic
+  stage can be inspected; the agent did not enter credentials.
 - The existing `webmail` client and server-wide registration policy were not
   changed. `requireClientRegistration` and `anonymousClientRegistration` remain
   unchanged; the missing `stalwart-webui` record is deferred hardening, not an
@@ -65,8 +69,8 @@
 
 ## Remaining Phase 1 follow-up
 
-After approval to deploy the diagnostics, retry the approved browser login,
-identify and fix the callback failure, then verify session persistence, refresh
-or bounded access-token expiry, logout, and OAuth-token `Mailbox/get`. Keep all
+After the user completes sign-in in the existing browser page, inspect the
+callback stage, fix the failure, then verify session persistence, refresh or
+bounded access-token expiry, logout, and OAuth-token `Mailbox/get`. Keep all
 global Stalwart registration settings unchanged and do not begin Phase 2 before
 this verification succeeds.

@@ -41,11 +41,13 @@ shows `CallbackRouteError` during the JWT callback with an underlying
 generic error and does not identify which finalization stage failed. Production
 environment and database-session schema/permissions were checked read-only.
 
-The local callback now logs a bounded stage and allowlisted error class without
-credentials, identities, or server-supplied error text. The change passed 15
-tests, typecheck, and production build, and has been reviewed. It is not yet
-deployed. Ask for explicit approval before deploying this production
-diagnostics change; after deployment, retry the already approved sign-in,
+The callback diagnostics passed 15 tests, typecheck, and production build, were
+reviewed, and were deployed to production on 2026-10-23 as
+`dpl_A3TtY6Duyt6FLqbk6TPhtodq1Re9`, aliased to `https://webmail.rekad.id`.
+They log a bounded stage and allowlisted error class without credentials,
+identities, or server-supplied error text. On retry, Stalwart displayed its
+username/password form, so the user must sign in from the existing browser page
+before the callback can be diagnosed. After the user returns from that login,
 inspect the stage, fix the cause, then verify session persistence, OAuth-token
 `Mailbox/get`, refresh or bounded expiry, and logout. Do not start Phase 2
 until end-to-end authentication succeeds. Keep all Stalwart global settings

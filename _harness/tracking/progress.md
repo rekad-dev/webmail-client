@@ -29,9 +29,10 @@ scope: progress
 - `AUTH_STALWART_ID`, the existing client's secret and token-auth method, and
   `DATABASE_URL` are now configured locally. The ID matches `webmail`; the
   idempotent migration created the application session table and expiry index.
-- Latest local verification: 15 unit tests, `pnpm typecheck`, `pnpm build`, and
-  local production route checks passed. The callback diagnostics are reviewed
-  but have not been deployed.
+- Latest local verification: 15 unit tests, `pnpm typecheck`, and `pnpm build`
+  passed. The reviewed callback diagnostics are deployed to Vercel production
+  as `dpl_A3TtY6Duyt6FLqbk6TPhtodq1Re9` and aliased to
+  `https://webmail.rekad.id`.
 - On 2026-10-23, the user completed Stalwart sign-in and returned to the exact
   registered callback. Auth.js reached the JWT callback, confirming the code
   exchange and OIDC profile processing completed, but the callback returned
@@ -42,10 +43,12 @@ scope: progress
   deployed callback does not log the finalization stage. Production auth
   configuration and PostgreSQL session schema/permissions were checked
   read-only. No mailbox result or successful app session has been verified.
-- The new local diagnostic log records only a stage, an allowlisted error
-  class, and a constrained SQLSTATE/static reason when applicable. Deploying
-  it to production requires the user's explicit approval; after deployment,
-  retry sign-in to identify and fix the failing stage.
+- The deployed diagnostic log records only a stage, an allowlisted error
+  class, and a constrained SQLSTATE/static reason when applicable. Its
+  production deployment was explicitly approved and completed. The retry is at
+  Stalwart's username/password form; the browser needs the user to sign in
+  before we can observe the callback stage. No credentials were entered by the
+  agent.
 - No Stalwart client or server-wide setting has been changed. Keep
   `requireClientRegistration` and `anonymousClientRegistration` unchanged.
   `stalwart-webui` registration remains a future hardening prerequisite, not
@@ -53,7 +56,7 @@ scope: progress
 
 ## Next
 
-After approval, deploy the reviewed diagnostics, retry the existing browser
-sign-in, fix the callback failure, then verify session persistence, refresh or
+After the user completes sign-in in the existing browser page, inspect the
+callback stage, fix the failure, then verify session persistence, refresh or
 bounded access-token expiry, logout, and OAuth-token `Mailbox/get`. Do not begin
 Phase 2 before successful end-to-end authentication.
