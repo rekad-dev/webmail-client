@@ -36,6 +36,9 @@
   project in its active scope and no project is linked in this checkout. The
   function log for the failing route is therefore unavailable; end-to-end
   login remains blocked pending project access and diagnosis.
+- The supplied project ID is not found under the CLI's active team; the CLI
+  lists only `crlnravels-projects`. The owning account/team scope or a redacted
+  runtime log is needed to continue diagnosis.
 - Latest verification passed: 15 tests, `pnpm typecheck`, and `pnpm build`.
 - The existing `webmail` client and server-wide registration policy were not
   changed. `requireClientRegistration` and `anonymousClientRegistration` remain

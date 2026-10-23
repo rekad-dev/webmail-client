@@ -40,10 +40,12 @@ checks succeeded, while unauthenticated status returned `401`. The
 provider-specific sign-in route returned an empty `500` before OAuth began. No
 credentials were entered and no mailbox request was made. The Vercel CLI cannot
 map the hostname to a project in its active scope, and this checkout has no
-linked project. Link the correct Vercel project or provide its project ID/logs,
-inspect the function failure, then retry the same approved isolated flow and
-verify session persistence, refresh or bounded expiry, logout, and OAuth-token
-`Mailbox/get`. Do not start Phase 2 until the end-to-end login succeeds.
+linked project. The user supplied a project ID, but Vercel reports it is not
+found under the active team; the CLI lists only `crlnravels-projects`. Get the
+owning account/team scope or a redacted function log, inspect the failure, then
+retry the same approved isolated flow and verify session persistence, refresh
+or bounded expiry, logout, and OAuth-token `Mailbox/get`. Do not start Phase 2
+until the end-to-end login succeeds.
 
 Ego Lite reported an available update. Do not run `ego-browser upgrade` unless
 the user approves it. No login credentials were entered and no mailbox data was

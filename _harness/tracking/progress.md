@@ -38,6 +38,9 @@ scope: progress
 - The production hostname now resolves, but Vercel CLI cannot map it to a
   project in its active scope, and this checkout has no linked project. Runtime
   logs for the provider sign-in failure remain inaccessible.
+- The user-provided project ID is not found under the CLI's active team; the
+  CLI lists only `crlnravels-projects`. The correct Vercel account/team scope is
+  still needed to retrieve the route log.
 - No Stalwart client or server-wide setting has been changed. Keep
   `requireClientRegistration` and `anonymousClientRegistration` unchanged.
   `stalwart-webui` registration remains a future hardening prerequisite, not
