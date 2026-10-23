@@ -20,16 +20,19 @@ scope: progress
   `invalid_grant`; client credentials use OAuth form encoding before Basic
   encoding. Expired rows are swept during sign-in and session checks, with no
   scheduled cleanup runner configured.
-- A sign-out database failure is still a known risk: Auth.js clears its cookie
-  even when the sign-out event fails, so a copied cookie may continue to resolve
-  until the server row expires. A retry-safe logout path needs a separate design.
+- The Auth.js sign-out POST now checks the trusted app origin and revokes the
+  server-side session before delegating to Auth.js to clear the cookie. A
+  session-ID lookup or database failure returns `503` without invoking Auth.js;
+  cross-origin requests return `403`. Local tests cover ordering and failure
+  behavior. The code is not yet deployed, and the production database-outage
+  path remains unverified.
 - Local route checks passed: provider discovery reports `stalwart` and the
   expected callback shape; the empty session is `null`; unauthenticated status
   is `401`.
 - `AUTH_STALWART_ID`, the existing client's secret and token-auth method, and
   `DATABASE_URL` are now configured locally. The ID matches `webmail`; the
   idempotent migration created the application session table and expiry index.
-- Latest local verification: 15 unit tests, `pnpm typecheck`, and `pnpm build`
+- Latest local verification: 22 unit tests, `pnpm typecheck`, and `pnpm build`
   passed. The reviewed diagnostics and OIDC subject fix are deployed to
   Vercel production as `dpl_D8oi6i3YB1iwfvF1bUcXBbb7eYaY` at
   `https://webmail.rekad.id`.
@@ -50,9 +53,10 @@ scope: progress
   Stalwart client or global registration setting was changed. The admin key
   was not used for application authentication or mailbox access.
 - Phase 1 remains active for invalid-credential handling, multi-account
-  isolation, forced refresh behavior, and the database-failure logout path.
-  The normal production login, mailbox-access, bounded-expiry, and logout paths
-  have passed; do not begin Phase 2 automatically.
+  isolation, forced refresh behavior, and production verification of guarded
+  logout failure handling. The normal production login, mailbox-access,
+  bounded-expiry, and logout paths have passed; do not begin Phase 2
+  automatically.
 - No Stalwart client or server-wide setting has been changed. Keep
   `requireClientRegistration` and `anonymousClientRegistration` unchanged.
   `stalwart-webui` registration remains a future hardening prerequisite, not
@@ -61,6 +65,7 @@ scope: progress
 ## Next
 
 Complete remaining Phase 1 acceptance checks for invalid credentials and
-multi-account isolation, and address the known logout database-failure path.
+forced refresh. Verify multi-account isolation once the second dedicated test
+account is available, then deploy and verify guarded logout failure handling.
 Keep Phase 2 pending until Phase 1 is closed; do not change global Stalwart
 registration settings.

@@ -63,9 +63,12 @@ disk are not session stores.
 Refresh keeps the session on network, server, or malformed-response failures
 so a later request can retry; only an explicit OAuth `invalid_grant` removes the
 session. Expired rows are opportunistically swept during sign-in and session
-checks; no scheduled cleanup runner is configured. A database failure during
-the Auth.js sign-out event remains a known risk because Auth.js clears the
-browser cookie even if that event fails.
+checks; no scheduled cleanup runner is configured. The Auth.js sign-out POST
+now verifies the app origin and revokes the server row before delegating to
+Auth.js to clear the cookie. If session-ID lookup or revocation throws, it
+returns `503` without invoking Auth.js, leaving the cookie available for a
+retry. This path is covered by local unit tests but is not yet deployed or
+verified against a production database outage.
 
 The user confirmed that the existing `webmail` client is the app client; its
 registered callback matches this implementation. The audit did not find
@@ -90,8 +93,9 @@ generates `user.id` as an app identifier while `account.providerAccountId`
 contains the OIDC subject. Reviewed commit `58f5ccd` removed that check and is
 deployed as `dpl_D8oi6i3YB1iwfvF1bUcXBbb7eYaY`. No mailbox data was returned or
 mutated. Phase 1 remains active for invalid-credential handling, multi-account
-isolation, forced refresh behavior, and the known logout database-failure path.
-No Stalwart client or global registration setting was changed.
+isolation, forced refresh behavior, and production verification of guarded
+logout failure handling. No Stalwart client or global registration setting was
+changed.
 
 ## Phase 0 proof of concept
 

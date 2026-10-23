@@ -7,7 +7,7 @@ phases remain sequential.
 | Phase | Scope | Priority | Status |
 | --- | --- | --- | --- |
 | 0 | Project discovery and JMAP proof of concept | P0 | Complete: discovery and authenticated `Mailbox/get` verified |
-| 1 | Secure authentication using Stalwart OAuth where available | P0 | Production login, app session, read-only mailbox access, bounded expiry, and normal logout verified; Phase 1 security follow-ups remain |
+| 1 | Secure authentication using Stalwart OAuth where available | P0 | Production login, app session, read-only mailbox access, bounded expiry, and normal logout verified; guarded logout failure handling is implemented locally; Phase 1 verification remains |
 | 2 | Real inbox and mailbox listing | P0 | Pending |
 | 3 | Safe email reading and HTML isolation | P0 | Pending |
 | 4 | Compose and send through JMAP | P0 | Pending |
@@ -26,8 +26,11 @@ logout cleared the browser session and deleted the app session row, verified
 with a read-only database count. Reviewed commit `58f5ccd` fixed Auth.js subject
 validation and is deployed as `dpl_D8oi6i3YB1iwfvF1bUcXBbb7eYaY`. Phase 1
 remains active for invalid-credential handling, multi-account isolation,
-forced refresh behavior, and the logout database-failure path. Do not start
-Phase 2 automatically. The missing
+forced refresh behavior, and production verification of the guarded logout
+path. The guarded path now revokes the app session before delegating to Auth.js;
+it returns `503` without clearing the cookie if database revocation fails. Unit
+tests cover that behavior locally, but this change is not deployed yet. Do not
+start Phase 2 automatically. The missing
 `stalwart-webui` registration is a future hardening prerequisite, not an MVP
 blocker. Optional `requireClientRegistration` hardening remains separate and
 requires the user's explicit approval after a current settings/client review.

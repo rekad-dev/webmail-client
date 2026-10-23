@@ -24,9 +24,12 @@ for transport, server, and malformed-response failures; an explicit
 `invalid_grant` revokes it. Basic client credentials are form-encoded before
 Base64 encoding. Expired rows are opportunistically removed on sign-in and
 session lookups. This sweep has no scheduled runner yet, so dormant expired
-rows can remain until the database is accessed again. Auth.js clears its cookie
-even when the sign-out event fails; the replayable-row failure path still needs
-a dedicated design and remains unverified.
+rows can remain until the database is accessed again. The Auth.js sign-out POST
+now checks the trusted app origin and revokes the app session before handing
+the request to Auth.js. Session-ID lookup or deletion failures return `503`
+without clearing the cookie, and cross-origin requests return `403`. Local
+tests cover these behaviors; production deployment and outage-path verification
+are pending.
 
 No Stalwart OAuth client or global setting was changed. Keep
 `requireClientRegistration` and `anonymousClientRegistration` unchanged. The
@@ -39,8 +42,9 @@ access. The provider-settings audit can remain deferred.
 The core production login, session persistence, OAuth-backed read-only mailbox
 access, bounded expiry, and normal logout paths now pass. Phase 1 remains open
 for invalid-credential handling, multi-account isolation, forced refresh
-behavior, and the known logout database-failure path. Do not start Phase 2
-automatically. Keep `requireClientRegistration` and
+behavior, and production verification of guarded logout failure handling.
+Wait for the second dedicated test account before account-isolation testing. Do
+not start Phase 2 automatically. Keep `requireClientRegistration` and
 `anonymousClientRegistration` unchanged; do not use the admin API key for app
 authentication or mailbox access.
 

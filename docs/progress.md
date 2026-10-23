@@ -16,10 +16,13 @@
   for retry; an explicit OAuth `invalid_grant` deletes it. Basic client
   credentials are form-encoded before Base64. Expired rows are removed during
   sign-in and session checks, but there is no scheduled cleanup runner.
-- Logout still has a failure edge: Auth.js clears its cookie even when the
-  sign-out event fails, so a copied cookie can remain usable if PostgreSQL
-  could not delete the server row. A retry-safe sign-out route needs a separate
-  design.
+- The Auth.js sign-out POST now checks the trusted app origin and revokes the
+  server-side session before delegating to Auth.js to clear its cookie. If
+  session-ID lookup throws or PostgreSQL revocation fails, it returns `503`
+  without invoking Auth.js, so the browser can retry. Cross-origin sign-out is
+  rejected. Unit tests cover ordering and both failure paths. This change is
+  local and has not yet been deployed or exercised against a production
+  database outage.
 - Local route checks passed: provider discovery returned `stalwart` with the
   expected callback shape; session returned `null`; unauthenticated mailbox
   status returned `401`.
@@ -42,12 +45,12 @@
   `/api/auth/session` returned `200` with no session, `/api/auth/status`
   returned `401`, and the same aggregate found zero recent session rows.
   No mailbox data was returned or mutated.
-- `pnpm test` (15 passing), `pnpm typecheck`, and `pnpm build` passed. No
+- `pnpm test` (22 passing), `pnpm typecheck`, and `pnpm build` passed. No
   Stalwart client/global registration setting changed, and the admin API key
   was not used for application authentication or mailbox access.
 - Phase 1 remains active for invalid-credential handling, multi-account
-  isolation, forced refresh behavior, and the known logout database-failure
-  path. Do not begin Phase 2 automatically.
+  isolation, forced refresh behavior, and production verification of the new
+  guarded logout path. Do not begin Phase 2 automatically.
 - The existing `webmail` client and server-wide registration policy were not
   changed. `requireClientRegistration` and `anonymousClientRegistration` remain
   unchanged; the missing `stalwart-webui` record is deferred hardening, not an
@@ -70,6 +73,8 @@
 
 ## Remaining Phase 1 follow-up
 
-Complete invalid-credential and multi-account isolation checks, then address
-the known logout database-failure path. Keep Phase 2 pending and all global
-Stalwart registration settings unchanged until Phase 1 is closed.
+Complete invalid-credential handling, forced refresh verification, and
+multi-account isolation when the second dedicated test account is ready.
+Deploy and verify the guarded logout path before closing Phase 1. Keep Phase 2
+pending and all global Stalwart registration settings unchanged until Phase 1
+is closed.
