@@ -1,4 +1,5 @@
 import { getAuthSession, signIn } from "@/auth";
+import { SignOutButton } from "./sign-out-button";
 
 export default async function HomePage() {
   const session = await getAuthSession();
@@ -22,7 +23,9 @@ export default async function HomePage() {
             ? "Your Stalwart session is active. Mailbox browsing is not available yet."
             : "Use your rekad email account to continue."}
         </p>
-        {isSignedIn ? null : (
+        {isSignedIn ? (
+          <SignOutButton />
+        ) : (
           <form action={signInWithStalwart}>
             <button className="sign-in-button" type="submit">
               Sign in with Stalwart
