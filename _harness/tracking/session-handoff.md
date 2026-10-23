@@ -28,8 +28,10 @@ rows can remain until the database is accessed again. The Auth.js sign-out POST
 now checks the trusted app origin and revokes the app session before handing
 the request to Auth.js. Session-ID lookup or deletion failures return `503`
 without clearing the cookie, and cross-origin requests return `403`. Local
-tests cover these behaviors; production deployment and outage-path verification
-are pending.
+tests cover these behaviors. The change is deployed as
+`dpl_CAdcJ8jV2a7aozyYrEAfaVEQviyS` at `https://webmail.rekad.id`; the browser is
+currently anonymous, so the normal production logout check awaits a fresh
+test-account sign-in. A production database outage was not simulated.
 
 No Stalwart OAuth client or global setting was changed. Keep
 `requireClientRegistration` and `anonymousClientRegistration` unchanged. The
@@ -42,9 +44,9 @@ access. The provider-settings audit can remain deferred.
 The core production login, session persistence, OAuth-backed read-only mailbox
 access, bounded expiry, and normal logout paths now pass. Phase 1 remains open
 for invalid-credential handling, multi-account isolation, forced refresh
-behavior, and production verification of guarded logout failure handling.
-Wait for the second dedicated test account before account-isolation testing. Do
-not start Phase 2 automatically. Keep `requireClientRegistration` and
+behavior, and the normal production logout check after sign-in. Wait for the
+second dedicated test account before account-isolation testing. Do not start
+Phase 2 automatically. Keep `requireClientRegistration` and
 `anonymousClientRegistration` unchanged; do not use the admin API key for app
 authentication or mailbox access.
 

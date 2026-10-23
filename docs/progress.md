@@ -21,8 +21,10 @@
   session-ID lookup throws or PostgreSQL revocation fails, it returns `503`
   without invoking Auth.js, so the browser can retry. Cross-origin sign-out is
   rejected. Unit tests cover ordering and both failure paths. This change is
-  local and has not yet been deployed or exercised against a production
-  database outage.
+  deployed to production as `dpl_CAdcJ8jV2a7aozyYrEAfaVEQviyS` at
+  `https://webmail.rekad.id`; the new route's normal production logout check is
+  pending a fresh test-account sign-in. No production database outage was
+  simulated.
 - Local route checks passed: provider discovery returned `stalwart` with the
   expected callback shape; session returned `null`; unauthenticated mailbox
   status returned `401`.
@@ -50,7 +52,7 @@
   was not used for application authentication or mailbox access.
 - Phase 1 remains active for invalid-credential handling, multi-account
   isolation, forced refresh behavior, and production verification of the new
-  guarded logout path. Do not begin Phase 2 automatically.
+  guarded logout path after sign-in. Do not begin Phase 2 automatically.
 - The existing `webmail` client and server-wide registration policy were not
   changed. `requireClientRegistration` and `anonymousClientRegistration` remain
   unchanged; the missing `stalwart-webui` record is deferred hardening, not an

@@ -67,8 +67,10 @@ checks; no scheduled cleanup runner is configured. The Auth.js sign-out POST
 now verifies the app origin and revokes the server row before delegating to
 Auth.js to clear the cookie. If session-ID lookup or revocation throws, it
 returns `503` without invoking Auth.js, leaving the cookie available for a
-retry. This path is covered by local unit tests but is not yet deployed or
-verified against a production database outage.
+retry. This path is covered by local unit tests and deployed as
+`dpl_CAdcJ8jV2a7aozyYrEAfaVEQviyS` at `https://webmail.rekad.id`. Its normal
+production logout check is pending a fresh test-account sign-in; no production
+database outage was simulated.
 
 The user confirmed that the existing `webmail` client is the app client; its
 registered callback matches this implementation. The audit did not find

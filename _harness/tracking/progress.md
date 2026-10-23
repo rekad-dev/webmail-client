@@ -24,8 +24,10 @@ scope: progress
   server-side session before delegating to Auth.js to clear the cookie. A
   session-ID lookup or database failure returns `503` without invoking Auth.js;
   cross-origin requests return `403`. Local tests cover ordering and failure
-  behavior. The code is not yet deployed, and the production database-outage
-  path remains unverified.
+  behavior. The code is deployed as `dpl_CAdcJ8jV2a7aozyYrEAfaVEQviyS` at
+  `https://webmail.rekad.id`. The browser is anonymous; normal production
+  logout verification awaits a fresh test-account sign-in. No production
+  database outage was simulated.
 - Local route checks passed: provider discovery reports `stalwart` and the
   expected callback shape; the empty session is `null`; unauthenticated status
   is `401`.
@@ -54,7 +56,7 @@ scope: progress
   was not used for application authentication or mailbox access.
 - Phase 1 remains active for invalid-credential handling, multi-account
   isolation, forced refresh behavior, and production verification of guarded
-  logout failure handling. The normal production login, mailbox-access,
+  logout after sign-in. The normal production login, mailbox-access,
   bounded-expiry, and logout paths have passed; do not begin Phase 2
   automatically.
 - No Stalwart client or server-wide setting has been changed. Keep
@@ -65,7 +67,7 @@ scope: progress
 ## Next
 
 Complete remaining Phase 1 acceptance checks for invalid credentials and
-forced refresh. Verify multi-account isolation once the second dedicated test
-account is available, then deploy and verify guarded logout failure handling.
+forced refresh. Verify guarded logout after fresh sign-in and multi-account
+isolation once the second dedicated test account is available.
 Keep Phase 2 pending until Phase 1 is closed; do not change global Stalwart
 registration settings.

@@ -29,8 +29,10 @@ remains active for invalid-credential handling, multi-account isolation,
 forced refresh behavior, and production verification of the guarded logout
 path. The guarded path now revokes the app session before delegating to Auth.js;
 it returns `503` without clearing the cookie if database revocation fails. Unit
-tests cover that behavior locally, but this change is not deployed yet. Do not
-start Phase 2 automatically. The missing
+tests cover that behavior locally. The guarded path is deployed as
+`dpl_CAdcJ8jV2a7aozyYrEAfaVEQviyS` at `https://webmail.rekad.id`; the normal
+production logout check is pending a fresh test-account sign-in. Do not start
+Phase 2 automatically. The missing
 `stalwart-webui` registration is a future hardening prerequisite, not an MVP
 blocker. Optional `requireClientRegistration` hardening remains separate and
 requires the user's explicit approval after a current settings/client review.
