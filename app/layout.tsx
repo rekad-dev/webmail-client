@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Rekad Mail",
-  description: "A lightweight webmail client for Rekad.",
+  title: "rekad Mail",
+  description: "A lightweight webmail client for rekad.",
 };
 
 export default function RootLayout({
