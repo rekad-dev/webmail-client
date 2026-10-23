@@ -42,8 +42,11 @@ scope: progress
   `pnpm typecheck`, and `pnpm build`, then deployed as
   `dpl_5JWtuf37v19z7CAiUoUSr38nkgar`. The anonymous home page returned `200`
   with the sign-in button; after logout, `/api/auth/session` returned `null`
-  and `/api/auth/status` returned `401`. The new sign-out button still needs a
-  signed-in post-deployment browser click.
+  and `/api/auth/status` returned `401`. On 2026-10-24, the user signed in
+  again and clicked the deployed sign-out button. The active session had
+  mailbox access before the click; afterward the app returned to the sign-in
+  page, `/api/auth/session` was `null`, `/api/auth/status` was `401`, and no
+  error message appeared. The browser was left signed out.
 - Deleted the accidental Vercel project `rekad/mail-client`. The requested
   `mail-client-nine.vercel.app` alias and its generated project alias are now
   absent; `rekad/webmail-client` and `webmail.rekad.id` remain.
@@ -74,10 +77,9 @@ scope: progress
   Stalwart client or global registration setting was changed. The admin key
   was not used for application authentication or mailbox access.
 - Phase 1 remains active for invalid-credential handling, multi-account
-  isolation, forced refresh behavior, and a post-deployment click of the new
-  sign-out button. The normal production login, mailbox-access,
-  bounded-expiry, and logout paths have passed; do not begin Phase 2
-  automatically.
+  isolation, and forced refresh behavior. The normal production login,
+  mailbox-access, bounded-expiry, and logout paths have passed; do not begin
+  Phase 2 automatically.
 - No Stalwart client or server-wide setting has been changed. Keep
   `requireClientRegistration` and `anonymousClientRegistration` unchanged.
   `stalwart-webui` registration remains a future hardening prerequisite, not
@@ -86,8 +88,7 @@ scope: progress
 ## Next
 
 Complete remaining Phase 1 acceptance checks for invalid credentials and
-forced refresh. Click the deployed sign-out button after the user signs in,
-and verify multi-account isolation once the second dedicated test account is
-available.
+forced refresh. Verify multi-account isolation once the second dedicated test
+account is available.
 Keep Phase 2 pending until Phase 1 is closed; do not change global Stalwart
 registration settings.

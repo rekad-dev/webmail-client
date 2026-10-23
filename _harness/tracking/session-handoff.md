@@ -41,8 +41,11 @@ button. Commit `c9d8511` passed 22 tests, `pnpm typecheck`, and `pnpm build`;
 production deploy `dpl_5JWtuf37v19z7CAiUoUSr38nkgar` is ready at
 `https://webmail.rekad.id`. After deployment, the anonymous home page returned
 `200`, the sign-in button was present, `/api/auth/session` returned `null`, and
-`/api/auth/status` returned `401`. The new button has not yet been clicked on
-this latest deployment because the browser is signed out.
+`/api/auth/status` returned `401`. On 2026-10-24, the user signed in again and
+the deployed sign-out button was clicked: the active session had mailbox
+access before the click; afterward the app returned to the sign-in page,
+`/api/auth/session` was `null`, `/api/auth/status` was `401`, and no error
+message appeared. The browser was left signed out at the sign-in page.
 
 For future Vercel CLI deployments, this repository is linked to the existing
 `rekad/webmail-client` project. The first deployment attempt created a separate
@@ -76,13 +79,12 @@ access. The provider-settings audit can remain deferred.
 ## Next safe step
 
 The core production login, session persistence, OAuth-backed read-only mailbox
-access, bounded expiry, and guarded logout route now pass. Phase 1 remains open
-for invalid-credential handling, multi-account isolation, forced refresh
-behavior, and a post-deployment click of the new sign-out button. Wait for the
-second dedicated test account before account-isolation testing. Do not start
-Phase 2 automatically. Keep `requireClientRegistration` and
-`anonymousClientRegistration` unchanged; do not use the admin API key for app
-authentication or mailbox access.
+access, bounded expiry, and guarded logout button now pass. Phase 1 remains open
+for invalid-credential handling, multi-account isolation, and forced refresh
+behavior. Wait for the second dedicated test account before account-isolation
+testing. Do not start Phase 2 automatically. Keep `requireClientRegistration`
+and `anonymousClientRegistration` unchanged; do not use the admin API key for
+app authentication or mailbox access.
 
 ## Skill installation note
 
