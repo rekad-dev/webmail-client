@@ -27,11 +27,15 @@
   and token-auth method, and `DATABASE_URL`. The configured client ID matches
   `webmail`; the idempotent migration created the app-owned session table and
   expiry index in PostgreSQL.
-- Local production route checks passed: providers `200`, session `200` with
-  `null`, and unauthenticated status `401`. The approved browser login attempt
-  could not reach the registered production host because `webmail.rekad.id`
-  failed DNS resolution in both shell and browser. No login or mailbox access
-  occurred.
+- Production route checks on 2026-10-23 returned providers `200`, anonymous
+  session `200`, unauthenticated status `401`, generic sign-in `200`, and CSRF
+  `200`. Stalwart's public OIDC discovery document also returned `200` from the
+  shell. The provider-specific sign-in route returned an empty `500` before
+  redirecting to Stalwart, so no credentials or mailbox data were accessed.
+- The production hostname resolves, but the Vercel CLI cannot map it to a
+  project in its active scope and no project is linked in this checkout. The
+  function log for the failing route is therefore unavailable; end-to-end
+  login remains blocked pending project access and diagnosis.
 - Latest verification passed: 15 tests, `pnpm typecheck`, and `pnpm build`.
 - The existing `webmail` client and server-wide registration policy were not
   changed. `requireClientRegistration` and `anonymousClientRegistration` remain
@@ -55,8 +59,8 @@
 
 ## Remaining Phase 1 follow-up
 
-Restore DNS/network reachability to `webmail.rekad.id`, then repeat the
-approved isolated login flow at the registered production callback and verify
-session persistence, refresh or bounded expiration, logout, and OAuth-token
-`Mailbox/get`. Keep all global Stalwart registration settings unchanged and do
-not begin Phase 2 before this verification succeeds.
+Resolve the Vercel provider sign-in `500` using the function log, then repeat
+the approved isolated login flow at the registered production callback and
+verify session persistence, refresh or bounded expiration, logout, and
+OAuth-token `Mailbox/get`. Keep all global Stalwart registration settings
+unchanged and do not begin Phase 2 before this verification succeeds.

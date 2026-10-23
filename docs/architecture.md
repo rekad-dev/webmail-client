@@ -79,10 +79,13 @@ by application authentication or mailbox access.
 The local Auth.js provider/session/status routes have been checked. The local
 environment now contains the existing `webmail` client ID and token-auth
 settings plus `DATABASE_URL`; the application session table/index migration
-has been applied. End-to-end login is still pending because
-`webmail.rekad.id` did not resolve from the shell or approved browser session.
-Use the production callback above once that host is reachable. No Stalwart
-client or global setting was changed.
+has been applied. The production hostname now resolves. Production provider,
+session, CSRF, generic sign-in, and Stalwart OIDC discovery checks returned
+`200`; unauthenticated status returned `401`. The provider-specific sign-in
+route returned an empty `500` before the browser reached Stalwart. The Vercel
+CLI could not map the hostname to a project in its active scope, so production
+function logs remain unavailable. No credentials were entered, no mailbox
+request was made, and no Stalwart client or global setting was changed.
 
 ## Phase 0 proof of concept
 

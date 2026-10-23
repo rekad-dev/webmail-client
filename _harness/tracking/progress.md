@@ -30,9 +30,14 @@ scope: progress
   `DATABASE_URL` are now configured locally. The ID matches `webmail`; the
   idempotent migration created the application session table and expiry index.
 - Latest verification: 15 unit tests, `pnpm typecheck`, `pnpm build`, and local
-  production route checks passed. The approved browser attempt could not reach
-  `webmail.rekad.id` because DNS resolution failed, so login and mailbox access
-  were not exercised.
+  production route checks passed. On 2026-10-23, production providers, session,
+  generic sign-in, CSRF, and Stalwart OIDC discovery returned `200`; anonymous
+  status returned `401`. The provider-specific sign-in route returned an empty
+  `500` before redirecting to Stalwart. No credentials or mailbox access were
+  used.
+- The production hostname now resolves, but Vercel CLI cannot map it to a
+  project in its active scope, and this checkout has no linked project. Runtime
+  logs for the provider sign-in failure remain inaccessible.
 - No Stalwart client or server-wide setting has been changed. Keep
   `requireClientRegistration` and `anonymousClientRegistration` unchanged.
   `stalwart-webui` registration remains a future hardening prerequisite, not
@@ -40,7 +45,8 @@ scope: progress
 
 ## Next
 
-Restore DNS/network reachability for `webmail.rekad.id`, then complete the
-already approved browser login at the registered callback and verify session
-persistence, refresh or bounded access-token expiry, logout, and OAuth-token
-`Mailbox/get`. Do not begin Phase 2 before successful end-to-end authentication.
+Inspect the provider sign-in function error after this checkout is linked to the
+correct Vercel project/scope, fix the cause, then complete the already approved
+browser login at the registered callback and verify session persistence,
+refresh or bounded access-token expiry, logout, and OAuth-token `Mailbox/get`.
+Do not begin Phase 2 before successful end-to-end authentication.
