@@ -26,12 +26,13 @@ scope: progress
 - Local route checks passed: provider discovery reports `stalwart` and the
   expected callback shape; the empty session is `null`; unauthenticated status
   is `401`.
-- Latest verification: 14 unit tests and `pnpm typecheck` passed after the
-  review fixes. No database-backed refresh/cleanup operation or browser login
-  was exercised.
-- Full browser login is not verified. Local `DATABASE_URL` and existing client
-  token authentication configuration (method and secret, if required) are
-  missing, and localhost callback URIs are not registered.
+- `AUTH_STALWART_ID`, the existing client's secret and token-auth method, and
+  `DATABASE_URL` are now configured locally. The ID matches `webmail`; the
+  idempotent migration created the application session table and expiry index.
+- Latest verification: 15 unit tests, `pnpm typecheck`, `pnpm build`, and local
+  production route checks passed. The approved browser attempt could not reach
+  `webmail.rekad.id` because DNS resolution failed, so login and mailbox access
+  were not exercised.
 - No Stalwart client or server-wide setting has been changed. Keep
   `requireClientRegistration` and `anonymousClientRegistration` unchanged.
   `stalwart-webui` registration remains a future hardening prerequisite, not
@@ -39,8 +40,7 @@ scope: progress
 
 ## Next
 
-Configure the shared PostgreSQL URL and the existing `webmail` client's token
-authentication method/secret if required. Then complete browser-based login at
-the registered production callback and verify session persistence, refresh or
-bounded access-token expiry, logout, and OAuth-token `Mailbox/get`. Do not begin
-Phase 2 before successful end-to-end authentication.
+Restore DNS/network reachability for `webmail.rekad.id`, then complete the
+already approved browser login at the registered callback and verify session
+persistence, refresh or bounded access-token expiry, logout, and OAuth-token
+`Mailbox/get`. Do not begin Phase 2 before successful end-to-end authentication.

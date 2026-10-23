@@ -76,11 +76,13 @@ milestone; both remain unchanged. Do not change either setting without a
 separate review and the user's explicit approval. The admin API key is not used
 by application authentication or mailbox access.
 
-The implementation is in place and the local Auth.js provider/session/status
-routes have been checked. A real login is still pending: local configuration
-does not contain `DATABASE_URL` or the existing client's token-auth method and
-secret (if required), and local callback URLs are not registered with Stalwart.
-The production callback above is the one to use for end-to-end verification.
+The local Auth.js provider/session/status routes have been checked. The local
+environment now contains the existing `webmail` client ID and token-auth
+settings plus `DATABASE_URL`; the application session table/index migration
+has been applied. End-to-end login is still pending because
+`webmail.rekad.id` did not resolve from the shell or approved browser session.
+Use the production callback above once that host is reachable. No Stalwart
+client or global setting was changed.
 
 ## Phase 0 proof of concept
 

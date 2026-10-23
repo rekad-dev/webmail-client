@@ -23,12 +23,16 @@
 - Local route checks passed: provider discovery returned `stalwart` with the
   expected callback shape; session returned `null`; unauthenticated mailbox
   status returned `401`.
-- End-to-end login remains unverified. `.env.local` has `AUTH_SECRET` and the
-  token-encryption key, but `DATABASE_URL` and the existing client's token
-  authentication settings are not configured. The local callback is not
-  registered with Stalwart.
-- Latest review-fix verification passed: 14 tests, `pnpm typecheck`, and
-  `pnpm build`. No database-backed operation or browser login was run.
+- `.env.local` now contains `AUTH_STALWART_ID`, the existing client's secret
+  and token-auth method, and `DATABASE_URL`. The configured client ID matches
+  `webmail`; the idempotent migration created the app-owned session table and
+  expiry index in PostgreSQL.
+- Local production route checks passed: providers `200`, session `200` with
+  `null`, and unauthenticated status `401`. The approved browser login attempt
+  could not reach the registered production host because `webmail.rekad.id`
+  failed DNS resolution in both shell and browser. No login or mailbox access
+  occurred.
+- Latest verification passed: 15 tests, `pnpm typecheck`, and `pnpm build`.
 - The existing `webmail` client and server-wide registration policy were not
   changed. `requireClientRegistration` and `anonymousClientRegistration` remain
   unchanged; the missing `stalwart-webui` record is deferred hardening, not an
@@ -45,14 +49,14 @@
   with five mailbox roles: `drafts`, `inbox`, `junk`, `sent`, and `trash`.
 - Existing Phase 0 verification passed: 7 focused tests, `pnpm typecheck`,
   `pnpm build`, `pnpm jmap:discover`, and `pnpm jmap:smoke`.
-- No external service or mail-server configuration was changed, and no message
-  was sent or mutated.
+- No Stalwart or mail-server setting was changed, and no message was sent or
+  mutated. The configured PostgreSQL database received only the app-owned,
+  idempotent OAuth-session table/index migration.
 
 ## Remaining Phase 1 follow-up
 
-Configure the shared PostgreSQL database and the existing `webmail` client's
-token-auth method and secret if applicable. Then exercise the registered
-production callback in a browser and verify login, session persistence, refresh
-or bounded expiration, logout, and OAuth-token `Mailbox/get`. Keep all global
-Stalwart registration settings unchanged and do not begin Phase 2 before this
-verification succeeds.
+Restore DNS/network reachability to `webmail.rekad.id`, then repeat the
+approved isolated login flow at the registered production callback and verify
+session persistence, refresh or bounded expiration, logout, and OAuth-token
+`Mailbox/get`. Keep all global Stalwart registration settings unchanged and do
+not begin Phase 2 before this verification succeeds.

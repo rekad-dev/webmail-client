@@ -32,13 +32,18 @@ access. The provider-settings audit can remain deferred.
 
 ## Next safe step
 
-The local environment has `AUTH_SECRET` and an OAuth-token encryption key, but
-no `DATABASE_URL`; it also lacks the existing `webmail` client's token-auth
-method/secret configuration. Configure these as appropriate, then run browser
-login using the production callback and verify session persistence, refresh or
-bounded access-token expiry, logout, and OAuth-token `Mailbox/get`. Localhost
-callback URIs are not registered with Stalwart. Do not start Phase 2 until the
+The local environment now has `AUTH_STALWART_ID=webmail`, the existing client's
+token-auth settings, and `DATABASE_URL`. The idempotent migration applied the
+application-owned session table and expiry index. The approved interactive
+login attempt stopped before login because `webmail.rekad.id` did not resolve
+from the shell or browser host. Restore that DNS/network path, then retry the
+same approved isolated flow and verify session persistence, refresh or bounded
+expiry, logout, and OAuth-token `Mailbox/get`. Do not start Phase 2 until the
 end-to-end login succeeds.
+
+Ego Lite reported an available update. Do not run `ego-browser upgrade` unless
+the user approves it. No login credentials were entered and no mailbox data was
+accessed during the failed browser attempt.
 
 ## Skill installation note
 
