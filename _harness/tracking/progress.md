@@ -49,6 +49,16 @@ scope: progress
   Stalwart's username/password form; the browser needs the user to sign in
   before we can observe the callback stage. No credentials were entered by the
   agent.
+- Production diagnostics identified the `validate_oauth_response` stage and
+  the fixed incomplete-response reason. Auth.js source confirms it assigns
+  `user.id` a random app ID while `account.providerAccountId` comes from the
+  OIDC profile subject. The callback incorrectly required those IDs to match;
+  that check is removed in reviewed commit `58f5ccd`. The fix passed 15 tests,
+  typecheck, and build, then deployed to production as
+  `dpl_D8oi6i3YB1iwfvF1bUcXBbb7eYaY` and was aliased to the webmail domain.
+- A fresh OAuth attempt after the fix returned to Stalwart's sign-in form.
+  The user must sign in again in the same browser page before we can verify the
+  fixed callback, app session, JMAP access, refresh, and logout.
 - No Stalwart client or server-wide setting has been changed. Keep
   `requireClientRegistration` and `anonymousClientRegistration` unchanged.
   `stalwart-webui` registration remains a future hardening prerequisite, not
@@ -56,7 +66,7 @@ scope: progress
 
 ## Next
 
-After the user completes sign-in in the existing browser page, inspect the
-callback stage, fix the failure, then verify session persistence, refresh or
-bounded access-token expiry, logout, and OAuth-token `Mailbox/get`. Do not begin
-Phase 2 before successful end-to-end authentication.
+After the user completes sign-in in the existing browser page, verify the
+callback and app session, then verify OAuth-token `Mailbox/get`, refresh or
+bounded access-token expiry, and logout. Do not begin Phase 2 before successful
+end-to-end authentication.

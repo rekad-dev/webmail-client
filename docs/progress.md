@@ -47,6 +47,13 @@
 - The retry currently shows Stalwart's username/password form in the existing
   browser page. The user must sign in before the callback and new diagnostic
   stage can be inspected; the agent did not enter credentials.
+- The first diagnostic run identified the `validate_oauth_response` stage and
+  fixed incomplete-response reason. Auth.js source shows `user.id` is a random
+  app ID while `account.providerAccountId` is the OIDC subject, so the
+  implementation's equality check was invalid. Reviewed commit `58f5ccd`
+  removes that check; it passed 15 tests, typecheck, and build, then deployed
+  to production as `dpl_D8oi6i3YB1iwfvF1bUcXBbb7eYaY`. A new OAuth attempt now
+  waits at the Stalwart sign-in form for the user to reauthenticate.
 - The existing `webmail` client and server-wide registration policy were not
   changed. `requireClientRegistration` and `anonymousClientRegistration` remain
   unchanged; the missing `stalwart-webui` record is deferred hardening, not an
@@ -69,8 +76,7 @@
 
 ## Remaining Phase 1 follow-up
 
-After the user completes sign-in in the existing browser page, inspect the
-callback stage, fix the failure, then verify session persistence, refresh or
-bounded access-token expiry, logout, and OAuth-token `Mailbox/get`. Keep all
-global Stalwart registration settings unchanged and do not begin Phase 2 before
-this verification succeeds.
+After the user completes sign-in in the existing browser page, verify the
+callback and app session, then verify OAuth-token `Mailbox/get`, refresh or
+bounded access-token expiry, and logout. Keep all global Stalwart registration
+settings unchanged and do not begin Phase 2 before this verification succeeds.

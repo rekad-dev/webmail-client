@@ -45,13 +45,17 @@ The callback diagnostics passed 15 tests, typecheck, and production build, were
 reviewed, and were deployed to production on 2026-10-23 as
 `dpl_A3TtY6Duyt6FLqbk6TPhtodq1Re9`, aliased to `https://webmail.rekad.id`.
 They log a bounded stage and allowlisted error class without credentials,
-identities, or server-supplied error text. On retry, Stalwart displayed its
-username/password form, so the user must sign in from the existing browser page
-before the callback can be diagnosed. After the user returns from that login,
-inspect the stage, fix the cause, then verify session persistence, OAuth-token
-`Mailbox/get`, refresh or bounded expiry, and logout. Do not start Phase 2
-until end-to-end authentication succeeds. Keep all Stalwart global settings
-unchanged.
+identities, or server-supplied error text. The production log identified the
+`validate_oauth_response` stage. Installed Auth.js source showed our code was
+comparing its generated app `user.id` to `account.providerAccountId`, the OIDC
+subject. That check was removed in reviewed commit `58f5ccd`; the fix passed 15
+tests, typecheck, and production build, and was deployed as
+`dpl_D8oi6i3YB1iwfvF1bUcXBbb7eYaY`, aliased to `https://webmail.rekad.id`.
+The fresh OAuth attempt now waits at Stalwart's username/password form. The user
+must sign in again from the existing browser page. After callback, verify app
+session persistence, OAuth-token `Mailbox/get`, refresh or bounded expiry, and
+logout. Do not start Phase 2 until end-to-end authentication succeeds. Keep all
+Stalwart global settings unchanged.
 
 ## Skill installation note
 

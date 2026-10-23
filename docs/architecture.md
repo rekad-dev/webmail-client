@@ -84,13 +84,14 @@ Stalwart OIDC discovery checks returned `200`; unauthenticated status returned
 `401`. The user signed in at Stalwart and returned to the registered callback.
 Auth.js reached its JWT callback, confirming code exchange and OIDC profile
 processing, but the callback returned `500` and the app session is anonymous.
-Vercel logs show `CallbackRouteError` and an underlying `TypeError: immutable`;
-the former deployed handler did not identify the failing finalization stage.
-The reviewed diagnostics patch was approved and deployed as
-`dpl_A3TtY6Duyt6FLqbk6TPhtodq1Re9`, now aliased to `https://webmail.rekad.id`.
-It logs a bounded stage and allowlisted error class. On retry, Stalwart
-displayed its username/password form; the user must sign in before we can
-inspect the new callback log. No Stalwart client or global setting was changed.
+Vercel logs showed `CallbackRouteError` and `TypeError: immutable`. The deployed
+diagnostics then identified the `validate_oauth_response` stage. Auth.js assigns
+the callback's `user.id` a random app ID and its `account.providerAccountId`
+the OIDC subject; code incorrectly required the two to match. Commit `58f5ccd`
+removes that check and is deployed as `dpl_D8oi6i3YB1iwfvF1bUcXBbb7eYaY`, now
+aliased to `https://webmail.rekad.id`. A new OAuth attempt is waiting at
+Stalwart's username/password form for the user to sign in again. No Stalwart
+client or global setting was changed.
 
 ## Phase 0 proof of concept
 
