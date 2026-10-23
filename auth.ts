@@ -9,11 +9,12 @@ import {
   getOAuthSessionSummary,
   revokeOAuthSession,
 } from "./lib/auth/session-store.mts";
+import { getStalwartClientId } from "./lib/auth/stalwart-client-id.mts";
 import { runJmapOAuthAccessCheck } from "./lib/jmap/phase0-poc.mts";
 
 const SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
 const STALWART_ISSUER = "https://mail.rekad.id";
-const STALWART_CLIENT_ID = "webmail";
+const STALWART_CLIENT_ID = getStalwartClientId();
 const MAIL_SCOPE = "urn:ietf:params:oauth:scope:mail";
 const AUTH_METHODS = new Set([
   "none",

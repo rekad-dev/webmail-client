@@ -9,6 +9,7 @@ import {
   type StoredOAuthTokens,
 } from "./token-crypto.mts";
 import { encodeOAuthClientBasicCredentials } from "./oauth-client-auth.mts";
+import { getStalwartClientId } from "./stalwart-client-id.mts";
 import {
   isInvalidGrantOAuthError,
   OAuthTokenRefreshError,
@@ -18,7 +19,6 @@ const APP_SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
 const ACCESS_TOKEN_REFRESH_SKEW_MS = 45_000;
 const TOKEN_REQUEST_TIMEOUT_MS = 10_000;
 const DEFAULT_ISSUER = "https://mail.rekad.id";
-const DEFAULT_CLIENT_ID = "webmail";
 
 type SqlClient = ReturnType<typeof postgres>;
 
@@ -129,7 +129,7 @@ function getClientAuthentication(): {
   method: "none" | "client_secret_basic" | "client_secret_post";
   secret?: string;
 } {
-  const clientId = DEFAULT_CLIENT_ID;
+  const clientId = getStalwartClientId();
   const methodValue =
     process.env.AUTH_STALWART_TOKEN_AUTH_METHOD ?? "client_secret_basic";
   const secret = process.env.AUTH_STALWART_SECRET;
