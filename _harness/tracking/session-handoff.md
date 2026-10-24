@@ -7,8 +7,8 @@ scope: session-handoff
 
 ## Current status
 
-Phase 0 is complete. Production Authorization Code + PKCE sign-in now succeeds
-with the existing `webmail` client and exact registered callback
+Phase 0 and Phase 1 are complete. Production Authorization Code + PKCE sign-in
+now succeeds with the existing `webmail` client and exact registered callback
 `https://webmail.rekad.id/api/auth/callback/stalwart`. It performs PKCE/state/
 nonce checks, validates the OIDC identity, verifies OAuth-token JMAP mailbox
 access, and stores encrypted tokens in PostgreSQL behind an encrypted Auth.js
@@ -40,6 +40,15 @@ state was changed. During the first account's login, an agent-side parsing bug
 caused one rejected credential attempt; Stalwart showed its generic invalid
 username-or-password response, and the corrected configured credentials
 succeeded without creating an app session for the rejected attempt.
+
+On 2026-10-24, production natural-expiry refresh verification passed. The prior
+access-token expiry was in the ~03:53 UTC window. After that window, read-only
+session metadata showed the active access token expiring at 04:53:10 UTC with a
+refresh token present. In the shared browser, `/api/auth/session` returned
+HTTP `200` with an unexpired app session and `/api/auth/status` returned HTTP
+`200` with `authenticated: true` and `mailboxAccess: true`. No token or
+database state was modified to force refresh. No mailbox contents were read,
+and browser control was returned with the first test account signed in.
 
 The Phase 1 home page now starts the existing `stalwart` OAuth flow with a
 server-side sign-in action and shows an active-session confirmation after
@@ -91,16 +100,14 @@ access. The provider-settings audit can remain deferred.
 
 ## Next safe step
 
-The core production login, session persistence, OAuth-backed read-only mailbox
-access, bounded expiry, invalid-credential rejection, account isolation, and
-guarded logout button now pass. All 24 local tests, `pnpm typecheck`, and the
-latest `pnpm build` pass. Phase 1 remains open for natural-expiry refresh
-verification. Local tests cover sanitized JMAP HTTP 503 and network-failure
-errors; a production outage was not simulated. The first account's refresh
-check is scheduled for its existing expiry window; no token or database state
-was altered to force it. Do not start Phase 2 automatically. Keep
-`requireClientRegistration` and `anonymousClientRegistration` unchanged; do not
-use the admin API key for app authentication or mailbox access.
+Phase 1 is complete: production login, session persistence, OAuth-backed
+read-only mailbox access, bounded expiry, invalid-credential rejection,
+account isolation, guarded logout, and natural-expiry refresh all pass. All 24
+local tests, `pnpm typecheck`, and the latest `pnpm build` pass. Local tests
+cover sanitized JMAP HTTP 503 and network-failure errors; a production outage
+was not simulated. Phase 2 remains pending; do not start it automatically.
+Keep `requireClientRegistration` and `anonymousClientRegistration` unchanged;
+do not use the admin API key for app authentication or mailbox access.
 
 ## Skill installation note
 

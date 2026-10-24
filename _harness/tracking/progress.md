@@ -5,7 +5,7 @@ scope: progress
 
 # Progress
 
-## Phase 1 authentication in progress
+## Phase 1 authentication complete
 
 - Auth.js OIDC login is implemented for the existing Stalwart client `webmail`.
 - The home page now has a server-side “Sign in with Stalwart” action and shows
@@ -58,6 +58,13 @@ scope: progress
   or mailbox state changed. A parsing mistake caused one rejected credential
   attempt before the corrected login; Stalwart showed its generic invalid
   username-or-password message, and the rejected attempt created no app session.
+- Production natural-expiry refresh verification passed on 2026-10-24. The
+  prior access-token expiry was in the ~03:53 UTC window; after that window,
+  read-only session metadata showed the active token expiring at 04:53:10 UTC
+  with a refresh token present. `/api/auth/session` returned HTTP `200` with an
+  unexpired app session, and `/api/auth/status` returned HTTP `200` with
+  `authenticated: true` and `mailboxAccess: true`. No token or database state
+  was changed to force refresh; no mailbox contents were read.
 - Deleted the accidental Vercel project `rekad/mail-client`. The requested
   `mail-client-nine.vercel.app` alias and its generated project alias are now
   absent; `rekad/webmail-client` and `webmail.rekad.id` remain.
@@ -88,12 +95,11 @@ scope: progress
 - No mailbox content was returned, no message or mailbox was mutated, and no
   Stalwart client or global registration setting was changed. The admin key
   was not used for application authentication or mailbox access.
-- Phase 1 remains active for natural-expiry refresh verification. Invalid-
-  credential rejection and multi-account isolation passed. Local tests cover
-  sanitized JMAP HTTP 503 and network-failure errors; a production outage was
-  not simulated. The normal production login,
-  mailbox-access, bounded-expiry, and logout paths have passed; do not begin
-  Phase 2 automatically.
+- Phase 1 is complete. Production login, mailbox access, bounded expiry,
+  invalid-credential rejection, account isolation, guarded logout, and
+  natural-expiry refresh passed. Local tests cover sanitized JMAP HTTP 503 and
+  network-failure errors; a production outage was not simulated. Phase 2
+  remains pending; do not begin it automatically.
 - No Stalwart client or server-wide setting has been changed. Keep
   `requireClientRegistration` and `anonymousClientRegistration` unchanged.
   `stalwart-webui` registration remains a future hardening prerequisite, not
@@ -101,8 +107,7 @@ scope: progress
 
 ## Next
 
-Complete natural-expiry refresh verification within Phase 1. Multi-account
-isolation, invalid-credential rejection, and sanitized JMAP outage errors are
-verified at the current client boundary.
-Keep Phase 2 pending until Phase 1 is closed; do not change global Stalwart
-registration settings.
+Phase 1 acceptance checks are complete, including multi-account isolation,
+invalid-credential rejection, natural-expiry refresh, and sanitized JMAP
+outage errors at the current client boundary. Phase 2 remains pending; do not
+begin it automatically. Do not change global Stalwart registration settings.

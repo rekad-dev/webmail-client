@@ -12,7 +12,7 @@
       "name": "Secure authentication",
       "description": "Authenticate existing Stalwart users and provide secure, isolated application sessions.",
       "dependencies": ["phase-0"],
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "id": "phase-2",
