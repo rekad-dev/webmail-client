@@ -316,12 +316,25 @@ access. The provider-settings audit can remain deferred.
 
 ## Current safe step
 
-Continue Phase 5 verification only; do not start Phase 6. The lookup for
-`Re: Fwd: Test Send` returned no subject-query candidates after the authenticated
-account check passed, so thread identification was not reached. Further lookup
-requires another exact subject or separate approval for a broader subject-only
-candidate search. Do not load message bodies or mutate production mailboxes
-without separate explicit authorization. Keep `requireClientRegistration` and
+Continue Phase 5 verification only; do not start Phase 6. The exact-subject
+lookup for `Re: Fwd: Test Send` returned `thread_not_found`; the broader
+subject-only candidate search was already authorized but remains to be run. No
+Trash action or other mailbox mutation was attempted in this latest run.
+
+The new authenticated, body-free `/api/mail/location?emailId=...` endpoint was
+deployed to `https://webmail.rekad.id` as
+`dpl_CGdQH7WzTwFKF5eBTyq62NhQZSYu`. It reads only an exact email ID, mailbox IDs,
+and mailbox roles, validates JMAP `notFound` coverage, and bounds session
+discovery plus reads to an 8-second operation deadline. Local validation passed:
+`pnpm typecheck`, `pnpm test` (130 tests), and `pnpm build`. Commits are
+`f768144`, `22a1c57`, and `5c0f64f`.
+
+The Ego TaskSpace used for this final production check was finished after the
+404 result. The only remaining signed-in space is user-owned, so get the user's
+explicit authorization before claiming it to continue the authorized
+metadata-only diagnostics and one-message Trash→Sent check. Do not load message
+bodies or previews, act on any other message, permanently delete anything, or
+send email. Keep `requireClientRegistration` and
 `anonymousClientRegistration` unchanged, and do not use the admin API key.
 
 ## Skill installation note
