@@ -1,6 +1,31 @@
 # Progress
 
-## Current milestone: Phase 2 inbox and mailbox listing complete
+## Current milestone: Phase 3 safe email reading in progress
+
+- The Phase 3 plan is recorded in the Traycer artifact
+  `phase-3-safe-reading-plan`. Local implementation adds an authenticated
+  message-detail JMAP read path, bounded body retrieval, server-side HTML
+  sanitization, an isolated read view, attachment metadata, and a separate
+  same-origin `Email/set` patch that changes only `$seen` after the body loads.
+- Focused coverage passes: `pnpm test` reports 63/63, `pnpm typecheck` passes,
+  and `pnpm build` passes. The test suite covers malicious HTML stripping,
+  external-link handling, response size caps, account mismatch revocation,
+  `$seen` patch shape, same-origin read-state authorization, and rejection of
+  a different localhost port before session lookup. Focus is moved to the
+  message detail and restored to the triggering inbox row; a pending read-state
+  update reconciles the list or triggers a refresh.
+- `pnpm jmap:smoke` succeeds against the dedicated Stalwart account and reports
+  five mailboxes but zero inbox messages. No body can be opened against the
+  real account yet. No message was mutated and no deployment or browser check
+  was performed. A dedicated test message is required for live body and read
+  state verification; changing `$seen` on it needs explicit approval.
+- Independent review findings for development-origin trust, keyboard focus,
+  and an in-flight read update were resolved and covered by the local route
+  tests and code paths. Phase 3 remains in progress pending populated-message
+  verification. No Stalwart client or global setting was changed; the admin
+  API key is not used.
+
+## Completed milestone: Phase 2 inbox and mailbox listing
 
 - Phase 1 authentication completed on 2026-10-24. Production Authorization
   Code + PKCE sign-in uses the existing `webmail` client and exact callback
@@ -56,5 +81,5 @@ to Inbox, and manual refresh worked; refresh generated a new `/api/mail`
 request. Previous/next controls were disabled for the empty Inbox. Live
 message-row display and page turns were not available to exercise without
 existing messages; automated tests cover summary mapping, route pagination
-input, and the max offset. No message was opened, sent, or changed. Keep Phase 3
-pending and leave all global Stalwart registration settings unchanged.
+input, and the max offset. No message was opened, sent, or changed. Phase 3 is
+now in progress; leave all global Stalwart registration settings unchanged.

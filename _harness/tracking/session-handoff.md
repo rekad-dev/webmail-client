@@ -7,6 +7,20 @@ scope: session-handoff
 
 ## Current status
 
+Phase 3 safe email reading is in progress. Local code now includes an
+authenticated detail route, bounded JMAP body retrieval, server-side HTML
+sanitization and sandboxed display, attachment metadata, and a same-origin
+`Email/set` read-state path that patches only `$seen` after detail loads.
+`pnpm test` passes 63/63, `pnpm typecheck` passes, and `pnpm build` passes. The
+independent security review's three findings were fixed: local origin checks
+require the exact app origin, message detail moves focus and restores it on
+return, and an in-flight read update reconciles or refreshes the listing. The
+read-only `pnpm jmap:smoke` check found five mailboxes and zero Inbox messages,
+so live body display is not yet verified. No message was mutated and no Phase 3
+deployment or browser review has happened. The next verification needs a
+dedicated populated test message; the user must explicitly approve changing
+its read state before live verification.
+
 Phase 0, Phase 1, and Phase 2 are complete. The authenticated `/api/mail` route
 verifies the JMAP primary account
 against the app session, validates selected mailboxes against that account,
@@ -122,12 +136,14 @@ access. The provider-settings audit can remain deferred.
 
 ## Next safe step
 
-Phase 2 is complete. Stop before Phase 3 and wait for the user's direction. If
-live message-row and page-turn verification is needed, use a populated
-dedicated test mailbox without sending or mutating messages unless explicitly
-authorized. Keep `requireClientRegistration` and
-`anonymousClientRegistration` unchanged; do not use the admin API key for app
-authentication or mailbox access.
+Local implementation, security review fixes, tests, type checking, and build
+are complete. To verify the real read flow, use a populated dedicated test
+mailbox after the user explicitly authorizes changing that message's read
+state. Browser review requires the project-approved browser setup; Obscura is
+not configured in this repository, and ego-browser needs explicit
+route/session/checklist approval. Do not deploy Phase 3 or use the admin API
+key unless separately authorized. Keep `requireClientRegistration` and
+`anonymousClientRegistration` unchanged.
 
 ## Skill installation note
 

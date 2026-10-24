@@ -8,7 +8,7 @@ Phase 2 is complete. Later phases remain sequential.
 | 0 | Project discovery and JMAP proof of concept | P0 | Complete: discovery and authenticated `Mailbox/get` verified |
 | 1 | Secure authentication using Stalwart OAuth where available | P0 | Complete: production login, account isolation, natural-expiry refresh, and guarded logout verified |
 | 2 | Real inbox and mailbox listing | P0 | Complete: deployed and checked with a signed-in test account |
-| 3 | Safe email reading and HTML isolation | P0 | Pending |
+| 3 | Safe email reading and HTML isolation | P0 | In progress: local implementation, review fixes, and checks pass; live message verification pending |
 | 4 | Compose and send through JMAP | P0 | Pending |
 | 5 | Essential mailbox actions, search, threads, and drafts | P1 | Pending |
 | 6 | Attachments, responsive UX, and accessibility refinement | P1 | Pending |

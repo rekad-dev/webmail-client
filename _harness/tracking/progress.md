@@ -5,6 +5,24 @@ scope: progress
 
 # Progress
 
+## Phase 3 safe email reading in progress
+
+- The plan is recorded in the Traycer artifact
+  `phase-3-safe-reading-plan`. Local implementation includes an authenticated
+  JMAP detail route, bounded body values and response size, strict server-side
+  HTML sanitization, isolated rendering, attachment metadata, and a separate
+  same-origin update that changes only `$seen` after the message body loads.
+- `pnpm test`: 63/63 passed. `pnpm typecheck` and `pnpm build` passed.
+- The independent review's findings are fixed: localhost port trust is exact,
+  focus moves into message detail and returns to the triggering row, and a
+  pending read-state update reconciles the listing or refreshes it on failure.
+- The read-only dedicated-account smoke check reports five mailboxes and an
+  empty Inbox. Live body display, browser flow, and read-state update remain
+  unverified. No message was changed and no deployment occurred. A live test
+  needs a dedicated message and explicit approval to mark it read.
+- Phase 3 remains in progress pending populated-message verification. No
+  Stalwart client or global settings changed.
+
 ## Phase 2 inbox and mailbox listing complete
 
 - Phase 1 authentication is complete, including production account isolation
@@ -27,7 +45,7 @@ scope: progress
   disabled previous/next controls. No message was opened, sent, or changed.
 - Live message-row display and page turns remain unexercised because the test
   Inbox has no messages. JMAP summary mapping, route pagination input, and the
-  max page-position boundary are covered by tests. Phase 3 remains pending.
+  max page-position boundary are covered by tests. Phase 3 is now in progress.
 
 ## Completed Phase 1 authentication
 

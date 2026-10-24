@@ -122,6 +122,38 @@ Inbox, and manual refresh. Live message-row display and pagination could not be
 exercised because the test inbox contains no messages; JMAP summary mapping,
 route pagination input, and the page-position cap are covered by tests.
 
+## Phase 3 safe email reading
+
+The detail API is `GET /api/mail/detail?emailId=...`; it derives the OAuth
+token and JMAP primary mail account from the app session. The JMAP client
+checks that account against the session, requests only sender/recipient,
+subject/time, read state, text and HTML body values, attachment metadata, and
+mailbox IDs, and bounds both body values and the full API response. It returns
+an application-shaped object with server-sanitized HTML and validated external
+links. It never returns a body-part blob ID or attachment bytes.
+
+HTML uses a strict server-side allowlist. Images, styles, scripts, forms,
+frames, event attributes, and unsafe URL schemes are removed. Body links are
+inert; allowed HTTP, HTTPS, and mailto destinations are listed outside the
+message frame. The UI places sanitized HTML in a sandboxed iframe with a
+restrictive content security policy and renders plaintext through React text
+escaping. Remote resources remain blocked.
+
+Opening a message loads the body first, then issues a same-origin authenticated
+`POST /api/mail/detail?emailId=...` to patch only `keywords/$seen`. The route
+checks the app origin and account binding and revokes the app session on JMAP
+account mismatch. A failed read-state update leaves the body readable and
+reports that the message remains unread. Attachment name, type, and size are
+displayed; attachment downloads are outside Phase 3.
+
+Local tests (63/63), type checking, and production build pass. Review findings
+were resolved: development read-state requests require an exact same origin,
+opening and closing a message moves and restores keyboard focus, and a pending
+read-state update reconciles or refreshes the retained list. The dedicated
+Stalwart account currently has an empty Inbox, so real body display and the
+live read mutation remain unverified. No production deployment or browser
+session check has been performed for Phase 3.
+
 ## Phase 0 proof of concept
 
 The local `pnpm jmap:discover` and `pnpm jmap:smoke` commands run outside the
