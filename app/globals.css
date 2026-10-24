@@ -282,11 +282,53 @@ h1 {
 
 .message-toolbar {
   display: flex;
+  flex-wrap: wrap;
   min-height: 58px;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   border-bottom: 1px solid var(--line);
+}
+
+.mail-search-controls {
+  display: flex;
+  min-width: min(100%, 360px);
+  flex: 1 1 360px;
+  align-items: center;
+  gap: 9px;
+}
+
+.mail-search-controls label {
+  color: #58656e;
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.mail-search-controls input {
+  width: 100%;
+  min-width: 80px;
+  min-height: 38px;
+  border: 1px solid #cbd3d5;
+  border-radius: 7px;
+  background: #fff;
+  padding: 0 11px;
+  color: var(--ink);
+}
+
+.mail-search-controls select,
+.conversation-row-actions select,
+.thread-actions select,
+.thread-message-actions select,
+.message-action-bar select {
+  min-height: 36px;
+  border: 1px solid #cbd3d5;
+  border-radius: 6px;
+  background: #fff;
+  padding: 0 9px;
+  color: #35424b;
+  font: inherit;
+  font-size: 0.82rem;
 }
 
 .message-toolbar-actions {
@@ -410,6 +452,17 @@ h1 {
   gap: 6px;
   border-bottom: 1px solid #edf0f0;
   padding: 12px 0;
+}
+
+.draft-save-status {
+  margin: 0;
+  padding: 8px 0 2px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.draft-save-status.is-error {
+  color: #8a3831;
 }
 
 .compose-field label,
@@ -652,6 +705,11 @@ h1 {
   border-bottom: 1px solid var(--line);
 }
 
+.conversation-list-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .message-row {
   display: grid;
   width: 100%;
@@ -722,6 +780,138 @@ h1 {
   color: var(--muted);
   font-size: 0.78rem;
   white-space: nowrap;
+}
+
+.conversation-star {
+  color: #9a6c18;
+  font-size: 0.95rem;
+}
+
+.conversation-row-actions,
+.thread-actions,
+.thread-message-actions,
+.message-action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.conversation-row-actions {
+  padding: 0 4px 12px 28px;
+}
+
+.conversation-row-actions button,
+.thread-actions button,
+.thread-message-actions button,
+.message-action-bar button {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid #d4dcde;
+  border-radius: 6px;
+  background: #fff;
+  color: #40505a;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.conversation-row-actions button:hover:not(:disabled),
+.thread-actions button:hover:not(:disabled),
+.thread-message-actions button:hover:not(:disabled),
+.message-action-bar button:hover:not(:disabled) {
+  border-color: #9baead;
+  background: #f4f8f7;
+}
+
+.conversation-row-actions button:disabled,
+.thread-actions button:disabled,
+.thread-message-actions button:disabled,
+.message-action-bar button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.thread-view {
+  margin-top: 18px;
+}
+
+.thread-header {
+  display: grid;
+  gap: 14px;
+  margin: 12px 0 18px;
+  border-bottom: 1px solid var(--line);
+  padding: 18px 0;
+}
+
+.thread-header .eyebrow {
+  margin: 0 0 4px;
+}
+
+.thread-header h2 {
+  overflow-wrap: anywhere;
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(1.25rem, 2.4vw, 1.7rem);
+}
+
+.thread-truncated-note {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.thread-message-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.thread-message-card {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+}
+
+.thread-message-open {
+  display: grid;
+  width: 100%;
+  min-height: 78px;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  border: 0;
+  background: transparent;
+  padding: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.thread-message-open:hover {
+  background: #f8faf9;
+}
+
+.thread-message-open.is-unread .message-sender,
+.thread-message-open.is-unread .message-subject {
+  color: #1d2932;
+  font-weight: 700;
+}
+
+.thread-message-actions {
+  border-top: 1px solid #edf0f0;
+  padding: 8px 12px 10px 35px;
+}
+
+.message-action-bar {
+  margin-top: 15px;
+}
+
+.message-move-control {
+  display: inline-flex;
 }
 
 .message-detail {

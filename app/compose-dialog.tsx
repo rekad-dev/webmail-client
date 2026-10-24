@@ -31,13 +31,24 @@ interface ComposePreflight {
   identities: ComposeIdentity[];
 }
 
-interface ComposeFields {
+export interface ComposeFields {
   fromEmail: string;
   to: string;
   cc: string;
   bcc: string;
   subject: string;
   body: string;
+}
+
+interface ReplyHeaders {
+  inReplyTo: string[];
+  references: string[];
+}
+
+interface LoadedDraft extends ComposeFields {
+  id: string;
+  inReplyTo: string[];
+  references: string[];
 }
 
 type SendState =
@@ -73,6 +84,40 @@ function parseAddresses(value: unknown): EmailAddress[] | null {
     addresses.push({ name: address.name, email: address.email });
   }
   return addresses;
+}
+
+function parseLoadedDraft(value: unknown): LoadedDraft | null {
+  const draft = objectValue(value);
+  if (
+    !draft ||
+    typeof draft.id !== "string" ||
+    typeof draft.subject !== "string" ||
+    typeof draft.body !== "string" ||
+    !Array.isArray(draft.inReplyTo) ||
+    !Array.isArray(draft.references) ||
+    !draft.inReplyTo.every((item) => typeof item === "string") ||
+    !draft.references.every((item) => typeof item === "string")
+  ) return null;
+  const from = parseAddresses(draft.from);
+  const to = parseAddresses(draft.to);
+  const cc = parseAddresses(draft.cc);
+  const bcc = parseAddresses(draft.bcc);
+  if (!from || !to || !cc || !bcc) return null;
+  return {
+    id: draft.id,
+    fromEmail: from[0]?.email ?? "",
+    to: to.map((address) => address.email).join(", "),
+    cc: cc.map((address) => address.email).join(", "),
+    bcc: bcc.map((address) => address.email).join(", "),
+    subject: draft.subject,
+    body: draft.body,
+    inReplyTo: draft.inReplyTo,
+    references: draft.references,
+  };
+}
+
+function parseAddressesField(value: string): string[] {
+  return splitRecipients(value);
 }
 
 function parseComposePreflight(value: unknown): ComposePreflight | null {
@@ -151,6 +196,12 @@ function preflightErrorMessage(error: string): string {
   if (error === "sign_in_required") {
     return "Your mail session has ended. Sign in again to compose a message.";
   }
+  if (error === "draft_not_found") {
+    return "This saved draft is no longer available in your Drafts mailbox.";
+  }
+  if (error === "draft_load_failed") {
+    return "This saved draft could not be loaded. Check your connection and try again.";
+  }
   return "Sender identities could not be loaded. Check your connection and try again.";
 }
 
@@ -179,6 +230,8 @@ function sendErrorMessage(error: string | undefined): string {
     case "server_rejected":
     case "send_rejected":
       return "Stalwart rejected this message. Check its details and try again.";
+    case "draft_changed":
+      return "This saved draft changed on the server. Reopen it before sending.";
     default:
       return "The message could not be submitted. Check your connection and try again.";
   }
@@ -211,12 +264,20 @@ export function ComposeDialog({
   onSubmitted,
   fallbackFocusRef,
   triggerRef,
+  mode = "new",
+  initialDraftId,
+  initialFields,
+  initialReplyHeaders,
 }: {
   onClose(): void;
   onInspectSent(): void;
   onSubmitted(): void;
   fallbackFocusRef: RefObject<HTMLHeadingElement | null>;
   triggerRef: RefObject<HTMLButtonElement | null>;
+  mode?: "new" | "reply" | "forward" | "draft";
+  initialDraftId?: string;
+  initialFields?: Partial<ComposeFields>;
+  initialReplyHeaders?: ReplyHeaders;
 }) {
   const [preflight, setPreflight] = useState<ComposePreflight | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -235,8 +296,19 @@ export function ComposeDialog({
   const [sendError, setSendError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [draftId, setDraftId] = useState<string | null>(initialDraftId ?? null);
+  const [draftSaveState, setDraftSaveState] = useState<"idle" | "saving" | "saved" | "error" | "cleanup_pending">("idle");
+  const [draftSaveError, setDraftSaveError] = useState(false);
+  const [replyHeaders, setReplyHeaders] = useState<ReplyHeaders>(initialReplyHeaders ?? {
+    inReplyTo: [],
+    references: [],
+  });
   const attemptKeyRef = useRef<string | null>(null);
   const hasBodyEditsRef = useRef(false);
+  const draftIdRef = useRef<string | null>(initialDraftId ?? null);
+  const draftRevisionRef = useRef(0);
+  const savedDraftRevisionRef = useRef(0);
+  const draftSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const dialogRef = useRef<HTMLElement | null>(null);
   const titleRef = useRef<HTMLHeadingElement | null>(null);
   const identitySelectRef = useRef<HTMLSelectElement | null>(null);
@@ -279,19 +351,65 @@ export function ComposeDialog({
         if (controller.signal.aborted) return;
 
         setPreflight(nextPreflight);
-        const initialIdentity = nextPreflight.identities.length === 1
-          ? nextPreflight.identities[0]
-          : null;
-        if (initialIdentity) {
-          setIdentityId(initialIdentity.id);
-          setFields((current) => ({
-            ...current,
-            bcc: "",
-            body: initialIdentity.textSignature
-              ? `\n\n${initialIdentity.textSignature}`
-              : "",
-          }));
+        let loadedDraft: LoadedDraft | null = null;
+        if (initialDraftId) {
+          const draftResponse = await fetch(
+            `/api/mail/drafts?draftId=${encodeURIComponent(initialDraftId)}`,
+            {
+              method: "GET",
+              credentials: "same-origin",
+              cache: "no-store",
+              signal: controller.signal,
+              headers: { accept: "application/json" },
+            },
+          );
+          const draftBody: unknown = await draftResponse.json();
+          if (!draftResponse.ok) {
+            const reason = objectValue(draftBody)?.error;
+            throw new Error(
+              reason === "sign_in_required" || reason === "draft_not_found"
+                ? reason
+                : "draft_load_failed",
+            );
+          }
+          loadedDraft = parseLoadedDraft(draftBody);
+          if (!loadedDraft) throw new Error("draft_load_failed");
+          setDraftId(loadedDraft.id);
+          draftIdRef.current = loadedDraft.id;
+          setReplyHeaders({
+            inReplyTo: loadedDraft.inReplyTo,
+            references: loadedDraft.references,
+          });
         }
+
+        const initialIdentity = loadedDraft
+          ? nextPreflight.identities.find((identity) =>
+              identity.isWildcard
+                ? loadedDraft!.fromEmail.toLowerCase().endsWith(`@${identity.email.slice(2).toLowerCase()}`)
+                : identity.email.toLowerCase() === loadedDraft!.fromEmail.toLowerCase(),
+            ) ?? null
+          : nextPreflight.identities.length === 1
+            ? nextPreflight.identities[0]
+            : null;
+        setIdentityId(initialIdentity?.id ?? "");
+        const signature = initialIdentity?.textSignature
+          ? `\n\n${initialIdentity.textSignature}`
+          : "";
+        setFields(loadedDraft ?? {
+          fromEmail: initialFields?.fromEmail ?? "",
+          to: initialFields?.to ?? "",
+          cc: initialFields?.cc ?? "",
+          bcc: initialFields?.bcc ?? "",
+          subject: initialFields?.subject ?? "",
+          body: initialFields?.body ?? signature,
+        });
+        hasBodyEditsRef.current = Boolean(loadedDraft || initialFields?.body);
+        draftRevisionRef.current = loadedDraft
+          ? 0
+          : initialFields && Object.values(initialFields).some(Boolean)
+            ? 1
+            : 0;
+        savedDraftRevisionRef.current = 0;
       } catch (error) {
         if (controller.signal.aborted) return;
         setLoadError(error instanceof Error ? error.message : "mail_unavailable");
@@ -302,7 +420,7 @@ export function ComposeDialog({
 
     void loadIdentities();
     return () => controller.abort();
-  }, [reloadVersion]);
+  }, [reloadVersion, initialDraftId]);
 
   useEffect(() => {
     if (isLoading || loadError || !preflight) {
@@ -332,8 +450,109 @@ export function ComposeDialog({
     (sendState === "unknown" || sendState === "in_progress") &&
     attemptKeyRef.current !== null;
 
+  function queueDraftSave(
+    snapshot: ComposeFields,
+    selectedIdentityId: string,
+    revision: number,
+    force = false,
+  ): Promise<void> {
+    const task = draftSaveQueueRef.current.then(async () => {
+      if (revision <= savedDraftRevisionRef.current) return;
+      if (!force && revision < draftRevisionRef.current) return;
+      setDraftSaveState("saving");
+      setDraftSaveError(false);
+      const response = await fetch("/api/mail/drafts", {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          ...(draftIdRef.current ? { draftId: draftIdRef.current } : {}),
+          identityId: selectedIdentityId,
+          ...(snapshot.fromEmail.trim()
+            ? { fromEmail: snapshot.fromEmail.trim() }
+            : {}),
+          to: parseAddressesField(snapshot.to),
+          cc: parseAddressesField(snapshot.cc),
+          bcc: parseAddressesField(snapshot.bcc),
+          subject: snapshot.subject,
+          body: snapshot.body,
+          inReplyTo: replyHeaders.inReplyTo,
+          references: replyHeaders.references,
+        }),
+      });
+      const body: unknown = await response.json();
+      const result = objectValue(body);
+      if (!response.ok || typeof result?.draftId !== "string") {
+        const reason = result?.error;
+        throw new Error(typeof reason === "string" ? reason : "draft_save_failed");
+      }
+      draftIdRef.current = result.draftId;
+      setDraftId(result.draftId);
+      savedDraftRevisionRef.current = revision;
+      setDraftSaveState(result.previousRemoved === false ? "cleanup_pending" : "saved");
+      setDraftSaveError(false);
+    });
+    draftSaveQueueRef.current = task.catch(() => undefined);
+    return task.catch(() => {
+      setDraftSaveState("error");
+      setDraftSaveError(true);
+      throw new Error("draft_save_failed");
+    });
+  }
+
+  async function saveDraftNow(): Promise<void> {
+    const revision = draftRevisionRef.current;
+    if (revision <= savedDraftRevisionRef.current && draftIdRef.current) return;
+    if (!selectedIdentity) throw new Error("draft_identity_missing");
+    await queueDraftSave(fields, selectedIdentity.id, revision, true);
+    if (!draftIdRef.current) throw new Error("draft_save_failed");
+  }
+
+  async function closeCompose(): Promise<void> {
+    if (
+      selectedIdentity &&
+      sendState !== "submitted" &&
+      sendState !== "submitted_sent_update_pending" &&
+      draftRevisionRef.current > savedDraftRevisionRef.current
+    ) {
+      try {
+        await saveDraftNow();
+      } catch {
+        setFormError("This draft could not be saved. Keep it open and try again.");
+        return;
+      }
+    }
+    onClose();
+  }
+
+  useEffect(() => {
+    if (
+      !selectedIdentity ||
+      !preflight?.draftsMailboxId ||
+      isLoading ||
+      sendState === "submitted" ||
+      sendState === "submitted_sent_update_pending" ||
+      isSending ||
+      draftRevisionRef.current <= savedDraftRevisionRef.current
+    ) return;
+    const snapshot = fields;
+    const identityIdSnapshot = selectedIdentity.id;
+    const revision = draftRevisionRef.current;
+    const timer = window.setTimeout(() => {
+      void queueDraftSave(snapshot, identityIdSnapshot, revision).catch(() => undefined);
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [fields, identityId, isLoading, isSending, preflight?.draftsMailboxId, sendState]);
+
   function updateFields(patch: Partial<ComposeFields>) {
     setFields((current) => ({ ...current, ...patch }));
+    draftRevisionRef.current += 1;
+    setDraftSaveState("idle");
+    setDraftSaveError(false);
     attemptKeyRef.current = null;
     setSendState(null);
     setSendError(null);
@@ -360,6 +579,9 @@ export function ComposeDialog({
           ? `\n\n${nextIdentity.textSignature}`
           : "",
     }));
+    draftRevisionRef.current += 1;
+    setDraftSaveState("idle");
+    setDraftSaveError(false);
     window.setTimeout(() => toFieldRef.current?.focus(), 0);
   }
 
@@ -384,17 +606,32 @@ export function ComposeDialog({
       return;
     }
 
+    setIsSending(true);
+    setSendError(null);
+    setFormError(null);
+    try {
+      await saveDraftNow();
+    } catch {
+      setIsSending(false);
+      setFormError("This draft could not be saved. Check your connection and try again.");
+      return;
+    }
+    const savedDraftId = draftIdRef.current;
+    if (!savedDraftId) {
+      setIsSending(false);
+      setFormError("This draft could not be saved. Check your connection and try again.");
+      return;
+    }
+
     let attemptKey: string;
     try {
       attemptKey = attemptKeyRef.current ?? createAttemptKey();
     } catch {
+      setIsSending(false);
       setFormError("A secure send request could not be created in this browser.");
       return;
     }
     attemptKeyRef.current = attemptKey;
-    setIsSending(true);
-    setSendError(null);
-    setFormError(null);
 
     try {
       const response = await fetch("/api/mail/send", {
@@ -407,6 +644,7 @@ export function ComposeDialog({
         },
         body: JSON.stringify({
           attemptKey,
+          draftId: savedDraftId,
           identityId: selectedIdentity.id,
           ...(selectedIdentity.isWildcard
             ? { fromEmail: fields.fromEmail.trim() }
@@ -416,6 +654,8 @@ export function ComposeDialog({
           bcc,
           subject: fields.subject,
           body: fields.body,
+          inReplyTo: replyHeaders.inReplyTo,
+          references: replyHeaders.references,
         }),
       });
       const body: unknown = await response.json();
@@ -460,7 +700,7 @@ export function ComposeDialog({
   function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
     if (event.key === "Escape") {
       event.preventDefault();
-      if (!isSending) onClose();
+      if (!isSending) void closeCompose();
       return;
     }
     if (event.key !== "Tab" || !dialogRef.current) return;
@@ -489,6 +729,13 @@ export function ComposeDialog({
       !preflight.draftsMailboxId ||
       !preflight.sentMailboxId ||
       preflight.identities.length === 0);
+  const composeHeading = mode === "reply"
+    ? "Reply"
+    : mode === "forward"
+      ? "Forward"
+      : mode === "draft"
+        ? "Continue draft"
+        : "Compose";
 
   return (
     <div className="compose-backdrop">
@@ -503,14 +750,14 @@ export function ComposeDialog({
       >
         <header className="compose-header">
           <div>
-            <p className="eyebrow">New message</p>
-            <h2 id="compose-title" ref={titleRef} tabIndex={-1}>Compose</h2>
+            <p className="eyebrow">{mode === "reply" ? "Replying" : mode === "forward" ? "Forwarding" : mode === "draft" ? "Saved draft" : "New message"}</p>
+            <h2 id="compose-title" ref={titleRef} tabIndex={-1}>{composeHeading}</h2>
           </div>
           <button
             aria-label="Close compose"
             className="compose-close"
             disabled={isSending}
-            onClick={onClose}
+            onClick={() => void closeCompose()}
             type="button"
           >
             <span aria-hidden="true">×</span>
@@ -520,7 +767,7 @@ export function ComposeDialog({
         {isLoading ? (
           <div className="compose-state" role="status" aria-live="polite">
             <span className="loading-indicator" aria-hidden="true" />
-            <p>Checking send capability and identities…</p>
+            <p>{initialDraftId ? "Loading saved draft…" : "Checking send capability and identities…"}</p>
           </div>
         ) : null}
 
@@ -742,6 +989,20 @@ export function ComposeDialog({
               <p className="compose-send-error" role="alert">{formError}</p>
             ) : null}
 
+            <p className={`draft-save-status${draftSaveError ? " is-error" : ""}`} role="status" aria-live="polite">
+              {draftSaveState === "saving"
+                ? "Saving draft…"
+                : draftSaveState === "saved"
+                  ? "Draft saved to Drafts."
+                  : draftSaveState === "cleanup_pending"
+                    ? "Draft saved. An older revision may still appear in Drafts."
+                    : draftSaveState === "error"
+                      ? "Draft could not be saved. It remains in this window until you close it."
+                      : draftId
+                        ? "Draft is stored in Drafts."
+                        : "Changes save to Drafts automatically."}
+            </p>
+
             <footer className="compose-actions">
               {(sendState === "unknown" || sendState === "in_progress") ? (
                 <button
@@ -755,7 +1016,7 @@ export function ComposeDialog({
                 <button
                   className="compose-secondary-action"
                   disabled={isSending}
-                  onClick={onClose}
+                  onClick={() => void closeCompose()}
                   type="button"
                 >
                   {sendState === "submitted" || sendState === "submitted_sent_update_pending"

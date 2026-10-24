@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { ComposeDialog } from "./compose-dialog";
+import type { ComposeFields } from "./compose-dialog";
 import { SignOutButton } from "./sign-out-button";
 
 const PAGE_SIZE = 25;
@@ -16,11 +17,22 @@ interface Mailbox {
 
 interface EmailSummary {
   id: string;
+  threadId: string;
   from: Array<{ name: string | null; email: string }>;
   subject: string | null;
   receivedAt: string | null;
   preview: string;
   isUnread: boolean;
+  isStarred: boolean;
+  isDraft: boolean;
+}
+
+interface ThreadMessage extends EmailSummary {}
+
+interface ThreadView {
+  threadId: string;
+  messages: ThreadMessage[];
+  truncated: boolean;
 }
 
 interface MailListing {
@@ -46,7 +58,9 @@ interface EmailAttachment {
 
 interface EmailDetail {
   id: string;
+  threadId: string;
   from: EmailAddress[];
+  replyTo: EmailAddress[];
   to: EmailAddress[];
   cc: EmailAddress[];
   bcc: EmailAddress[];
@@ -54,6 +68,11 @@ interface EmailDetail {
   sentAt: string | null;
   receivedAt: string | null;
   isUnread: boolean;
+  isStarred: boolean;
+  isDraft: boolean;
+  messageId: string[];
+  inReplyTo: string[];
+  references: string[];
   textBody: string | null;
   htmlBody: string | null;
   externalLinks: string[];
@@ -61,6 +80,8 @@ interface EmailDetail {
   attachments: EmailAttachment[];
   mailboxIds: string[];
 }
+
+type MailAction = "mark_read" | "mark_unread" | "star" | "unstar" | "move" | "archive" | "trash";
 
 type BodyFormat = "formatted" | "plain";
 
@@ -146,6 +167,9 @@ async function readEmailDetail(response: Response): Promise<EmailDetail> {
     typeof body !== "object" ||
     typeof (body as EmailDetail).id !== "string" ||
     !Array.isArray((body as EmailDetail).from) ||
+    !Array.isArray((body as EmailDetail).replyTo) ||
+    !Array.isArray((body as EmailDetail).messageId) ||
+    !Array.isArray((body as EmailDetail).references) ||
     !Array.isArray((body as EmailDetail).attachments)
   ) {
     throw new Error("mail_unavailable");
@@ -175,6 +199,13 @@ function MessageDetailView({
   onBack,
   onRetry,
   onBodyFormatChange,
+  mailboxes,
+  actionPending,
+  actionError,
+  onAction,
+  onMove,
+  onReply,
+  onForward,
 }: {
   detail: EmailDetail | null;
   isLoading: boolean;
@@ -187,6 +218,13 @@ function MessageDetailView({
   onBack(): void;
   onRetry(): void;
   onBodyFormatChange(format: BodyFormat): void;
+  mailboxes: Mailbox[];
+  actionPending: boolean;
+  actionError: string | null;
+  onAction(action: MailAction): void;
+  onMove(destinationMailboxId: string): void;
+  onReply(detail: EmailDetail): void;
+  onForward(detail: EmailDetail): void;
 }) {
   const backButton = (
     <button
@@ -242,6 +280,36 @@ function MessageDetailView({
           <h2 id="message-detail-title" ref={headingRef} tabIndex={-1}>
             {detail.subject?.trim() || "(no subject)"}
           </h2>
+          <div className="message-action-bar" role="group" aria-label="Message actions">
+            <button disabled={actionPending} onClick={() => onAction(detail.isUnread ? "mark_read" : "mark_unread")} type="button">
+              {detail.isUnread ? "Mark read" : "Mark unread"}
+            </button>
+            <button aria-pressed={detail.isStarred} disabled={actionPending} onClick={() => onAction(detail.isStarred ? "unstar" : "star")} type="button">
+              {detail.isStarred ? "Unstar" : "Star"}
+            </button>
+            <button disabled={actionPending} onClick={() => onAction("archive")} type="button">Archive</button>
+            <button disabled={actionPending} onClick={() => onAction("trash")} type="button">Trash</button>
+            <label className="message-move-control">
+              <span className="visually-hidden">Move message to mailbox</span>
+              <select
+                aria-label="Move message to mailbox"
+                defaultValue=""
+                disabled={actionPending}
+                onChange={(event) => {
+                  if (event.target.value) onMove(event.target.value);
+                  event.target.value = "";
+                }}
+              >
+                <option value="">Move to…</option>
+                {mailboxes.map((mailbox) => (
+                  <option key={mailbox.id} value={mailbox.id}>{mailbox.name}</option>
+                ))}
+              </select>
+            </label>
+            <button disabled={actionPending} onClick={() => onReply(detail)} type="button">Reply</button>
+            <button disabled={actionPending} onClick={() => onForward(detail)} type="button">Forward</button>
+          </div>
+          {actionError ? <p className="mail-alert" role="alert">{actionError}</p> : null}
           <dl className="message-metadata">
             {detail.from.length > 0 ? (
               <div>
@@ -418,6 +486,30 @@ async function readListing(response: Response): Promise<MailListing> {
   return body as MailListing;
 }
 
+async function readThread(response: Response): Promise<ThreadView> {
+  if (!response.ok) {
+    let reason = "mail_unavailable";
+    try {
+      const body: unknown = await response.json();
+      const value = body && typeof body === "object" && "error" in body
+        ? (body as { error?: unknown }).error
+        : null;
+      if (typeof value === "string") reason = value;
+    } catch {
+      // Keep the generic service error for non-JSON responses.
+    }
+    throw new Error(reason);
+  }
+  const body: unknown = await response.json();
+  if (
+    !body || typeof body !== "object" ||
+    typeof (body as ThreadView).threadId !== "string" ||
+    !Array.isArray((body as ThreadView).messages) ||
+    typeof (body as ThreadView).truncated !== "boolean"
+  ) throw new Error("mail_unavailable");
+  return body as ThreadView;
+}
+
 function errorMessage(error: string): string {
   if (error === "sign_in_required") {
     return "Your mail session is no longer available. Sign out, then sign in again.";
@@ -428,14 +520,41 @@ function errorMessage(error: string): string {
   return "Mail could not be loaded. Check your connection and try again.";
 }
 
+function mailActionErrorMessage(error: string): string {
+  switch (error) {
+    case "sign_in_required":
+      return "Your mail session has ended. Sign in again before changing mail.";
+    case "origin_not_allowed":
+      return "The request could not be verified. Reload rekad Mail and try again.";
+    case "archive_unavailable":
+      return "This account does not have an Archive mailbox, so the message was left unchanged.";
+    case "trash_unavailable":
+      return "This account does not have a Trash mailbox, so the message was left unchanged.";
+    case "thread_too_large":
+      return "This conversation is too large for a bulk action. The action was not applied.";
+    case "mail_not_found":
+      return "That message or mailbox is no longer available. Refresh and try again.";
+    default:
+      return "That mailbox action could not be saved. The current view will refresh.";
+  }
+}
+
 export function InboxClient() {
   const [mailboxId, setMailboxId] = useState<string | null>(null);
+  const [searchInput, setSearchInput] = useState("");
+  const [searchText, setSearchText] = useState("");
+  const [searchScope, setSearchScope] = useState<"all" | "mailbox">("all");
   const [position, setPosition] = useState(0);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [listing, setListing] = useState<MailListing | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [openEmailId, setOpenEmailId] = useState<string | null>(null);
+  const [openThreadId, setOpenThreadId] = useState<string | null>(null);
+  const [threadView, setThreadView] = useState<ThreadView | null>(null);
+  const [threadError, setThreadError] = useState<string | null>(null);
+  const [threadLoading, setThreadLoading] = useState(false);
+  const [threadRefreshVersion, setThreadRefreshVersion] = useState(0);
   const [emailDetail, setEmailDetail] = useState<EmailDetail | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -443,13 +562,34 @@ export function InboxClient() {
   const [bodyFormat, setBodyFormat] = useState<BodyFormat>("formatted");
   const [readUpdateError, setReadUpdateError] = useState(false);
   const [isComposeOpen, setIsComposeOpen] = useState(false);
+  const [composeMode, setComposeMode] = useState<"new" | "reply" | "forward" | "draft">("new");
+  const [composeDraftId, setComposeDraftId] = useState<string | undefined>();
+  const [composeSeed, setComposeSeed] = useState<Partial<ComposeFields> | undefined>();
+  const [composeReplyHeaders, setComposeReplyHeaders] = useState<{ inReplyTo: string[]; references: string[] } | undefined>();
+  const [actionPending, setActionPending] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const skipMailboxFetch = useRef<string | null>(null);
   const composeButtonRef = useRef<HTMLButtonElement | null>(null);
   const mailTitleRef = useRef<HTMLHeadingElement | null>(null);
   const detailBackButtonRef = useRef<HTMLButtonElement | null>(null);
   const detailHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const threadBackButtonRef = useRef<HTMLButtonElement | null>(null);
   const lastOpenedMessageIdRef = useRef<string | null>(null);
   const restoreMessageFocus = useRef(false);
+  const lastOpenedThreadIdRef = useRef<string | null>(null);
+  const restoreThreadFocus = useRef(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const normalized = searchInput.trim();
+      if (normalized !== searchText) {
+        setPosition(0);
+        setListing(null);
+        setSearchText(normalized);
+      }
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [searchInput, searchText]);
 
   useEffect(() => {
     if (mailboxId && skipMailboxFetch.current === mailboxId) {
@@ -460,6 +600,10 @@ export function InboxClient() {
     const controller = new AbortController();
     const params = new URLSearchParams({ position: String(position) });
     if (mailboxId) params.set("mailboxId", mailboxId);
+    if (searchText) {
+      params.set("q", searchText);
+      params.set("searchScope", searchScope);
+    }
 
     async function loadMail() {
       setIsLoading(true);
@@ -496,7 +640,38 @@ export function InboxClient() {
 
     void loadMail();
     return () => controller.abort();
-  }, [mailboxId, position, refreshVersion]);
+  }, [mailboxId, position, refreshVersion, searchText, searchScope]);
+
+  useEffect(() => {
+    if (!openThreadId) return;
+    const threadId = openThreadId;
+    const controller = new AbortController();
+    async function loadThread() {
+      setThreadLoading(true);
+      setThreadError(null);
+      try {
+        const query = new URLSearchParams({ threadId });
+        const response = await fetch(`/api/mail/thread?${query.toString()}`, {
+          method: "GET",
+          credentials: "same-origin",
+          cache: "no-store",
+          signal: controller.signal,
+          headers: { accept: "application/json" },
+        });
+        const nextThread = await readThread(response);
+        if (controller.signal.aborted) return;
+        setThreadView(nextThread);
+      } catch (loadError) {
+        if (controller.signal.aborted) return;
+        setThreadError(loadError instanceof Error ? loadError.message : "mail_unavailable");
+        setThreadView(null);
+      } finally {
+        if (!controller.signal.aborted) setThreadLoading(false);
+      }
+    }
+    void loadThread();
+    return () => controller.abort();
+  }, [openThreadId, threadRefreshVersion]);
 
   useEffect(() => {
     if (!openEmailId) return;
@@ -611,18 +786,32 @@ export function InboxClient() {
       detailBackButtonRef.current?.focus();
       return;
     }
-    if (!restoreMessageFocus.current) return;
+    if (openThreadId && !restoreMessageFocus.current) {
+      threadBackButtonRef.current?.focus();
+      return;
+    }
+    if (restoreMessageFocus.current) {
+      restoreMessageFocus.current = false;
+      const messageId = lastOpenedMessageIdRef.current;
+      lastOpenedMessageIdRef.current = null;
+      if (!messageId) return;
+      const messageButton = Array.from(
+        document.querySelectorAll<HTMLButtonElement>("[data-email-id]"),
+      ).find((button) => button.dataset.emailId === messageId);
+      messageButton?.focus();
+      return;
+    }
+    if (openThreadId || !restoreThreadFocus.current) return;
 
-    restoreMessageFocus.current = false;
-    const messageId = lastOpenedMessageIdRef.current;
-    lastOpenedMessageIdRef.current = null;
-    if (!messageId) return;
-
+    restoreThreadFocus.current = false;
+    const threadId = lastOpenedThreadIdRef.current;
+    lastOpenedThreadIdRef.current = null;
+    if (!threadId) return;
     const messageButton = Array.from(
-      document.querySelectorAll<HTMLButtonElement>(".message-row"),
-    ).find((button) => button.dataset.emailId === messageId);
+      document.querySelectorAll<HTMLButtonElement>("[data-thread-id]"),
+    ).find((button) => button.dataset.threadId === threadId);
     messageButton?.focus();
-  }, [openEmailId]);
+  }, [openEmailId, openThreadId]);
 
   useEffect(() => {
     if (emailDetail?.id === openEmailId) {
@@ -638,16 +827,23 @@ export function InboxClient() {
   const resultRange = listing
     ? listing.messages.length === 0
       ? listing.total === 0
-        ? "0 messages"
-        : "No messages on this page"
+        ? "0 conversations"
+        : "No conversations on this page"
       : listing.total === null
-        ? `${firstResult}–${lastResult}`
-        : `${firstResult}–${lastResult} of ${listing.total}`
+        ? `${firstResult}–${lastResult} conversations`
+        : `${firstResult}–${lastResult} of ${listing.total} conversations`
     : "";
 
   function refresh() {
     if (openEmailId) {
       setDetailRefreshVersion((value) => value + 1);
+      setRefreshVersion((value) => value + 1);
+      if (openThreadId) setThreadRefreshVersion((value) => value + 1);
+      return;
+    }
+    if (openThreadId) {
+      setThreadRefreshVersion((value) => value + 1);
+      setRefreshVersion((value) => value + 1);
       return;
     }
     setError(null);
@@ -664,10 +860,119 @@ export function InboxClient() {
     restoreMessageFocus.current = false;
     setListing(null);
     setError(null);
+    setActionError(null);
     setPosition(0);
     setMailboxId(nextMailboxId);
     setOpenEmailId(null);
+    setOpenThreadId(null);
+    setThreadView(null);
     setEmailDetail(null);
+  }
+
+  async function performMailAction(
+    action: MailAction,
+    target: { emailId: string } | { threadId: string },
+    destinationMailboxId?: string,
+  ) {
+    if (actionPending) return;
+    setActionPending(true);
+    setActionError(null);
+    const body: Record<string, string> = { action, ...target };
+    if (action === "move" && destinationMailboxId) {
+      body.destinationMailboxId = destinationMailboxId;
+      if (listing?.selectedMailboxId) {
+        body.sourceMailboxId = listing.selectedMailboxId;
+      }
+    }
+    try {
+      const response = await fetch("/api/mail/actions", {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: {
+          accept: "application/json",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        let reason = "mail_unavailable";
+        try {
+          const responseBody: unknown = await response.json();
+          const value = responseBody && typeof responseBody === "object" && "error" in responseBody
+            ? (responseBody as { error?: unknown }).error
+            : null;
+          if (typeof value === "string") reason = value;
+        } catch {
+          // Keep the generic failure for non-JSON responses.
+        }
+        throw new Error(reason);
+      }
+      if (action === "mark_unread" && "emailId" in target && target.emailId === openEmailId) {
+        closeMessage();
+      }
+      setRefreshVersion((value) => value + 1);
+      if (openThreadId) setThreadRefreshVersion((value) => value + 1);
+      if (openEmailId && action !== "mark_unread") {
+        setDetailRefreshVersion((value) => value + 1);
+      }
+    } catch (error) {
+      setActionError(mailActionErrorMessage(
+        error instanceof Error ? error.message : "mail_unavailable",
+      ));
+      setRefreshVersion((value) => value + 1);
+      if (openThreadId) setThreadRefreshVersion((value) => value + 1);
+    } finally {
+      setActionPending(false);
+    }
+  }
+
+  function openCompose(mode: "new" | "reply" | "forward", seed?: Partial<ComposeFields>, headers?: { inReplyTo: string[]; references: string[] }) {
+    setComposeMode(mode);
+    setComposeDraftId(undefined);
+    setComposeSeed(seed);
+    setComposeReplyHeaders(headers);
+    setIsComposeOpen(true);
+  }
+
+  function replyToMessage(detail: EmailDetail) {
+    const targets = detail.replyTo.length > 0 ? detail.replyTo : detail.from;
+    const subject = detail.subject?.trim() ?? "";
+    const replySubject = /^re:/i.test(subject) ? subject : subject ? `Re: ${subject}` : "";
+    const originalId = detail.messageId[detail.messageId.length - 1] ??
+      detail.inReplyTo[detail.inReplyTo.length - 1];
+    const references = Array.from(new Set([
+      ...detail.references,
+      ...(originalId ? [originalId] : []),
+    ])).slice(-50);
+    const quote = (detail.textBody ?? "").split("\n").map((line) => `> ${line}`).join("\n");
+    const date = formatDetailDate(detail.sentAt ?? detail.receivedAt) ?? "the previous message";
+    const author = detail.from[0] ? addressLabel(detail.from[0]) : "the sender";
+    openCompose("reply", {
+      to: targets.map((address) => address.email).join(", "),
+      subject: replySubject,
+      body: `\n\nOn ${date}, ${author} wrote:\n${quote}`,
+    }, {
+      inReplyTo: originalId ? [originalId] : [],
+      references,
+    });
+  }
+
+  function forwardMessage(detail: EmailDetail) {
+    const subject = detail.subject?.trim() ?? "";
+    const forwardSubject = /^fwd:/i.test(subject) ? subject : subject ? `Fwd: ${subject}` : "";
+    const headerLines = [
+      "---------- Forwarded message ----------",
+      `From: ${detail.from.map(addressLabel).join(", ") || "Unknown sender"}`,
+      `Date: ${formatDetailDate(detail.sentAt ?? detail.receivedAt) ?? "Date unavailable"}`,
+      `Subject: ${subject || "(no subject)"}`,
+      `To: ${detail.to.map(addressLabel).join(", ") || "Unknown recipient"}`,
+    ];
+    if (detail.cc.length > 0) headerLines.push(`Cc: ${detail.cc.map(addressLabel).join(", ")}`);
+    openCompose("forward", {
+      subject: forwardSubject,
+      body: `\n\n${headerLines.join("\n")}\n\n${detail.textBody ?? ""}`,
+    }, { inReplyTo: [], references: [] });
   }
 
   function changePage(nextPosition: number) {
@@ -681,9 +986,17 @@ export function InboxClient() {
     if (!sentMailbox) return;
     setListing(null);
     setError(null);
+    setActionError(null);
     setPosition(0);
+    setSearchInput("");
+    setSearchText("");
+    setSearchScope("mailbox");
     setMailboxId(sentMailbox.id);
     setRefreshVersion((value) => value + 1);
+    setOpenThreadId(null);
+    setOpenEmailId(null);
+    setThreadView(null);
+    setEmailDetail(null);
   }
 
   function closeMessage() {
@@ -696,11 +1009,51 @@ export function InboxClient() {
 
   function openMessage(emailId: string) {
     restoreMessageFocus.current = true;
+    setActionError(null);
     lastOpenedMessageIdRef.current = emailId;
     setDetailLoading(true);
     setDetailError(null);
     setReadUpdateError(false);
     setOpenEmailId(emailId);
+  }
+
+  function openThread(threadId: string) {
+    restoreMessageFocus.current = false;
+    restoreThreadFocus.current = true;
+    lastOpenedThreadIdRef.current = threadId;
+    setOpenEmailId(null);
+    setActionError(null);
+    setEmailDetail(null);
+    setOpenThreadId(threadId);
+    setThreadView(null);
+    setThreadError(null);
+  }
+
+  function closeThread() {
+    setOpenEmailId(null);
+    setEmailDetail(null);
+    setOpenThreadId(null);
+    setThreadView(null);
+    setThreadError(null);
+    setActionError(null);
+    restoreThreadFocus.current = true;
+    setRefreshVersion((value) => value + 1);
+  }
+
+  function openSavedDraft(draftId: string) {
+    setComposeMode("draft");
+    setComposeDraftId(draftId);
+    setComposeSeed(undefined);
+    setComposeReplyHeaders(undefined);
+    setIsComposeOpen(true);
+  }
+
+  function closeComposeDialog() {
+    setIsComposeOpen(false);
+    setComposeDraftId(undefined);
+    setComposeSeed(undefined);
+    setComposeReplyHeaders(undefined);
+    setRefreshVersion((value) => value + 1);
   }
 
   return (
@@ -749,35 +1102,59 @@ export function InboxClient() {
           <div>
             <p className="eyebrow">Your mailbox</p>
             <h1 id="mail-title" ref={mailTitleRef} tabIndex={-1}>
-              {openEmailId ? "Reading message" : selectedMailbox?.name ?? "Inbox"}
+              {openEmailId ? "Reading message" : openThreadId ? "Conversation" : selectedMailbox?.name ?? "Inbox"}
             </h1>
           </div>
           <button
             className="refresh-button"
-            disabled={openEmailId ? detailLoading : isLoading}
+            disabled={openEmailId ? detailLoading : openThreadId ? threadLoading : isLoading}
             onClick={refresh}
             type="button"
-            aria-label={openEmailId ? "Refresh message" : "Refresh messages"}
+            aria-label={openEmailId ? "Refresh message" : openThreadId ? "Refresh conversation" : "Refresh messages"}
           >
             <span className="refresh-icon" aria-hidden="true">
               ↻
             </span>
-            {(openEmailId ? detailLoading : isLoading) && listing
+            {(openEmailId ? detailLoading : openThreadId ? threadLoading : isLoading) && listing
               ? "Refreshing…"
               : "Refresh"}
           </button>
         </header>
 
-        {!openEmailId ? (
+        {!openEmailId && !openThreadId ? (
           <div className="message-toolbar" aria-label="Message list controls">
+            <div className="mail-search-controls">
+              <label htmlFor="mail-search">Search mail</label>
+              <input
+                autoComplete="off"
+                id="mail-search"
+                onChange={(event) => setSearchInput(event.target.value)}
+                placeholder="Search all mail"
+                type="search"
+                value={searchInput}
+              />
+              <label className="visually-hidden" htmlFor="mail-search-scope">Search scope</label>
+              <select
+                id="mail-search-scope"
+                onChange={(event) => {
+                  setSearchScope(event.target.value as "all" | "mailbox");
+                  setPosition(0);
+                  setListing(null);
+                }}
+                value={searchScope}
+              >
+                <option value="all">All mail</option>
+                <option value="mailbox">Current mailbox</option>
+              </select>
+            </div>
             <p className="result-count" aria-live="polite">
-              {listing ? resultRange : isLoading ? "Loading messages…" : ""}
+              {listing ? resultRange : isLoading ? "Loading conversations…" : ""}
             </p>
             <div className="message-toolbar-actions">
               <button
                 className="compose-launch-button"
                 disabled={!listing || isLoading}
-                onClick={() => setIsComposeOpen(true)}
+                onClick={() => openCompose("new")}
                 ref={composeButtonRef}
                 type="button"
               >
@@ -810,7 +1187,7 @@ export function InboxClient() {
           </div>
         ) : null}
 
-        {!openEmailId && error ? (
+        {!openEmailId && !openThreadId && error ? (
           <div className="mail-alert" role="alert">
             <p>{errorMessage(error)}</p>
             {error !== "sign_in_required" ? (
@@ -821,14 +1198,14 @@ export function InboxClient() {
           </div>
         ) : null}
 
-        {!openEmailId && !listing && isLoading ? (
+        {!openEmailId && !openThreadId && !listing && isLoading ? (
           <div className="mail-state" role="status" aria-live="polite">
             <span className="loading-indicator" aria-hidden="true" />
             <p>Loading your mail…</p>
           </div>
         ) : null}
 
-        {!openEmailId && !listing && !isLoading && !error ? (
+        {!openEmailId && !openThreadId && !listing && !isLoading && !error ? (
           <div className="mail-state">
             <p>Mail is unavailable right now.</p>
             <button className="inline-retry" onClick={refresh} type="button">
@@ -837,40 +1214,41 @@ export function InboxClient() {
           </div>
         ) : null}
 
-        {!openEmailId && listing && listing.messages.length === 0 && !isLoading && !error ? (
+        {!openEmailId && !openThreadId && listing && listing.messages.length === 0 && !isLoading && !error ? (
           <div className="empty-state">
             <span className="empty-envelope" aria-hidden="true">
               <svg viewBox="0 0 32 24" focusable="false">
                 <path d="M2.5 3.5h27v17h-27zM3 4l13 10L29 4" />
               </svg>
             </span>
-            <h2>
-              {position === 0 ? "This mailbox is empty" : "No messages on this page"}
-            </h2>
+            <h2>{searchText ? "No conversations found" : position === 0 ? "This mailbox is empty" : "No conversations on this page"}</h2>
             <p>
-              {position === 0
+              {searchText
+                ? "Try another search or change the search scope."
+                : position === 0
                 ? "New messages will appear here."
                 : "Go to the previous page or refresh to check again."}
             </p>
           </div>
         ) : null}
 
-        {!openEmailId && listing && listing.messages.length > 0 ? (
-          <ol className={`message-list${isLoading ? " is-loading" : ""}`} aria-label="Messages">
+        {!openEmailId && !openThreadId && listing && listing.messages.length > 0 ? (
+          <ol className={`message-list${isLoading ? " is-loading" : ""}`} aria-label="Conversations">
             {listing.messages.map((message) => (
-              <li key={message.id}>
+              <li className="conversation-list-item" key={message.threadId}>
                 <button
                   type="button"
                   className={`message-row${message.isUnread ? " is-unread" : ""}`}
                   data-email-id={message.id}
-                  aria-label={`Open ${message.isUnread ? "unread" : "read"} message from ${senderLabel(message)}: ${message.subject?.trim() || "(no subject)"}`}
-                  onClick={() => openMessage(message.id)}
+                  data-thread-id={message.threadId}
+                  aria-label={`Open ${message.isUnread ? "unread" : "read"} conversation from ${senderLabel(message)}: ${message.subject?.trim() || "(no subject)"}`}
+                  onClick={() => message.isDraft ? openSavedDraft(message.id) : openThread(message.threadId)}
                 >
                   <span className="message-state-dot" aria-hidden="true" />
                   <span className="message-copy">
-                    <span className="message-sender">{senderLabel(message)}</span>
+                    <span className="message-sender">{senderLabel(message)}{message.isStarred ? <span className="conversation-star" aria-label="Starred"> ★</span> : null}</span>
                     <span className="message-subject">
-                      {message.subject?.trim() || "(no subject)"}
+                      {message.isDraft ? "Draft: " : ""}{message.subject?.trim() || "(no subject)"}
                     </span>
                     <span className="message-preview">{message.preview}</span>
                   </span>
@@ -881,9 +1259,151 @@ export function InboxClient() {
                     {formatDate(message.receivedAt)}
                   </time>
                 </button>
+                {!message.isDraft ? (
+                  <div className="conversation-row-actions" role="group" aria-label="Conversation actions">
+                    <label>
+                      <span className="visually-hidden">Move conversation to mailbox</span>
+                      <select
+                        aria-label="Move conversation to mailbox"
+                        defaultValue=""
+                        disabled={actionPending}
+                        onChange={(event) => {
+                          const destinationId = event.target.value;
+                          if (destinationId) void performMailAction("move", { threadId: message.threadId }, destinationId);
+                          event.target.value = "";
+                        }}
+                      >
+                        <option value="">Move to…</option>
+                        {listing.mailboxes.map((mailbox) => <option key={mailbox.id} value={mailbox.id}>{mailbox.name}</option>)}
+                      </select>
+                    </label>
+                    <button disabled={actionPending} onClick={() => void performMailAction("archive", { threadId: message.threadId })} type="button">Archive</button>
+                    <button disabled={actionPending} onClick={() => void performMailAction("trash", { threadId: message.threadId })} type="button">Trash</button>
+                  </div>
+                ) : null}
               </li>
             ))}
           </ol>
+        ) : null}
+
+        {openThreadId && !openEmailId ? (
+          <section className="thread-view" aria-label="Conversation">
+            <button className="detail-back" onClick={closeThread} ref={threadBackButtonRef} type="button">
+              <span aria-hidden="true">←</span>
+              Back to {selectedMailbox?.name ?? "mail"}
+            </button>
+            {threadLoading ? (
+              <div className="mail-state" role="status" aria-live="polite">
+                <span className="loading-indicator" aria-hidden="true" />
+                <p>Opening conversation…</p>
+              </div>
+            ) : null}
+            {threadError ? (
+              <div className="mail-alert" role="alert">
+                <p>This conversation could not be loaded.</p>
+                <button className="inline-retry" onClick={() => setThreadRefreshVersion((value) => value + 1)} type="button">Try again</button>
+              </div>
+            ) : null}
+            {actionError ? <p className="mail-alert" role="alert">{actionError}</p> : null}
+            {threadView && !threadLoading ? (
+              <>
+                <header className="thread-header">
+                  <div>
+                    <p className="eyebrow">Conversation · {threadView.messages.length}{threadView.truncated ? "+" : ""} messages</p>
+                    <h2>{threadView.messages[threadView.messages.length - 1]?.subject?.trim() || "(no subject)"}</h2>
+                  </div>
+                  <div className="thread-actions" role="group" aria-label="Conversation actions">
+                    <button disabled={actionPending || threadView.truncated} onClick={() => void performMailAction(threadView.messages.some((message) => message.isUnread) ? "mark_read" : "mark_unread", { threadId: openThreadId })} type="button">
+                      {threadView.messages.some((message) => message.isUnread) ? "Mark all read" : "Mark all unread"}
+                    </button>
+                    <button disabled={actionPending || threadView.truncated} onClick={() => void performMailAction(threadView.messages.some((message) => message.isStarred) ? "unstar" : "star", { threadId: openThreadId })} type="button">
+                      {threadView.messages.some((message) => message.isStarred) ? "Unstar all" : "Star all"}
+                    </button>
+                    <label>
+                      <span className="visually-hidden">Move conversation to mailbox</span>
+                      <select
+                        aria-label="Move conversation to mailbox"
+                        defaultValue=""
+                        disabled={actionPending || threadView.truncated}
+                        onChange={(event) => {
+                          const destinationId = event.target.value;
+                          if (destinationId) void performMailAction("move", { threadId: openThreadId }, destinationId);
+                          event.target.value = "";
+                        }}
+                      >
+                        <option value="">Move to…</option>
+                        {(listing?.mailboxes ?? []).map((mailbox) => <option key={mailbox.id} value={mailbox.id}>{mailbox.name}</option>)}
+                      </select>
+                    </label>
+                    <button disabled={actionPending || threadView.truncated} onClick={() => void performMailAction("archive", { threadId: openThreadId })} type="button">Archive</button>
+                    <button disabled={actionPending || threadView.truncated} onClick={() => void performMailAction("trash", { threadId: openThreadId })} type="button">Trash</button>
+                    {threadView.messages.some((message) => !message.isDraft) ? (
+                      <button
+                        disabled={actionPending}
+                        onClick={() => {
+                          const latestMessage = [...threadView.messages]
+                            .reverse()
+                            .find((message) => !message.isDraft);
+                          if (latestMessage) openMessage(latestMessage.id);
+                        }}
+                        type="button"
+                      >
+                        Reply
+                      </button>
+                    ) : null}
+                  </div>
+                </header>
+                {threadView.truncated ? (
+                  <p className="thread-truncated-note" role="status">Showing the latest 100 messages. Bulk conversation actions are unavailable; message actions still work for the messages shown.</p>
+                ) : null}
+                <ol className="thread-message-list" aria-label="Messages in this conversation">
+                  {threadView.messages.map((message) => (
+                    <li className="thread-message-card" key={message.id}>
+                      <button
+                        className={`thread-message-open${message.isUnread ? " is-unread" : ""}`}
+                        data-email-id={message.id}
+                        aria-label={`${message.isDraft ? "Edit saved draft" : "Open message"} from ${senderLabel(message)}: ${message.subject?.trim() || "(no subject)"}`}
+                        onClick={() => message.isDraft ? openSavedDraft(message.id) : openMessage(message.id)}
+                        type="button"
+                      >
+                        <span className="message-state-dot" aria-hidden="true" />
+                        <span className="message-copy">
+                          <span className="message-sender">{senderLabel(message)}</span>
+                          <span className="message-subject">{message.subject?.trim() || "(no subject)"}{message.isStarred ? " ★" : ""}</span>
+                          <span className="message-preview">{message.preview}</span>
+                        </span>
+                        <time className="message-date" dateTime={message.receivedAt ?? undefined}>{formatDate(message.receivedAt)}</time>
+                      </button>
+                      {!message.isDraft ? (
+                        <div className="thread-message-actions" role="group" aria-label={`Actions for message from ${senderLabel(message)}`}>
+                          <button disabled={actionPending} onClick={() => void performMailAction(message.isUnread ? "mark_read" : "mark_unread", { emailId: message.id })} type="button">{message.isUnread ? "Mark read" : "Mark unread"}</button>
+                          <button aria-pressed={message.isStarred} disabled={actionPending} onClick={() => void performMailAction(message.isStarred ? "unstar" : "star", { emailId: message.id })} type="button">{message.isStarred ? "Unstar" : "Star"}</button>
+                          <label>
+                            <span className="visually-hidden">Move this message to mailbox</span>
+                            <select
+                              aria-label="Move this message to mailbox"
+                              defaultValue=""
+                              disabled={actionPending}
+                              onChange={(event) => {
+                                const destinationId = event.target.value;
+                                if (destinationId) void performMailAction("move", { emailId: message.id }, destinationId);
+                                event.target.value = "";
+                              }}
+                            >
+                              <option value="">Move to…</option>
+                              {(listing?.mailboxes ?? []).map((mailbox) => <option key={mailbox.id} value={mailbox.id}>{mailbox.name}</option>)}
+                            </select>
+                          </label>
+                          <button disabled={actionPending} onClick={() => void performMailAction("archive", { emailId: message.id })} type="button">Archive</button>
+                          <button disabled={actionPending} onClick={() => void performMailAction("trash", { emailId: message.id })} type="button">Trash</button>
+                        </div>
+                      ) : null}
+                    </li>
+                  ))}
+                </ol>
+              </>
+            ) : null}
+          </section>
         ) : null}
 
         {openEmailId ? (
@@ -894,28 +1414,43 @@ export function InboxClient() {
             detail={emailDetail}
             error={detailError}
             isLoading={detailLoading}
-            mailboxName={selectedMailbox?.name ?? "messages"}
+            mailboxName="conversation"
             onBack={closeMessage}
             onBodyFormatChange={setBodyFormat}
             onRetry={refresh}
             readUpdateError={readUpdateError}
+            mailboxes={listing?.mailboxes ?? []}
+            actionPending={actionPending}
+            actionError={actionError}
+            onAction={(action) => void performMailAction(action, { emailId: openEmailId })}
+            onMove={(destinationId) => void performMailAction("move", { emailId: openEmailId }, destinationId)}
+            onReply={replyToMessage}
+            onForward={forwardMessage}
           />
         ) : null}
 
-        {!openEmailId && listing && error ? (
+        {!openEmailId && !openThreadId && actionError ? (
+          <p className="mail-alert" role="alert">{actionError}</p>
+        ) : null}
+
+        {!openEmailId && !openThreadId && listing && error ? (
           <p className="stale-list-note">Showing the last successfully loaded page.</p>
         ) : null}
       </section>
       {isComposeOpen ? (
         <ComposeDialog
           fallbackFocusRef={mailTitleRef}
-          onClose={() => setIsComposeOpen(false)}
+          onClose={closeComposeDialog}
           onInspectSent={() => {
-            setIsComposeOpen(false);
+            closeComposeDialog();
             selectSentMailbox();
           }}
           onSubmitted={selectSentMailbox}
           triggerRef={composeButtonRef}
+          mode={composeMode}
+          initialDraftId={composeDraftId}
+          initialFields={composeSeed}
+          initialReplyHeaders={composeReplyHeaders}
         />
       ) : null}
     </main>
