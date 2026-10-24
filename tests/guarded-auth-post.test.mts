@@ -7,8 +7,12 @@ import {
   isTrustedLogoutOrigin,
 } from "../lib/auth/guarded-auth-post.mts";
 
-function request(path: string, origin?: string): Request {
-  return new Request(`https://webmail.rekad.id${path}`, {
+function request(
+  path: string,
+  origin?: string,
+  requestOrigin = "https://webmail.rekad.id",
+): Request {
+  return new Request(`${requestOrigin}${path}`, {
     method: "POST",
     ...(origin ? { headers: { origin } } : {}),
   });
@@ -33,10 +37,25 @@ test("accepts the production app origin and loopback development origins", () =>
   );
   assert.equal(
     isTrustedLogoutOrigin(
-      request("/api/auth/signout", "http://localhost:3001"),
+      request(
+        "/api/auth/signout",
+        "http://localhost:3001",
+        "http://localhost:3001",
+      ),
       false,
     ),
     true,
+  );
+  assert.equal(
+    isTrustedLogoutOrigin(
+      request(
+        "/api/auth/signout",
+        "http://localhost:3000",
+        "http://localhost:3001",
+      ),
+      false,
+    ),
+    false,
   );
   assert.equal(
     isTrustedLogoutOrigin(

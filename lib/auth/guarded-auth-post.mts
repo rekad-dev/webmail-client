@@ -1,4 +1,4 @@
-const PRODUCTION_APP_ORIGIN = "https://webmail.rekad.id";
+export { isTrustedAppOrigin as isTrustedLogoutOrigin } from "./trusted-origin.mts";
 
 const LOGOUT_RESPONSE_HEADERS = {
   "Cache-Control": "no-store",
@@ -15,39 +15,6 @@ interface GuardedAuthPostDependencies {
 
 export function isAuthSignOutRequest(request: Request): boolean {
   return new URL(request.url).pathname === "/api/auth/signout";
-}
-
-export function isTrustedLogoutOrigin(
-  request: Request,
-  isProduction = process.env.NODE_ENV === "production",
-): boolean {
-  const origin = request.headers.get("origin");
-  if (!origin) return false;
-
-  let parsedOrigin: URL;
-  try {
-    parsedOrigin = new URL(origin);
-  } catch {
-    return false;
-  }
-
-  if (
-    parsedOrigin.origin !== origin ||
-    parsedOrigin.username ||
-    parsedOrigin.password ||
-    parsedOrigin.pathname !== "/" ||
-    parsedOrigin.search ||
-    parsedOrigin.hash
-  ) {
-    return false;
-  }
-
-  if (parsedOrigin.origin === PRODUCTION_APP_ORIGIN) return true;
-  if (isProduction || parsedOrigin.protocol !== "http:") return false;
-
-  return ["localhost", "127.0.0.1", "[::1]"].includes(
-    parsedOrigin.hostname,
-  );
 }
 
 function failureResponse(status: 403 | 503, message: string): Response {
