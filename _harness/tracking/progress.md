@@ -107,20 +107,23 @@ scope: progress
   same draft from Trash to Drafts and back; both transitions returned
   JMAP-confirmed success and listings confirmed its location after each step.
   The test is recorded in `phase-5-move-action-check`; the test draft remains
-  in Trash. Remaining live acceptance checks are read/unread and star on a
-  regular message, move/archive/trash on a regular message, and reply/forward
-  prefill. The project safety rules require explicit approval before further
-  production mailbox mutations or opening messages that may load content or
-  alter read state. Keep Phase 5 `in_progress`; do not start Phase 6.
+  in Trash. Remaining live acceptance checks are move/archive/trash on a
+  regular message and reply/forward prefill. The project safety rules require
+  explicit approval before further production mailbox mutations or opening
+  messages that may load content or alter read state. Keep Phase 5
+  `in_progress`; do not start Phase 6.
 
 - A separately approved read/star check on the regular message with exact
   subject `Re: Fwd: Test Send` did not reach any action: the exact-subject
   metadata route returned 404 and no unique member ID. Authentication passed;
   no mailbox state changed. The broader candidate route had already returned
-  this subject, but it does not expose IDs. A fallback `/api/mail` listing
-  includes preview fields, so do not use it for target resolution without
-  approval to fetch but ignore those previews. Record:
-  `phase-5-regular-action-check`.
+  this subject, but it does not expose IDs. After the user approved the
+  preview-bearing fallback, `/api/mail?q=Test Send` resolved one matching
+  thread and `/api/mail/thread` resolved the exact member. The original flags
+  were read and unstarred. JMAP confirmed `mark_unread`, `mark_read`, `star`,
+  and `unstar`; final readback confirmed the original flags were restored.
+  Preview fields were ignored, no body was requested, and no other message was
+  touched. Full result: `phase-5-regular-message-flags-check`.
 
 ## Phase 4 compose and send complete
 

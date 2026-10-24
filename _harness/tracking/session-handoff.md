@@ -119,8 +119,8 @@ listings confirmed its location after each step. It remains in Trash; no body
 was requested, and the listing preview field was ignored. See
 `phase-5-move-action-check`.
 
-Remaining live acceptance checks are read/unread and star on a regular message,
-move/archive/trash on a regular message, and reply/forward prefill. Under
+Remaining live acceptance checks are move/archive/trash on a regular message
+and reply/forward prefill. Under
 `_harness/rules.md` and `PROMPT.md`'s email safety requirements, do not perform
 further mailbox writes or open messages that may fetch content/change read
 state without separate explicit authorization. A specific target, exact
@@ -128,12 +128,15 @@ routes, state restoration plan, and content scope must be agreed before those
 checks.
 
 The user approved a read/star test on the regular email whose exact subject is
-`Re: Fwd: Test Send`. `/api/auth/status` passed, but the exact-subject
-`/api/mail/thread-subjects` request returned 404 and no unique member ID; no
-action request was sent and no state changed. The previously approved broad
-candidate route returns subjects/counts but not IDs. `/api/mail` can expose the
-ID but also returns a preview; ask before using it to resolve the target. Full
-record: `phase-5-regular-action-check`.
+`Re: Fwd: Test Send`. The exact-subject `/api/mail/thread-subjects` request
+returned 404 and no action was sent at that stage; see
+`phase-5-regular-action-check`. The user then approved a `/api/mail?q=Test
+Send` and `/api/mail/thread` fallback while ignoring preview fields. This
+resolved one exact member in the two-message thread. Its original flags were
+read and unstarred. JMAP confirmed `mark_unread`, `mark_read`, `star`, and
+`unstar`; final thread readback confirmed the original flags were restored.
+No body was requested and no other message was touched. Full result:
+`phase-5-regular-message-flags-check`.
 
 Phase 4 compose and send implementation and live verification are complete;
 see the Traycer artifacts `phase-4-compose-send-plan` and
