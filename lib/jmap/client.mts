@@ -27,6 +27,7 @@ const EMAIL_ACTION_GET_CALL_ID = "phase5-action-email-get";
 const EMAIL_ACTION_SET_CALL_ID = "phase5-action-email-set";
 const EMAIL_MEMBERSHIP_EMAIL_GET_CALL_ID = "phase5-membership-email-get";
 const EMAIL_MEMBERSHIP_MAILBOX_GET_CALL_ID = "phase5-membership-mailbox-get";
+const EMAIL_SUBJECT_METADATA_GET_CALL_ID = "phase5-subject-metadata-get";
 const EMAIL_DRAFT_GET_CALL_ID = "phase5-draft-get";
 const EMAIL_DRAFT_CREATE_CALL_ID = "phase5-draft-create";
 const EMAIL_DRAFT_DESTROY_CALL_ID = "phase5-draft-destroy";
@@ -243,6 +244,18 @@ export interface JmapThreadSubjectCandidates {
   memberSubjectLookupsIncomplete: boolean;
   incomplete: boolean;
   threads: JmapThreadSubjectCandidateGroup[];
+}
+
+export interface JmapSubjectMatchMetadata {
+  queryCandidateCount: number;
+  exactSubjectMatchCount: number;
+  metadataComplete: boolean;
+  candidates: Array<{
+    from: string[];
+    sentAt: string | null;
+    receivedAt: string | null;
+    mailboxes: Array<{ id: string; role: string | null }>;
+  }>;
 }
 
 export interface JmapMailDraft {
@@ -3931,6 +3944,276 @@ export async function runJmapOAuthThreadSubjectCandidates({
       candidateThreadsDisappearedCount > 0 ||
       memberSubjectLookupsIncomplete,
     threads,
+  };
+}
+
+function normalizeSubjectCandidateQuery(subject: string): string {
+  const normalized = subject.replace(/^(?:(?:re|fw|fwd)\s*:\s*)+/i, "").trim();
+  return normalized || subject;
+}
+
+function subjectMatchMetadataGetRequest(accountId: string, emailIds: string[]) {
+  return {
+    using: [CORE_CAPABILITY, MAIL_CAPABILITY],
+    methodCalls: [[
+      "Email/get",
+      {
+        accountId,
+        ids: emailIds,
+        properties: [
+          "id",
+          "threadId",
+          "subject",
+          "from",
+          "sentAt",
+          "receivedAt",
+          "mailboxIds",
+        ],
+      },
+      EMAIL_SUBJECT_METADATA_GET_CALL_ID,
+    ]],
+  };
+}
+
+function parseSubjectMatchMetadata(
+  responseJson: unknown,
+  emailIds: string[],
+  expectedSubject: string,
+): {
+  candidates: Array<{
+    emailId: string;
+    threadId: string;
+    from: string[];
+    sentAt: string | null;
+    receivedAt: string | null;
+    mailboxIds: string[];
+  }>;
+  notFound: string[];
+} {
+  const { payload } = getMethodResponse(
+    responseJson,
+    EMAIL_SUBJECT_METADATA_GET_CALL_ID,
+    "Email/get",
+  );
+  if (!Array.isArray(payload.list) || !Array.isArray(payload.notFound)) {
+    throw new JmapPocError("The JMAP API returned invalid subject match metadata.");
+  }
+
+  const expectedIds = new Set(emailIds);
+  const notFound = new Set<string>();
+  for (const rawId of payload.notFound) {
+    if (
+      typeof rawId !== "string" ||
+      !expectedIds.has(rawId) ||
+      notFound.has(rawId)
+    ) {
+      throw new JmapPocError("The JMAP API returned invalid subject match metadata.");
+    }
+    notFound.add(rawId);
+  }
+
+  const candidates = new Map<string, {
+    emailId: string;
+    threadId: string;
+    from: string[];
+    sentAt: string | null;
+    receivedAt: string | null;
+    mailboxIds: string[];
+  }>();
+  for (const rawEmail of payload.list) {
+    const email = objectValue(rawEmail);
+    if (
+      !email ||
+      typeof email.id !== "string" ||
+      !expectedIds.has(email.id) ||
+      candidates.has(email.id) ||
+      notFound.has(email.id) ||
+      typeof email.threadId !== "string" ||
+      email.threadId.length === 0 ||
+      email.threadId.length > 256 ||
+      email.subject !== expectedSubject ||
+      !Array.isArray(email.from) ||
+      !Object.hasOwn(email, "sentAt") ||
+      !Object.hasOwn(email, "receivedAt")
+    ) {
+      throw new JmapPocError("The JMAP API returned invalid subject match metadata.");
+    }
+    const sentAt = email.sentAt === null ? null : parseReceivedAt(email.sentAt);
+    const receivedAt = email.receivedAt === null
+      ? null
+      : parseReceivedAt(email.receivedAt);
+    if (
+      (email.sentAt !== null && !sentAt) ||
+      (email.receivedAt !== null && !receivedAt)
+    ) {
+      throw new JmapPocError("The JMAP API returned invalid subject match timestamps.");
+    }
+    const mailboxIds = objectValue(email.mailboxIds);
+    if (
+      !mailboxIds ||
+      Object.entries(mailboxIds).some(
+        ([id, present]) => id.length === 0 || id.length > 256 || present !== true,
+      )
+    ) {
+      throw new JmapPocError("The JMAP API returned invalid subject match mailbox state.");
+    }
+    candidates.set(email.id, {
+      emailId: email.id,
+      threadId: email.threadId,
+      from: parseEmailAddresses(email.from).map((address) => address.email),
+      sentAt,
+      receivedAt,
+      mailboxIds: Object.keys(mailboxIds),
+    });
+  }
+
+  if (emailIds.some((id) => !candidates.has(id) && !notFound.has(id))) {
+    throw new JmapPocError("The JMAP API omitted requested subject match metadata.");
+  }
+  return {
+    candidates: [...candidates.values()],
+    notFound: [...notFound],
+  };
+}
+
+export async function runJmapOAuthSubjectMatchMetadata({
+  accessToken,
+  expectedAccountId,
+  subject,
+  sessionUrl = "https://mail.rekad.id/.well-known/jmap",
+  trustedOrigins = ["https://mail.rekad.id"],
+  allowInsecureHttp = false,
+  fetchImpl = fetch,
+}: {
+  accessToken: string;
+  expectedAccountId: string;
+  subject: string;
+  sessionUrl?: string;
+  trustedOrigins?: string[];
+  allowInsecureHttp?: boolean;
+  fetchImpl?: typeof fetch;
+}): Promise<JmapSubjectMatchMetadata> {
+  if (!subject || subject.length > 512 || /[\u0000-\u001f\u007f]/.test(subject)) {
+    throw new JmapPocError("The requested message subject is invalid.");
+  }
+  const operationFetchImpl = withJmapOperationDeadline(
+    fetchImpl,
+    EMAIL_MEMBERSHIP_OPERATION_TIMEOUT_MS,
+  );
+  const context = await createJmapApiContext({
+    sessionUrl,
+    trustedOrigins,
+    allowInsecureHttp,
+    authorization: makeOAuthAuthorization(accessToken),
+    fetchImpl: operationFetchImpl,
+  });
+  if (context.accountId !== expectedAccountId) {
+    throw new JmapAccountMismatchError();
+  }
+
+  const batchSize = maxObjectsInGet(context);
+  const lookupLimit = Math.min(
+    MAX_THREAD_EMAILS,
+    batchSize * MAX_THREAD_SUBJECT_LOOKUP_GET_BATCHES,
+  );
+  const queryResponse = await postJmapApi({
+    apiUrl: context.apiUrl,
+    authorization: context.authorization,
+    requestBody: threadSubjectQueryRequest(
+      context.accountId,
+      normalizeSubjectCandidateQuery(subject),
+      lookupLimit,
+    ),
+    methodName: "Email/query subject match metadata",
+    fetchImpl: context.fetchImpl,
+    maxResponseBytes: 256 * 1024,
+  });
+  const candidateIds = parseSubjectQueryIds(queryResponse, lookupLimit);
+  const candidateEmails: Array<{ id: string; threadId: string; subject: string | null }> = [];
+  let candidatesDisappearedCount = 0;
+  for (let start = 0; start < candidateIds.length; start += batchSize) {
+    const emailIds = candidateIds.slice(start, start + batchSize);
+    const responseJson = await postJmapApi({
+      apiUrl: context.apiUrl,
+      authorization: context.authorization,
+      requestBody: threadSubjectLookupGetRequest(context.accountId, emailIds),
+      methodName: "Email/get subject match candidates",
+      fetchImpl: context.fetchImpl,
+      maxResponseBytes: 256 * 1024,
+    });
+    const result = parseSubjectLookup(responseJson, emailIds);
+    candidateEmails.push(...result.list);
+    candidatesDisappearedCount += result.notFound.length;
+  }
+
+  const exactMatches = candidateEmails.filter((candidate) => candidate.subject === subject);
+  if (exactMatches.length !== 2 || candidatesDisappearedCount > 0) {
+    if (isJmapOperationDeadlineExceeded(context.fetchImpl)) {
+      throw jmapOperationDeadlineError(context.fetchImpl);
+    }
+    return {
+      queryCandidateCount: candidateIds.length,
+      exactSubjectMatchCount: exactMatches.length,
+      metadataComplete: candidatesDisappearedCount === 0,
+      candidates: [],
+    };
+  }
+
+  const exactIds = exactMatches.map((candidate) => candidate.id);
+  const candidateMetadata: ReturnType<typeof parseSubjectMatchMetadata>["candidates"] = [];
+  let metadataDisappearedCount = 0;
+  for (let start = 0; start < exactIds.length; start += batchSize) {
+    const emailIds = exactIds.slice(start, start + batchSize);
+    const responseJson = await postJmapApi({
+      apiUrl: context.apiUrl,
+      authorization: context.authorization,
+      requestBody: subjectMatchMetadataGetRequest(context.accountId, emailIds),
+      methodName: "Email/get limited subject match metadata",
+      fetchImpl: context.fetchImpl,
+      maxResponseBytes: 256 * 1024,
+    });
+    const result = parseSubjectMatchMetadata(responseJson, emailIds, subject);
+    candidateMetadata.push(...result.candidates);
+    metadataDisappearedCount += result.notFound.length;
+  }
+
+  if (metadataDisappearedCount > 0 || candidateMetadata.length !== 2) {
+    if (isJmapOperationDeadlineExceeded(context.fetchImpl)) {
+      throw jmapOperationDeadlineError(context.fetchImpl);
+    }
+    return {
+      queryCandidateCount: candidateIds.length,
+      exactSubjectMatchCount: exactMatches.length,
+      metadataComplete: false,
+      candidates: [],
+    };
+  }
+
+  const mailboxRoles = await fetchMailboxMembershipRoles(context);
+  const candidates = candidateMetadata
+    .map((candidate) => ({
+      emailId: candidate.emailId,
+      from: candidate.from,
+      sentAt: candidate.sentAt,
+      receivedAt: candidate.receivedAt,
+      mailboxes: candidate.mailboxIds.map((id) => {
+        if (!mailboxRoles.has(id)) {
+          throw new JmapPocError("The JMAP API returned an unknown email mailbox.");
+        }
+        return { id, role: mailboxRoles.get(id) ?? null };
+      }).sort((left, right) => left.id.localeCompare(right.id)),
+    }))
+    .sort((left, right) => left.emailId.localeCompare(right.emailId))
+    .map(({ emailId: _emailId, ...candidate }) => candidate);
+
+  if (isJmapOperationDeadlineExceeded(context.fetchImpl)) {
+    throw jmapOperationDeadlineError(context.fetchImpl);
+  }
+  return {
+    queryCandidateCount: candidateIds.length,
+    exactSubjectMatchCount: exactMatches.length,
+    metadataComplete: metadataDisappearedCount === 0 && candidates.length === 2,
+    candidates,
   };
 }
 
