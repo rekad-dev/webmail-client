@@ -5,7 +5,7 @@ import test from "node:test";
 import {
   runJmapOAuthAccessCheck,
   runJmapPoc,
-} from "../lib/jmap/phase0-poc.mts";
+} from "../lib/jmap/client.mts";
 
 const CORE = "urn:ietf:params:jmap:core";
 const MAIL = "urn:ietf:params:jmap:mail";
@@ -119,7 +119,15 @@ test("performs authenticated, read-only Mailbox/get with discovered endpoints", 
   const apiRequest = JSON.parse(requestBody);
   assert.deepEqual(apiRequest.using, [CORE, MAIL]);
   assert.deepEqual(apiRequest.methodCalls, [
-    ["Mailbox/get", { accountId: "test-account", ids: null }, "phase0-mailboxes"],
+    [
+      "Mailbox/get",
+      {
+        accountId: "test-account",
+        ids: null,
+        properties: ["id", "name", "role", "totalEmails", "unreadEmails"],
+      },
+      "phase0-mailboxes",
+    ],
   ]);
   assert.equal(calls[2].options.redirect, "manual");
 });
@@ -259,7 +267,15 @@ test("verifies OAuth mailbox access with a user bearer token without returning m
   }
   const apiRequest = JSON.parse(String(calls[2].options.body));
   assert.deepEqual(apiRequest.methodCalls, [
-    ["Mailbox/get", { accountId: "test-account", ids: null }, "phase0-mailboxes"],
+    [
+      "Mailbox/get",
+      {
+        accountId: "test-account",
+        ids: null,
+        properties: ["id", "name", "role", "totalEmails", "unreadEmails"],
+      },
+      "phase0-mailboxes",
+    ],
   ]);
   assert.equal(calls[2].options.redirect, "manual");
 });

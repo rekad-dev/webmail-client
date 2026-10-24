@@ -21,7 +21,7 @@ description: Current repository structure and module lookup
 | Path | Purpose |
 |---|---|
 | `app/` | Minimal Next.js App Router placeholder and root styling |
-| `lib/jmap/phase0-poc.mts` | Server-side JMAP discovery, endpoint validation, and read-only mailbox smoke check |
+| `lib/jmap/client.mts` | Server-side JMAP discovery, endpoint validation, and read-only mailbox operations |
 | `scripts/jmap-smoke.mts` | Local discovery and authenticated smoke commands |
 | `tests/jmap-poc.test.mts` | Focused tests for the Phase 0 JMAP proof of concept |
 | `docs/` | Architecture, roadmap, progress, and detailed Phase 0 plan |

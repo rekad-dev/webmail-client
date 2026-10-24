@@ -3,7 +3,7 @@ import {
   revokeOAuthSession,
 } from "@/lib/auth/session-store.mts";
 import { getRequestOAuthSessionId } from "@/lib/auth/request-session.mts";
-import { runJmapOAuthAccessCheck } from "@/lib/jmap/phase0-poc.mts";
+import { runJmapOAuthAccessCheck } from "@/lib/jmap/client.mts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

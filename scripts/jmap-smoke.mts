@@ -1,4 +1,8 @@
-import { JmapPocError, runJmapPoc } from "../lib/jmap/phase0-poc.mts";
+import {
+  JmapPocError,
+  runJmapInboxSmoke,
+  runJmapPoc,
+} from "../lib/jmap/client.mts";
 
 function isMissingFileError(error: unknown): boolean {
   return (
@@ -33,25 +37,32 @@ if (process.exitCode !== 1) {
     const discoveryOnly = process.argv.includes("--discover-only");
 
     try {
-      const result = await runJmapPoc({
-        sessionUrl,
-        trustedOrigins,
-        allowInsecureHttp,
-        username: process.env.JMAP_TEST_USERNAME,
-        password: process.env.JMAP_TEST_PASSWORD,
-        discoveryOnly,
-      });
-
-      if (result.authenticated) {
-        console.log(
-          `Authenticated JMAP Mailbox/get succeeded: ${result.mailboxCount} mailboxes; roles: ${result.roles.join(", ") || "none"}.`,
-        );
-      } else {
+      if (discoveryOnly) {
+        const result = await runJmapPoc({
+          sessionUrl,
+          trustedOrigins,
+          allowInsecureHttp,
+          discoveryOnly: true,
+        });
+        if (result.authenticated) {
+          throw new Error("Discovery-only mode unexpectedly authenticated.");
+        }
         console.log(
           `JMAP session discovery succeeded. Validated endpoints: ${Object.keys(result.endpointOrigins).join(", ")}.`,
         );
         console.log(
           "No account data was requested. Configure a dedicated test account to run pnpm jmap:smoke.",
+        );
+      } else {
+        const result = await runJmapInboxSmoke({
+          sessionUrl,
+          trustedOrigins,
+          allowInsecureHttp,
+          username: process.env.JMAP_TEST_USERNAME,
+          password: process.env.JMAP_TEST_PASSWORD,
+        });
+        console.log(
+          `Authenticated read-only JMAP listing succeeded: ${result.mailboxCount} mailboxes; ${result.inboxMessageCount} inbox IDs on the first page; ${result.fetchedSummaryCount} message summaries fetched${result.inboxTotal === null ? "" : `; ${result.inboxTotal} total inbox messages`}.`,
         );
       }
     } catch (error) {
