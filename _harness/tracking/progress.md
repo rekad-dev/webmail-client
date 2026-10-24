@@ -77,6 +77,21 @@ scope: progress
   thread identification was not reached. No body or preview was fetched and no
   mailbox state changed. Full record: `phase-5-production-search-check`.
 
+- The bounded subject-candidate metadata endpoint is committed as `095bfc4`.
+  It exposes candidate/member subjects and thread counts without bodies or
+  previews, caps JMAP fanout, applies an 8-second operation deadline, and marks
+  stale or timed-out lookups incomplete. The final independent review found no
+  actionable issues. Local verification passed: 118/118 tests,
+  `pnpm typecheck`, `pnpm build`, and `git diff --check`. Production deployment
+  `dpl_9nBW19CiNWPoZghFave54kNsy7QD` is Ready and aliased to
+  `https://webmail.rekad.id`; Vercel's remote build passed. The approved
+  metadata-only browser call is pending: Ego Lite no longer lists the prior
+  taskspace, and `claimTaskSpace(7)` returned `task space not found`. The
+  browser skill requires reusing the same taskspace for one goal, so request
+  approval before creating a replacement for the same exact read-only check.
+  No production mailbox query was issued by this deployment step; no body,
+  preview, or mailbox state was accessed or changed.
+
 ## Phase 4 compose and send complete
 
 - The technical plan is recorded in the Traycer artifact

@@ -75,13 +75,33 @@ On 2026-10-25, the user authorized a broader subject-only candidate search in
 the same signed-in account. `/api/auth/status` again passed authentication and
 primary-account matching. Searching the partial subject `Test Send` returned
 two `Email/query` candidates but no exact subject matches; exact candidates for
-`Fwd: Test Send` and `Re: Test Send` were zero. The route does not return
-candidate subject values when no exact match resolves a thread, so no
-`Thread/get` followed and the thread's message count and member subjects remain
-unknown. The evidence points to subject matching/value differences; account
-scope passed, and thread identification was not reached. No body or preview
-was fetched and no mailbox state changed. The ego-browser task was finished;
-its current-version notice requires user approval before running its upgrade.
+`Fwd: Test Send` and `Re: Test Send` were zero. The earlier route did not return
+candidate subjects unless it resolved a thread, so those subjects and member
+counts remained unknown. The evidence pointed to subject matching/value
+differences; account scope passed, and thread identification was not reached.
+No body or preview was fetched and no mailbox state changed.
+
+The user approved continuing with a bounded subject-candidate metadata
+endpoint and approved its exact production browser check. The endpoint is
+committed as `095bfc4`; it returns candidate/member subjects and thread counts
+only, caps JMAP fanout, and uses an 8-second operation deadline that returns an
+explicit incomplete error. It passed 118/118 tests, `pnpm typecheck`,
+`pnpm build`, and `git diff --check`. Independent re-review found no remaining
+actionable issues; see `phase-5-subject-candidates-endpoint-final-review`.
+Production deployment `dpl_9nBW19CiNWPoZghFave54kNsy7QD` is Ready and aliased
+to `https://webmail.rekad.id`; Vercel's remote build passed.
+
+The approved production metadata call is still pending. Ego Lite's update was
+approved and completed. The previously used TaskSpace 7 was finished after
+the upgrade, `listTaskSpaces()` now returns no entries, and `claimTaskSpace(7)`
+reports that the taskspace was not found. The Ego browser skill requires one
+TaskSpace for the whole goal and says to stop and ask if that space cannot be
+resumed. Ask the user to authorize a replacement TaskSpace before running the
+same previously approved `/api/auth/status` and `POST
+/api/mail/thread-subject-candidates` request (`{"query":"Test Send"}`) in the
+first dedicated account. Read only candidate/member subjects, message counts,
+and truncation/incomplete metadata. Do not open the Inbox, request message
+bodies/previews, or change mailbox state.
 
 Phase 4 compose and send implementation and live verification are complete;
 see the Traycer artifacts `phase-4-compose-send-plan` and
