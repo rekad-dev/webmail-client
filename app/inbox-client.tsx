@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type RefObject } from "react";
+import { ComposeDialog } from "./compose-dialog";
 import { SignOutButton } from "./sign-out-button";
 
 const PAGE_SIZE = 25;
@@ -441,7 +442,10 @@ export function InboxClient() {
   const [detailRefreshVersion, setDetailRefreshVersion] = useState(0);
   const [bodyFormat, setBodyFormat] = useState<BodyFormat>("formatted");
   const [readUpdateError, setReadUpdateError] = useState(false);
+  const [isComposeOpen, setIsComposeOpen] = useState(false);
   const skipMailboxFetch = useRef<string | null>(null);
+  const composeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const mailTitleRef = useRef<HTMLHeadingElement | null>(null);
   const detailBackButtonRef = useRef<HTMLButtonElement | null>(null);
   const detailHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const lastOpenedMessageIdRef = useRef<string | null>(null);
@@ -672,6 +676,16 @@ export function InboxClient() {
     setPosition(nextPosition);
   }
 
+  function selectSentMailbox() {
+    const sentMailbox = listing?.mailboxes.find((mailbox) => mailbox.role === "sent");
+    if (!sentMailbox) return;
+    setListing(null);
+    setError(null);
+    setPosition(0);
+    setMailboxId(sentMailbox.id);
+    setRefreshVersion((value) => value + 1);
+  }
+
   function closeMessage() {
     restoreMessageFocus.current = true;
     setOpenEmailId(null);
@@ -734,7 +748,7 @@ export function InboxClient() {
         <header className="mail-header">
           <div>
             <p className="eyebrow">Your mailbox</p>
-            <h1 id="mail-title">
+            <h1 id="mail-title" ref={mailTitleRef} tabIndex={-1}>
               {openEmailId ? "Reading message" : selectedMailbox?.name ?? "Inbox"}
             </h1>
           </div>
@@ -756,31 +770,43 @@ export function InboxClient() {
 
         {!openEmailId ? (
           <div className="message-toolbar" aria-label="Message list controls">
-          <p className="result-count" aria-live="polite">
-            {listing ? resultRange : isLoading ? "Loading messages…" : ""}
-          </p>
-          {listing ? (
-            <nav className="pagination" aria-label="Message pages">
+            <p className="result-count" aria-live="polite">
+              {listing ? resultRange : isLoading ? "Loading messages…" : ""}
+            </p>
+            <div className="message-toolbar-actions">
               <button
-                aria-label="Previous page"
-                className="page-button"
-                disabled={position === 0 || isLoading}
-                onClick={() => changePage(Math.max(0, position - PAGE_SIZE))}
+                className="compose-launch-button"
+                disabled={!listing || isLoading}
+                onClick={() => setIsComposeOpen(true)}
+                ref={composeButtonRef}
                 type="button"
               >
-                <span aria-hidden="true">←</span>
+                <span aria-hidden="true">＋</span>
+                Compose
               </button>
-              <button
-                aria-label="Next page"
-                className="page-button"
-                disabled={!listing.hasMore || isLoading}
-                onClick={() => changePage(position + PAGE_SIZE)}
-                type="button"
-              >
-                <span aria-hidden="true">→</span>
-              </button>
-            </nav>
-          ) : null}
+              {listing ? (
+                <nav className="pagination" aria-label="Message pages">
+                  <button
+                    aria-label="Previous page"
+                    className="page-button"
+                    disabled={position === 0 || isLoading}
+                    onClick={() => changePage(Math.max(0, position - PAGE_SIZE))}
+                    type="button"
+                  >
+                    <span aria-hidden="true">←</span>
+                  </button>
+                  <button
+                    aria-label="Next page"
+                    className="page-button"
+                    disabled={!listing.hasMore || isLoading}
+                    onClick={() => changePage(position + PAGE_SIZE)}
+                    type="button"
+                  >
+                    <span aria-hidden="true">→</span>
+                  </button>
+                </nav>
+              ) : null}
+            </div>
           </div>
         ) : null}
 
@@ -880,6 +906,18 @@ export function InboxClient() {
           <p className="stale-list-note">Showing the last successfully loaded page.</p>
         ) : null}
       </section>
+      {isComposeOpen ? (
+        <ComposeDialog
+          fallbackFocusRef={mailTitleRef}
+          onClose={() => setIsComposeOpen(false)}
+          onInspectSent={() => {
+            setIsComposeOpen(false);
+            selectSentMailbox();
+          }}
+          onSubmitted={selectSentMailbox}
+          triggerRef={composeButtonRef}
+        />
+      ) : null}
     </main>
   );
 }
