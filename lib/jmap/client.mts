@@ -32,6 +32,7 @@ const EMAIL_SEND_MARKER_GET_CALL_ID = "phase5-send-marker-get";
 const EMAIL_SEND_MARKER_SET_CALL_ID = "phase5-send-marker-set";
 const MAX_SESSION_REDIRECTS = 5;
 const REQUEST_TIMEOUT_MS = 15_000;
+const THREAD_SUBJECT_CANDIDATE_OPERATION_TIMEOUT_MS = 8_000;
 const JMAP_RESPONSE_MAX_BYTES = 2 * 1024 * 1024;
 const EMAIL_DETAIL_RESPONSE_MAX_BYTES = 1024 * 1024;
 const EMAIL_BODY_VALUE_MAX_BYTES = 256 * 1024;
@@ -39,6 +40,8 @@ const EMAIL_BODY_VALUE_MAX_CHARS = 256 * 1024;
 const MAX_THREAD_EMAILS = 100;
 const MAX_THREAD_SUBJECT_LOOKUP_GET_BATCHES = 2;
 const MAX_THREAD_SUBJECT_MEMBER_GET_BATCHES = 2;
+const MAX_THREAD_SUBJECT_CANDIDATE_THREADS = 2;
+const MAX_THREAD_SUBJECT_CANDIDATE_MEMBER_GET_BATCHES_PER_SEARCH = 2;
 const MAX_THREAD_STATE_EMAILS_PER_THREAD = 1_000;
 const THREAD_STATE_EMAIL_GET_BATCH_SIZE = 100;
 const DRAFT_SEND_PENDING_PREFIX = "rekad-send-pending-";
@@ -214,6 +217,26 @@ export interface JmapThreadSubjects {
   subjectsTruncated: boolean;
 }
 
+export interface JmapThreadSubjectCandidateGroup {
+  candidateMessageCount: number;
+  candidateSubjects: Array<string | null>;
+  messageCount: number | null;
+  memberSubjects: Array<string | null>;
+  threadUnavailable: boolean;
+  truncated: boolean;
+  subjectsTruncated: boolean;
+}
+
+export interface JmapThreadSubjectCandidates {
+  queryCandidateCount: number;
+  candidatesDisappearedCount: number;
+  candidateMessagesMissingFromThreadCount: number;
+  candidateThreadsDisappearedCount: number;
+  memberSubjectLookupsIncomplete: boolean;
+  incomplete: boolean;
+  threads: JmapThreadSubjectCandidateGroup[];
+}
+
 export interface JmapMailDraft {
   id: string;
   from: JmapEmailAddress[];
@@ -305,6 +328,37 @@ export class JmapThreadSubjectSearchIncompleteError extends JmapPocError {
     super("The bounded subject search did not return a complete result set.");
     this.name = "JmapThreadSubjectSearchIncompleteError";
   }
+}
+
+const jmapOperationDeadlineByFetch = new WeakMap<typeof fetch, AbortSignal>();
+
+function withJmapOperationDeadline(
+  fetchImpl: typeof fetch,
+  timeoutMs: number,
+): typeof fetch {
+  const deadlineSignal = AbortSignal.timeout(timeoutMs);
+  const boundedFetch: typeof fetch = async (input, init = {}) => {
+    if (deadlineSignal.aborted) {
+      throw new JmapThreadSubjectSearchIncompleteError();
+    }
+    const signal = init.signal
+      ? AbortSignal.any([init.signal, deadlineSignal])
+      : deadlineSignal;
+    try {
+      return await fetchImpl(input, { ...init, signal });
+    } catch (error) {
+      if (deadlineSignal.aborted) {
+        throw new JmapThreadSubjectSearchIncompleteError();
+      }
+      throw error;
+    }
+  };
+  jmapOperationDeadlineByFetch.set(boundedFetch, deadlineSignal);
+  return boundedFetch;
+}
+
+function isJmapOperationDeadlineExceeded(fetchImpl: typeof fetch): boolean {
+  return jmapOperationDeadlineByFetch.get(fetchImpl)?.aborted === true;
 }
 
 export type JmapThreadSubjectsNotFoundReason =
@@ -542,6 +596,9 @@ async function fetchSession({
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
     } catch {
+      if (isJmapOperationDeadlineExceeded(fetchImpl)) {
+        throw new JmapThreadSubjectSearchIncompleteError();
+      }
       throw new JmapPocError(
         "Could not reach the configured JMAP session endpoint (network or TLS failure).",
       );
@@ -582,6 +639,9 @@ async function fetchSession({
         sessionUrl: currentUrl,
       };
     } catch {
+      if (isJmapOperationDeadlineExceeded(fetchImpl)) {
+        throw new JmapThreadSubjectSearchIncompleteError();
+      }
       throw new JmapPocError("JMAP session discovery returned invalid JSON.");
     }
   }
@@ -815,6 +875,9 @@ async function postJmapApi({
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch {
+    if (isJmapOperationDeadlineExceeded(fetchImpl)) {
+      throw new JmapThreadSubjectSearchIncompleteError();
+    }
     throw new JmapPocError(
       "Could not reach the configured JMAP API endpoint (network or TLS failure).",
     );
@@ -856,6 +919,9 @@ async function postJmapApi({
     }
   } catch (error) {
     if (error instanceof JmapPocError) throw error;
+    if (isJmapOperationDeadlineExceeded(fetchImpl)) {
+      throw new JmapThreadSubjectSearchIncompleteError();
+    }
     throw new JmapPocError(`Could not read the JMAP ${methodName} response.`);
   } finally {
     reader.releaseLock();
@@ -3647,6 +3713,202 @@ export async function runJmapOAuthThreadSubjects({
     members,
     truncated: allIds.length > visibleIds.length || staleMemberIds.size > 0,
     subjectsTruncated,
+  };
+}
+
+export async function runJmapOAuthThreadSubjectCandidates({
+  accessToken,
+  expectedAccountId,
+  query,
+  sessionUrl = "https://mail.rekad.id/.well-known/jmap",
+  trustedOrigins = ["https://mail.rekad.id"],
+  allowInsecureHttp = false,
+  fetchImpl = fetch,
+}: {
+  accessToken: string;
+  expectedAccountId: string;
+  query: string;
+  sessionUrl?: string;
+  trustedOrigins?: string[];
+  allowInsecureHttp?: boolean;
+  fetchImpl?: typeof fetch;
+}): Promise<JmapThreadSubjectCandidates> {
+  if (!query || query.length > 512 || /[\u0000-\u001f\u007f]/.test(query)) {
+    throw new JmapPocError("The requested subject query is invalid.");
+  }
+  const operationFetchImpl = withJmapOperationDeadline(
+    fetchImpl,
+    THREAD_SUBJECT_CANDIDATE_OPERATION_TIMEOUT_MS,
+  );
+  const context = await createJmapApiContext({
+    sessionUrl,
+    trustedOrigins,
+    allowInsecureHttp,
+    authorization: makeOAuthAuthorization(accessToken),
+    fetchImpl: operationFetchImpl,
+  });
+  if (context.accountId !== expectedAccountId) {
+    throw new JmapAccountMismatchError();
+  }
+
+  const batchSize = maxObjectsInGet(context);
+  const lookupLimit = Math.min(
+    MAX_THREAD_EMAILS,
+    batchSize * MAX_THREAD_SUBJECT_LOOKUP_GET_BATCHES,
+  );
+  const queryResponse = await postJmapApi({
+    apiUrl: context.apiUrl,
+    authorization: context.authorization,
+    requestBody: threadSubjectQueryRequest(context.accountId, query, lookupLimit),
+    methodName: "Email/query subject candidates",
+    fetchImpl: context.fetchImpl,
+    maxResponseBytes: 256 * 1024,
+  });
+  const candidateIds = parseSubjectQueryIds(queryResponse, lookupLimit);
+  if (candidateIds.length === 0) {
+    return {
+      queryCandidateCount: 0,
+      candidatesDisappearedCount: 0,
+      candidateMessagesMissingFromThreadCount: 0,
+      candidateThreadsDisappearedCount: 0,
+      memberSubjectLookupsIncomplete: false,
+      incomplete: false,
+      threads: [],
+    };
+  }
+
+  const candidateEmails: Array<{
+    id: string;
+    threadId: string;
+    subject: string | null;
+  }> = [];
+  let candidatesDisappearedCount = 0;
+  for (let start = 0; start < candidateIds.length; start += batchSize) {
+    const emailIds = candidateIds.slice(start, start + batchSize);
+    const responseJson = await postJmapApi({
+      apiUrl: context.apiUrl,
+      authorization: context.authorization,
+      requestBody: threadSubjectLookupGetRequest(context.accountId, emailIds),
+      methodName: "Email/get subject candidate metadata",
+      fetchImpl: context.fetchImpl,
+      maxResponseBytes: 256 * 1024,
+    });
+    const result = parseSubjectLookup(responseJson, emailIds);
+    candidateEmails.push(...result.list);
+    candidatesDisappearedCount += result.notFound.length;
+  }
+
+  const candidatesByThread = new Map<
+    string,
+    Array<{ id: string; subject: string | null }>
+  >();
+  for (const candidate of candidateEmails) {
+    const threadCandidates = candidatesByThread.get(candidate.threadId) ?? [];
+    threadCandidates.push({ id: candidate.id, subject: candidate.subject });
+    candidatesByThread.set(candidate.threadId, threadCandidates);
+  }
+  if (candidatesByThread.size > MAX_THREAD_SUBJECT_CANDIDATE_THREADS) {
+    throw new JmapThreadSubjectSearchIncompleteError();
+  }
+
+  const threads: JmapThreadSubjectCandidateGroup[] = [];
+  let candidateMessagesMissingFromThreadCount = 0;
+  let candidateThreadsDisappearedCount = 0;
+  let memberSubjectLookupsIncomplete = false;
+  let remainingMemberSubjectBatches =
+    MAX_THREAD_SUBJECT_CANDIDATE_MEMBER_GET_BATCHES_PER_SEARCH;
+  for (const [threadId, candidates] of candidatesByThread) {
+    let allIds: string[];
+    try {
+      allIds = await fetchThreadEmailIds(context, threadId);
+    } catch (error) {
+      if (!(error instanceof JmapEmailNotFoundError)) throw error;
+      candidateThreadsDisappearedCount += 1;
+      memberSubjectLookupsIncomplete = true;
+      const subjectsTruncated = candidates.some(
+        (candidate) => candidate.subject !== null && candidate.subject.length > 512,
+      );
+      threads.push({
+        candidateMessageCount: candidates.length,
+        candidateSubjects: candidates.map((candidate) =>
+          boundedString(candidate.subject, 512),
+        ),
+        messageCount: null,
+        memberSubjects: [],
+        threadUnavailable: true,
+        truncated: true,
+        subjectsTruncated,
+      });
+      continue;
+    }
+    const memberIds = new Set(allIds);
+    const currentCandidates = candidates.filter((candidate) => memberIds.has(candidate.id));
+    candidateMessagesMissingFromThreadCount += candidates.length - currentCandidates.length;
+    if (currentCandidates.length === 0) {
+      memberSubjectLookupsIncomplete = true;
+      continue;
+    }
+
+    const maxMemberCount = remainingMemberSubjectBatches > 0
+      ? Math.min(
+        MAX_THREAD_EMAILS,
+        batchSize * remainingMemberSubjectBatches,
+      )
+      : 0;
+    const visibleIds = maxMemberCount > 0 ? allIds.slice(-maxMemberCount) : [];
+    if (visibleIds.length < allIds.length) memberSubjectLookupsIncomplete = true;
+    const memberSubjects: Array<string | null> = [];
+    const staleMemberIds = new Set<string>();
+    let subjectsTruncated = currentCandidates.some(
+      (candidate) => candidate.subject !== null && candidate.subject.length > 512,
+    );
+    for (let start = 0; start < visibleIds.length; start += batchSize) {
+      const emailIds = visibleIds.slice(start, start + batchSize);
+      remainingMemberSubjectBatches -= 1;
+      const responseJson = await postJmapApi({
+        apiUrl: context.apiUrl,
+        authorization: context.authorization,
+        requestBody: threadSubjectsGetRequest(context.accountId, emailIds),
+        methodName: "Email/get candidate thread subjects",
+        fetchImpl: context.fetchImpl,
+        maxResponseBytes: 256 * 1024,
+      });
+      const result = parseThreadSubjects(responseJson, emailIds);
+      memberSubjects.push(...result.members.map((member) => member.subject));
+      subjectsTruncated ||= result.subjectsTruncated;
+      for (const emailId of result.notFound) staleMemberIds.add(emailId);
+    }
+    if (staleMemberIds.size > 0) memberSubjectLookupsIncomplete = true;
+
+    threads.push({
+      candidateMessageCount: currentCandidates.length,
+      candidateSubjects: currentCandidates.map((candidate) =>
+        boundedString(candidate.subject, 512),
+      ),
+      messageCount: allIds.length,
+      memberSubjects,
+      threadUnavailable: false,
+      truncated: allIds.length > visibleIds.length || staleMemberIds.size > 0,
+      subjectsTruncated,
+    });
+  }
+
+  if (isJmapOperationDeadlineExceeded(context.fetchImpl)) {
+    throw new JmapThreadSubjectSearchIncompleteError();
+  }
+
+  return {
+    queryCandidateCount: candidateIds.length,
+    candidatesDisappearedCount,
+    candidateMessagesMissingFromThreadCount,
+    candidateThreadsDisappearedCount,
+    memberSubjectLookupsIncomplete,
+    incomplete:
+      candidatesDisappearedCount > 0 ||
+      candidateMessagesMissingFromThreadCount > 0 ||
+      candidateThreadsDisappearedCount > 0 ||
+      memberSubjectLookupsIncomplete,
+    threads,
   };
 }
 

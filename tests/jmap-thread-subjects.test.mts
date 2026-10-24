@@ -7,6 +7,7 @@ import {
   JmapThreadSubjectsNotFoundError,
   JmapThreadSubjectSearchIncompleteError,
   runJmapOAuthThreadSubjects,
+  runJmapOAuthThreadSubjectCandidates,
 } from "../lib/jmap/client.mts";
 
 const CORE = "urn:ietf:params:jmap:core";
@@ -28,17 +29,29 @@ function createFetch(options: {
   omitSubjectProperty?: boolean;
   malformedThreadCoverage?: boolean;
   candidateSubject?: string;
+  candidateSubjects?: Record<string, string | null>;
+  candidateThreadIds?: Record<string, string>;
   longMemberSubject?: string;
   queryTotal?: number;
   queryIds?: string[];
   missingCandidate?: boolean;
   threadMissing?: boolean;
+  missingThreadIds?: string[];
   threadMemberIds?: string[];
+  threadMemberIdsByThread?: Record<string, string[]>;
   missingMemberIds?: string[];
 } = {}) {
   const memberIds = options.memberIds ?? ["email-1", "email-2"];
   const targetId = memberIds.at(-1) ?? "email-2";
   const queryIds = options.queryIds ?? [targetId];
+  const candidateSubjectFor = (id: string): string | null => {
+    if (options.candidateSubjects && Object.hasOwn(options.candidateSubjects, id)) {
+      return options.candidateSubjects[id] ?? null;
+    }
+    return id === targetId
+      ? options.candidateSubject ?? TARGET_SUBJECT
+      : `Subject ${id}`;
+  };
   const calls: Array<{ url: URL; init: RequestInit }> = [];
   const fetchImpl = async (
     input: RequestInfo | URL,
@@ -79,14 +92,22 @@ function createFetch(options: {
       });
     }
     if (method === "Thread/get") {
+      const requestedThreadIds = args.ids as string[];
+      const missingThreadIds = new Set(
+        options.missingThreadIds ?? (options.threadMissing ? ["thread-1"] : []),
+      );
       return responseJson({
         methodResponses: [[
           "Thread/get",
           {
-            list: options.malformedThreadCoverage || options.threadMissing
+            list: options.malformedThreadCoverage
               ? []
-              : [{ id: "thread-1", emailIds: options.threadMemberIds ?? memberIds }],
-            notFound: options.threadMissing ? ["thread-1"] : [],
+              : requestedThreadIds.filter((id) => !missingThreadIds.has(id)).map((id) => ({
+                id,
+                emailIds: options.threadMemberIdsByThread?.[id] ??
+                  options.threadMemberIds ?? memberIds,
+              })),
+            notFound: [...missingThreadIds].filter((id) => requestedThreadIds.includes(id)),
           },
           callId,
         ]],
@@ -96,9 +117,13 @@ function createFetch(options: {
     const list = callId === "phase5-thread-subject-lookup-get"
       ? options.missingCandidate
         ? []
-        : [options.omitSubjectProperty
-        ? { id: targetId, threadId: "thread-1" }
-        : { id: targetId, threadId: "thread-1", subject: options.candidateSubject ?? TARGET_SUBJECT }]
+        : args.ids.map((id: string) => options.omitSubjectProperty
+          ? { id, threadId: options.candidateThreadIds?.[id] ?? "thread-1" }
+          : {
+            id,
+            threadId: options.candidateThreadIds?.[id] ?? "thread-1",
+            subject: candidateSubjectFor(id),
+          })
       : options.omitMemberResult
         ? []
         : args.ids.filter((id: string) =>
@@ -109,9 +134,11 @@ function createFetch(options: {
           ...(options.omitSubjectProperty
             ? {}
             : {
-              subject: id === targetId
-                ? (options.candidateSubject ?? TARGET_SUBJECT)
-                : (options.longMemberSubject ?? `Subject ${id}`),
+              subject: options.candidateSubjects && Object.hasOwn(options.candidateSubjects, id)
+                ? options.candidateSubjects[id] ?? null
+                : id === targetId
+                  ? options.candidateSubject ?? TARGET_SUBJECT
+                  : options.longMemberSubject ?? `Subject ${id}`,
             }),
         }));
     const notFound = callId === "phase5-thread-subject-lookup-get" && options.missingCandidate
@@ -185,6 +212,146 @@ test("searches by subject and fetches only conversation member IDs and subjects"
       `Bearer ${accessToken}`,
     );
   }
+});
+
+test("returns bounded subject-only candidate thread metadata", async () => {
+  const { fetchImpl, calls } = createFetch({
+    queryIds: ["email-1", "email-2"],
+    candidateSubjects: {
+      "email-1": "Fwd: Test Send",
+      "email-2": "Re: Fwd: Test Send",
+    },
+  });
+  const result = await runJmapOAuthThreadSubjectCandidates({
+    accessToken: randomBytes(32).toString("base64url"),
+    expectedAccountId: "account-1",
+    query: "Test Send",
+    sessionUrl: `${ORIGIN}/.well-known/jmap`,
+    fetchImpl,
+  });
+
+  assert.deepEqual(result, {
+    queryCandidateCount: 2,
+    candidatesDisappearedCount: 0,
+    candidateMessagesMissingFromThreadCount: 0,
+    candidateThreadsDisappearedCount: 0,
+    memberSubjectLookupsIncomplete: false,
+    incomplete: false,
+    threads: [{
+      candidateMessageCount: 2,
+      candidateSubjects: ["Fwd: Test Send", "Re: Fwd: Test Send"],
+      messageCount: 2,
+      memberSubjects: ["Fwd: Test Send", "Re: Fwd: Test Send"],
+      threadUnavailable: false,
+      truncated: false,
+      subjectsTruncated: false,
+    }],
+  });
+
+  const requestJson = calls
+    .filter((call) => call.url.pathname === "/jmap/")
+    .map((call) => JSON.parse(String(call.init.body)));
+  const queryCall = requestJson
+    .flatMap((request) => request.methodCalls)
+    .find((methodCall: unknown[]) => methodCall[0] === "Email/query");
+  assert.deepEqual(queryCall[1].filter, { subject: "Test Send" });
+  assert.equal(JSON.stringify(requestJson).includes("preview"), false);
+  assert.equal(JSON.stringify(requestJson).includes("bodyValues"), false);
+  assert.equal(JSON.stringify(requestJson).includes("textBody"), false);
+  assert.equal(JSON.stringify(requestJson).includes("htmlBody"), false);
+  for (const methodCall of requestJson.flatMap((request) => request.methodCalls)) {
+    if (methodCall[0] === "Email/get") {
+      assert.ok(methodCall[1].properties.every((property: string) =>
+        ["id", "threadId", "subject"].includes(property),
+      ));
+    }
+  }
+});
+
+test("keeps available subject metadata when another candidate thread disappears", async () => {
+  const { fetchImpl } = createFetch({
+    queryIds: ["email-1", "email-2"],
+    candidateSubjects: {
+      "email-1": "Fwd: Test Send",
+      "email-2": "Re: Fwd: Test Send",
+    },
+    candidateThreadIds: {
+      "email-1": "thread-1",
+      "email-2": "thread-2",
+    },
+    missingThreadIds: ["thread-2"],
+    threadMemberIdsByThread: { "thread-1": ["email-1"] },
+  });
+  const result = await runJmapOAuthThreadSubjectCandidates({
+    accessToken: randomBytes(32).toString("base64url"),
+    expectedAccountId: "account-1",
+    query: "Test Send",
+    sessionUrl: `${ORIGIN}/.well-known/jmap`,
+    fetchImpl,
+  });
+
+  assert.equal(result.queryCandidateCount, 2);
+  assert.equal(result.candidateThreadsDisappearedCount, 1);
+  assert.equal(result.incomplete, true);
+  assert.equal(result.threads.length, 2);
+  assert.deepEqual(result.threads[0], {
+    candidateMessageCount: 1,
+    candidateSubjects: ["Fwd: Test Send"],
+    messageCount: 1,
+    memberSubjects: ["Fwd: Test Send"],
+    threadUnavailable: false,
+    truncated: false,
+    subjectsTruncated: false,
+  });
+  assert.deepEqual(result.threads[1], {
+    candidateMessageCount: 1,
+    candidateSubjects: ["Re: Fwd: Test Send"],
+    messageCount: null,
+    memberSubjects: [],
+    threadUnavailable: true,
+    truncated: true,
+    subjectsTruncated: false,
+  });
+});
+
+test("applies one global member-subject lookup budget and marks truncation", async () => {
+  const { fetchImpl, calls } = createFetch({
+    memberIds: ["email-1", "email-2", "email-3"],
+    queryIds: ["email-2"],
+    candidateSubject: "Re: Fwd: Test Send",
+  });
+  const result = await runJmapOAuthThreadSubjectCandidates({
+    accessToken: randomBytes(32).toString("base64url"),
+    expectedAccountId: "account-1",
+    query: "Test Send",
+    sessionUrl: `${ORIGIN}/.well-known/jmap`,
+    fetchImpl,
+  });
+
+  assert.equal(result.threads[0]?.messageCount, 3);
+  assert.equal(result.threads[0]?.truncated, true);
+  assert.equal(result.memberSubjectLookupsIncomplete, true);
+  assert.equal(result.incomplete, true);
+  const memberGets = emailGetCalls(calls).filter(
+    (methodCall) => methodCall[2] === "phase5-thread-subjects-email-get",
+  );
+  assert.equal(memberGets.length, 2);
+});
+
+test("marks a disappeared member subject as an incomplete candidate result", async () => {
+  const { fetchImpl } = createFetch({ missingMemberIds: ["email-2"] });
+  const result = await runJmapOAuthThreadSubjectCandidates({
+    accessToken: randomBytes(32).toString("base64url"),
+    expectedAccountId: "account-1",
+    query: "Test Send",
+    sessionUrl: `${ORIGIN}/.well-known/jmap`,
+    fetchImpl,
+  });
+
+  assert.equal(result.memberSubjectLookupsIncomplete, true);
+  assert.equal(result.incomplete, true);
+  assert.equal(result.threads[0]?.truncated, true);
+  assert.deepEqual(result.threads[0]?.memberSubjects, ["Subject email-1"]);
 });
 
 test("rejects a primary account mismatch before querying subjects", async () => {

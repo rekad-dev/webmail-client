@@ -77,3 +77,22 @@ export async function parseThreadSubjectsRequest(request: Request): Promise<stri
   }
   return subject;
 }
+
+export async function parseThreadSubjectCandidatesRequest(
+  request: Request,
+): Promise<string> {
+  const body = recordValue(await readJsonBody(request));
+  if (!body || Object.keys(body).some((key) => key !== "query")) {
+    throw new InvalidThreadSubjectsRequest();
+  }
+  const query = body.query;
+  if (
+    typeof query !== "string" ||
+    query.length === 0 ||
+    query.length > 512 ||
+    /[\u0000-\u001f\u007f]/.test(query)
+  ) {
+    throw new InvalidThreadSubjectsRequest();
+  }
+  return query;
+}
