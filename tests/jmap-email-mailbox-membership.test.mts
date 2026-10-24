@@ -175,3 +175,61 @@ test("fails closed if Email/get omits the requested mailboxIds property", async 
     JmapPocError,
   );
 });
+
+test("rejects omitted and contradictory Email/get notFound coverage", async () => {
+  const invalidResponses = [
+    {
+      methodResponses: [[
+        "Email/get",
+        { list: [], notFound: [] },
+        "phase5-action-email-get",
+      ]],
+    },
+    {
+      methodResponses: [[
+        "Email/get",
+        { list: [{ id: "email-target", mailboxIds: { "sent-mailbox": true } }] },
+        "phase5-action-email-get",
+      ]],
+    },
+    {
+      methodResponses: [[
+        "Email/get",
+        {
+          list: [{ id: "email-target", mailboxIds: { "sent-mailbox": true } }],
+          notFound: ["email-target"],
+        },
+        "phase5-action-email-get",
+      ]],
+    },
+  ];
+
+  for (const emailResponse of invalidResponses) {
+    const { fetchImpl } = createFetch({ emailResponse });
+    await assert.rejects(
+      runJmapOAuthEmailMailboxMembership({ ...commonOptions, fetchImpl }),
+      JmapPocError,
+    );
+  }
+});
+
+test("bounds session discovery and JMAP reads with one operation deadline", async () => {
+  const { fetchImpl: baseFetch } = createFetch();
+  const fetchImpl: typeof fetch = async (input, init = {}) => {
+    const url = new URL(input instanceof Request ? input.url : input.toString());
+    if (url.pathname !== "/jmap/") return baseFetch(input, init);
+    return await new Promise<Response>((_resolve, reject) => {
+      const signal = init.signal;
+      if (signal?.aborted) {
+        reject(signal.reason);
+        return;
+      }
+      signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+    });
+  };
+
+  await assert.rejects(
+    runJmapOAuthEmailMailboxMembership({ ...commonOptions, fetchImpl }),
+    JmapPocError,
+  );
+});

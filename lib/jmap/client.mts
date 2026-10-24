@@ -44,6 +44,7 @@ const MAX_THREAD_SUBJECT_LOOKUP_GET_BATCHES = 2;
 const MAX_THREAD_SUBJECT_MEMBER_GET_BATCHES = 2;
 const MAX_THREAD_SUBJECT_CANDIDATE_THREADS = 2;
 const MAX_THREAD_SUBJECT_CANDIDATE_MEMBER_GET_BATCHES_PER_SEARCH = 2;
+const EMAIL_MEMBERSHIP_OPERATION_TIMEOUT_MS = 8_000;
 const MAX_THREAD_STATE_EMAILS_PER_THREAD = 1_000;
 const THREAD_STATE_EMAIL_GET_BATCH_SIZE = 100;
 const DRAFT_SEND_PENDING_PREFIX = "rekad-send-pending-";
@@ -337,16 +338,21 @@ export class JmapThreadSubjectSearchIncompleteError extends JmapPocError {
   }
 }
 
-const jmapOperationDeadlineByFetch = new WeakMap<typeof fetch, AbortSignal>();
+const jmapOperationDeadlineByFetch = new WeakMap<
+  typeof fetch,
+  { signal: AbortSignal; createError: () => Error }
+>();
 
 function withJmapOperationDeadline(
   fetchImpl: typeof fetch,
   timeoutMs: number,
+  createError: () => Error = () =>
+    new JmapPocError("The JMAP operation exceeded its time limit."),
 ): typeof fetch {
   const deadlineSignal = AbortSignal.timeout(timeoutMs);
   const boundedFetch: typeof fetch = async (input, init = {}) => {
     if (deadlineSignal.aborted) {
-      throw new JmapThreadSubjectSearchIncompleteError();
+      throw createError();
     }
     const signal = init.signal
       ? AbortSignal.any([init.signal, deadlineSignal])
@@ -355,17 +361,25 @@ function withJmapOperationDeadline(
       return await fetchImpl(input, { ...init, signal });
     } catch (error) {
       if (deadlineSignal.aborted) {
-        throw new JmapThreadSubjectSearchIncompleteError();
+        throw createError();
       }
       throw error;
     }
   };
-  jmapOperationDeadlineByFetch.set(boundedFetch, deadlineSignal);
+  jmapOperationDeadlineByFetch.set(boundedFetch, {
+    signal: deadlineSignal,
+    createError,
+  });
   return boundedFetch;
 }
 
 function isJmapOperationDeadlineExceeded(fetchImpl: typeof fetch): boolean {
-  return jmapOperationDeadlineByFetch.get(fetchImpl)?.aborted === true;
+  return jmapOperationDeadlineByFetch.get(fetchImpl)?.signal.aborted === true;
+}
+
+function jmapOperationDeadlineError(fetchImpl: typeof fetch): Error {
+  return jmapOperationDeadlineByFetch.get(fetchImpl)?.createError() ??
+    new JmapPocError("The JMAP operation exceeded its time limit.");
 }
 
 export type JmapThreadSubjectsNotFoundReason =
@@ -604,7 +618,7 @@ async function fetchSession({
       });
     } catch {
       if (isJmapOperationDeadlineExceeded(fetchImpl)) {
-        throw new JmapThreadSubjectSearchIncompleteError();
+        throw jmapOperationDeadlineError(fetchImpl);
       }
       throw new JmapPocError(
         "Could not reach the configured JMAP session endpoint (network or TLS failure).",
@@ -647,7 +661,7 @@ async function fetchSession({
       };
     } catch {
       if (isJmapOperationDeadlineExceeded(fetchImpl)) {
-        throw new JmapThreadSubjectSearchIncompleteError();
+        throw jmapOperationDeadlineError(fetchImpl);
       }
       throw new JmapPocError("JMAP session discovery returned invalid JSON.");
     }
@@ -883,7 +897,7 @@ async function postJmapApi({
     });
   } catch {
     if (isJmapOperationDeadlineExceeded(fetchImpl)) {
-      throw new JmapThreadSubjectSearchIncompleteError();
+      throw jmapOperationDeadlineError(fetchImpl);
     }
     throw new JmapPocError(
       "Could not reach the configured JMAP API endpoint (network or TLS failure).",
@@ -927,7 +941,7 @@ async function postJmapApi({
   } catch (error) {
     if (error instanceof JmapPocError) throw error;
     if (isJmapOperationDeadlineExceeded(fetchImpl)) {
-      throw new JmapThreadSubjectSearchIncompleteError();
+      throw jmapOperationDeadlineError(fetchImpl);
     }
     throw new JmapPocError(`Could not read the JMAP ${methodName} response.`);
   } finally {
@@ -3746,6 +3760,7 @@ export async function runJmapOAuthThreadSubjectCandidates({
   const operationFetchImpl = withJmapOperationDeadline(
     fetchImpl,
     THREAD_SUBJECT_CANDIDATE_OPERATION_TIMEOUT_MS,
+    () => new JmapThreadSubjectSearchIncompleteError(),
   );
   const context = await createJmapApiContext({
     sessionUrl,
@@ -3901,7 +3916,7 @@ export async function runJmapOAuthThreadSubjectCandidates({
   }
 
   if (isJmapOperationDeadlineExceeded(context.fetchImpl)) {
-    throw new JmapThreadSubjectSearchIncompleteError();
+    throw jmapOperationDeadlineError(context.fetchImpl);
   }
 
   return {
@@ -3959,6 +3974,7 @@ async function getEmailActionState(
       throw new JmapPocError("The JMAP API returned an invalid email action response.");
     }
     const requested = new Set(requestedIds);
+    const notFound = new Set<string>();
     for (const rawEmail of payload.list) {
       const email = objectValue(rawEmail);
       if (
@@ -3980,7 +3996,24 @@ async function getEmailActionState(
       }
       state.set(email.id, { mailboxIds: Object.keys(rawMailboxIds) });
     }
-    if (requestedIds.some((id) => !state.has(id))) throw new JmapEmailNotFoundError();
+    if (!Array.isArray(payload.notFound)) {
+      throw new JmapPocError("The JMAP API returned an invalid email action notFound list.");
+    }
+    for (const rawId of payload.notFound) {
+      if (
+        typeof rawId !== "string" ||
+        !requested.has(rawId) ||
+        notFound.has(rawId) ||
+        state.has(rawId)
+      ) {
+        throw new JmapPocError("The JMAP API returned an invalid email action notFound list.");
+      }
+      notFound.add(rawId);
+    }
+    if (requestedIds.some((id) => !state.has(id) && !notFound.has(id))) {
+      throw new JmapPocError("The JMAP API omitted requested email action state.");
+    }
+    if (requestedIds.some((id) => notFound.has(id))) throw new JmapEmailNotFoundError();
   }
   return state;
 }
@@ -4210,12 +4243,16 @@ export async function runJmapOAuthEmailMailboxMembership({
   fetchImpl?: typeof fetch;
 }): Promise<JmapEmailMailboxMembership> {
   validateEmailId(emailId);
+  const operationFetchImpl = withJmapOperationDeadline(
+    fetchImpl,
+    EMAIL_MEMBERSHIP_OPERATION_TIMEOUT_MS,
+  );
   const context = await createJmapApiContext({
     sessionUrl,
     trustedOrigins,
     allowInsecureHttp,
     authorization: makeOAuthAuthorization(accessToken),
-    fetchImpl,
+    fetchImpl: operationFetchImpl,
   });
   if (context.accountId !== expectedAccountId) {
     throw new JmapAccountMismatchError();
@@ -4223,6 +4260,9 @@ export async function runJmapOAuthEmailMailboxMembership({
 
   const memberships = await getEmailActionState(context, [emailId]);
   const mailboxRoles = await fetchMailboxMembershipRoles(context);
+  if (isJmapOperationDeadlineExceeded(context.fetchImpl)) {
+    throw jmapOperationDeadlineError(context.fetchImpl);
+  }
   const mailboxIds = memberships.get(emailId)?.mailboxIds ?? [];
   const mailboxes = mailboxIds
     .map((id) => {

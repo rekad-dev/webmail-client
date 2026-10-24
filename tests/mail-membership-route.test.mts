@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   JmapAccountMismatchError,
   JmapEmailNotFoundError,
+  JmapPocError,
   type JmapEmailMailboxMembership,
 } from "../lib/jmap/client.mts";
 import {
@@ -137,4 +138,15 @@ test("maps an unavailable email to a generic 404", async () => {
   const response = await state.GET(request("?emailId=email-1"));
   assert.equal(response.status, 404);
   assert.deepEqual(await response.json(), { error: "message_not_found" });
+});
+
+test("maps malformed upstream membership data to a generic 503", async () => {
+  const state = makeHandler({
+    getMembership: async () => {
+      throw new JmapPocError("private upstream parser detail");
+    },
+  });
+  const response = await state.GET(request("?emailId=email-1"));
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: "mail_unavailable" });
 });
