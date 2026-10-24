@@ -298,6 +298,13 @@ export class JmapThreadSubjectAmbiguousError extends JmapPocError {
   }
 }
 
+export class JmapThreadSubjectSearchIncompleteError extends JmapPocError {
+  constructor() {
+    super("The bounded subject search did not return a complete result set.");
+    this.name = "JmapThreadSubjectSearchIncompleteError";
+  }
+}
+
 export class JmapMailActionUnavailableError extends JmapPocError {
   readonly reason: "archive_unavailable" | "trash_unavailable" | "thread_too_large";
 
@@ -3319,7 +3326,7 @@ function parseSubjectQueryIds(responseJson: unknown, limit: number): string[] {
     (typeof payload.total === "number" && payload.total > ids.length) ||
     (payload.total === undefined || payload.total === null) && ids.length === limit
   ) {
-    throw new JmapThreadSubjectAmbiguousError();
+    throw new JmapThreadSubjectSearchIncompleteError();
   }
   return ids;
 }
@@ -3371,7 +3378,7 @@ function parseSubjectLookup(
       email.threadId.length === 0 ||
       email.threadId.length > 256 ||
       !Object.hasOwn(email, "subject") ||
-      (email.subject !== undefined && email.subject !== null && typeof email.subject !== "string")
+      (email.subject !== null && typeof email.subject !== "string")
     ) {
       throw new JmapPocError("The JMAP API returned invalid subject search metadata.");
     }
@@ -3380,7 +3387,7 @@ function parseSubjectLookup(
     list.push({
       id: email.id,
       threadId: email.threadId,
-      subject: boundedString(email.subject, 512),
+      subject: email.subject,
     });
   }
   if (emailIds.some((id) => !seen.has(id) && !notFound.has(id))) {
@@ -3435,13 +3442,13 @@ function parseThreadSubjects(
       members.has(email.id) ||
       notFoundIds.has(email.id) ||
       !Object.hasOwn(email, "subject") ||
-      (email.subject !== undefined && email.subject !== null && typeof email.subject !== "string")
+      (email.subject !== null && typeof email.subject !== "string")
     ) {
       throw new JmapPocError("The JMAP API returned invalid thread subject metadata.");
     }
     members.set(email.id, {
       id: email.id,
-      subject: boundedString(email.subject, 512),
+      subject: email.subject,
     });
   }
   if (emailIds.some((emailId) => !members.has(emailId) && !notFoundIds.has(emailId))) {

@@ -2,8 +2,14 @@ import {
   JmapAccountMismatchError,
   JmapEmailNotFoundError,
   JmapThreadSubjectAmbiguousError,
+  JmapThreadSubjectSearchIncompleteError,
   type JmapThreadSubjects,
 } from "./client.mts";
+import {
+  InvalidThreadSubjectsRequest,
+  OversizedThreadSubjectsRequest,
+  parseThreadSubjectsRequest,
+} from "./mail-thread-subjects-request.mts";
 
 const RESPONSE_HEADERS = {
   "Cache-Control": "no-store",
@@ -26,6 +32,7 @@ export interface MailThreadSubjectsRouteDependencies {
   getAuthenticatedSession(sessionId: string): Promise<MailThreadSubjectsSession | null>;
   revokeSession(sessionId: string): Promise<void>;
   getThreadSubjects(options: ThreadSubjectOptions): Promise<JmapThreadSubjects>;
+  isTrustedOrigin(request: Request): boolean;
   getJmapSettings(): Pick<
     ThreadSubjectOptions,
     "sessionUrl" | "trustedOrigins" | "allowInsecureHttp"
@@ -36,29 +43,34 @@ function jsonResponse(body: unknown, status: number): Response {
   return Response.json(body, { status, headers: RESPONSE_HEADERS });
 }
 
-function readSubject(request: Request): string {
-  const values = new URL(request.url).searchParams.getAll("subject");
-  const subject = values[0];
-  if (
-    values.length !== 1 ||
-    !subject ||
-    subject.length > 512 ||
-    /[\u0000-\u001f\u007f]/.test(subject)
-  ) {
-    throw new Error("invalid_subject");
-  }
-  return subject;
+function contentTypeIsJson(request: Request): boolean {
+  return request.headers.get("content-type")?.split(";", 1)[0]
+    .trim()
+    .toLowerCase() === "application/json";
 }
 
-export function createMailThreadSubjectsGetHandler(
+export function createMailThreadSubjectsPostHandler(
   dependencies: MailThreadSubjectsRouteDependencies,
 ) {
-  return async function GET(request: Request): Promise<Response> {
+  return async function POST(request: Request): Promise<Response> {
+    if (!dependencies.isTrustedOrigin(request)) {
+      return jsonResponse({ error: "origin_not_allowed" }, 403);
+    }
+    if (!contentTypeIsJson(request)) {
+      return jsonResponse({ error: "invalid_request" }, 400);
+    }
+
     let subject: string;
     try {
-      subject = readSubject(request);
-    } catch {
-      return jsonResponse({ error: "invalid_request" }, 400);
+      subject = await parseThreadSubjectsRequest(request);
+    } catch (error) {
+      if (error instanceof OversizedThreadSubjectsRequest) {
+        return jsonResponse({ error: "request_too_large" }, 413);
+      }
+      if (error instanceof InvalidThreadSubjectsRequest) {
+        return jsonResponse({ error: "invalid_request" }, 400);
+      }
+      return jsonResponse({ error: "mail_unavailable" }, 503);
     }
 
     let sessionId: string | null = null;
@@ -89,6 +101,9 @@ export function createMailThreadSubjectsGetHandler(
       }
       if (error instanceof JmapThreadSubjectAmbiguousError) {
         return jsonResponse({ error: "subject_ambiguous" }, 409);
+      }
+      if (error instanceof JmapThreadSubjectSearchIncompleteError) {
+        return jsonResponse({ error: "subject_search_incomplete" }, 422);
       }
       return jsonResponse({ error: "mail_unavailable" }, 503);
     }

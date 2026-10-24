@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import test from "node:test";
 
-import { runJmapOAuthThreadSubjects } from "../lib/jmap/client.mts";
+import {
+  JmapEmailNotFoundError,
+  JmapThreadSubjectSearchIncompleteError,
+  runJmapOAuthThreadSubjects,
+} from "../lib/jmap/client.mts";
 
 const CORE = "urn:ietf:params:jmap:core";
 const MAIL = "urn:ietf:params:jmap:mail";
@@ -22,6 +26,8 @@ function createFetch(options: {
   omitMemberResult?: boolean;
   omitSubjectProperty?: boolean;
   malformedThreadCoverage?: boolean;
+  candidateSubject?: string;
+  queryTotal?: number;
 } = {}) {
   const memberIds = options.memberIds ?? ["email-1", "email-2"];
   const targetId = memberIds.at(-1) ?? "email-2";
@@ -59,7 +65,7 @@ function createFetch(options: {
       return responseJson({
         methodResponses: [[
           "Email/query",
-          { ids: [targetId], total: 1 },
+          { ids: [targetId], total: options.queryTotal ?? 1 },
           callId,
         ]],
       });
@@ -82,14 +88,14 @@ function createFetch(options: {
     const list = callId === "phase5-thread-subject-lookup-get"
       ? [options.omitSubjectProperty
         ? { id: targetId, threadId: "thread-1" }
-        : { id: targetId, threadId: "thread-1", subject: TARGET_SUBJECT }]
+        : { id: targetId, threadId: "thread-1", subject: options.candidateSubject ?? TARGET_SUBJECT }]
       : options.omitMemberResult
         ? []
         : args.ids.map((id: string) => ({
           id,
           ...(options.omitSubjectProperty
             ? {}
-            : { subject: id === targetId ? TARGET_SUBJECT : `Subject ${id}` }),
+            : { subject: id === targetId ? (options.candidateSubject ?? TARGET_SUBJECT) : `Subject ${id}` }),
         }));
     return responseJson({
       methodResponses: [["Email/get", { list, notFound: [] }, callId]],
@@ -215,5 +221,36 @@ test("rejects a requested subject property that is omitted from Email/get", asyn
       fetchImpl,
     }),
     /invalid subject search metadata/,
+  );
+});
+
+test("does not treat a longer subject as an exact match after the input limit", async () => {
+  const requestedSubject = "x".repeat(512);
+  const { fetchImpl } = createFetch({
+    candidateSubject: `${requestedSubject} extra`,
+  });
+  await assert.rejects(
+    runJmapOAuthThreadSubjects({
+      accessToken: randomBytes(32).toString("base64url"),
+      expectedAccountId: "account-1",
+      subject: requestedSubject,
+      sessionUrl: `${ORIGIN}/.well-known/jmap`,
+      fetchImpl,
+    }),
+    JmapEmailNotFoundError,
+  );
+});
+
+test("reports a bounded but incomplete subject query without claiming ambiguity", async () => {
+  const { fetchImpl } = createFetch({ queryTotal: 3 });
+  await assert.rejects(
+    runJmapOAuthThreadSubjects({
+      accessToken: randomBytes(32).toString("base64url"),
+      expectedAccountId: "account-1",
+      subject: TARGET_SUBJECT,
+      sessionUrl: `${ORIGIN}/.well-known/jmap`,
+      fetchImpl,
+    }),
+    JmapThreadSubjectSearchIncompleteError,
   );
 });
