@@ -7,12 +7,21 @@ scope: session-handoff
 
 ## Current status
 
-Phase 4 compose and send planning is complete; see the Traycer artifact
-`phase-4-compose-send-plan`. The user selected a durable Postgres send-attempt
-record; ambiguous outcomes must fail closed and never auto-resend. Implementation
-is still pending. Before live verification, check submission capability,
-identities, and Drafts/Sent roles with the user's OAuth session, then obtain the
-exact test recipient. No email or server setting was changed during planning.
+Phase 4 compose and send implementation is locally complete; see the Traycer
+artifact `phase-4-compose-send-plan` and commits `fd9df24`, `931496a`,
+`a42cc2a`, and `524f880`. The user selected a durable Postgres send-attempt
+record; ambiguous outcomes fail closed and never auto-resend. Local checks pass:
+87/87 tests, typecheck, and production build. The review artifact
+`phase-4-compose-ui-review` contains three resolved findings.
+
+The authenticated read-only `/api/mail/identities` route performs JMAP
+submission-capability, Identity, Drafts, and Sent checks using the user's OAuth
+session. That check has not yet run against the production session because this
+implementation has not been deployed. The send-attempt migration is also not
+applied. No browser session was accessed, no live email was sent, and no
+Stalwart settings changed. Before a real submission, get the user's exact
+approved test recipient; the user has authorized only waiting for that target,
+not sending to an unspecified address.
 
 Phase 3 safe email reading is complete. Local code now includes an
 authenticated detail route, bounded JMAP body retrieval, server-side HTML
@@ -148,8 +157,12 @@ access. The provider-settings audit can remain deferred.
 
 ## Next safe step
 
-Phase 4 planning is complete. Wait for the user's direction before
-implementation. Do not send a live test email until the exact recipient is
+Phase 4 code is committed and verified locally. The next production step is to
+deploy the implementation, apply the additive send-attempt table migration,
+and perform only the read-only OAuth identity/capability check. The repository's
+browser policy requires explicit approval naming the route, signed-in session,
+and checklist before using the interactive browser; deployment is also not yet
+authorized. Do not send a live test email until the exact recipient is
 explicitly authorized. Keep `requireClientRegistration` and
 `anonymousClientRegistration` unchanged, and do not use the admin API key.
 

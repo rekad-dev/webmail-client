@@ -5,20 +5,28 @@ scope: progress
 
 # Progress
 
-## Phase 4 compose and send planning complete
+## Phase 4 compose and send implementation in progress
 
 - The technical plan is recorded in the Traycer artifact
   `phase-4-compose-send-plan`. The user selected durable Postgres send-attempt
   metadata so duplicate requests can be reconciled; unknown submission results
   must never trigger automatic resend.
-- Planned scope is plain-text compose through the signed-in user's JMAP
-  `Identity/get`, `Email/set`, and `EmailSubmission/set`, with a Sent mailbox
-  update after successful submission. No SMTP client, draft editor, attachments,
-  or server-wide Stalwart changes are included.
-- Implementation remains pending. First verify read-only JMAP submission
-  capability, available identities, and Drafts/Sent roles using the user's
-  OAuth session. The exact authorized test recipient is required before a live
-  send; no email was sent during planning.
+- Local implementation is committed in `fd9df24`, `931496a`, `a42cc2a`, and
+  `524f880`. It adds a read-only OAuth identity/capability route, validated
+  plain-text compose and send routes, attempt metadata schema/store, safe
+  JMAP draft submission and Sent reconciliation, and an accessible compose
+  dialog. No SMTP client, rich HTML, attachments, or server-wide Stalwart
+  settings are included.
+- `pnpm test` passes 87/87, `pnpm typecheck` passes, and `pnpm build` passes.
+  The independent review artifact
+  `phase-4-compose-ui-review` recorded three UI findings; all three are fixed
+  and rechecked. Build output's generated `next-env.d.ts` change was restored.
+- The OAuth preflight has not yet been called against the signed-in production
+  account. The route is not deployed, and no production browser or deployment
+  action was taken. The additive database migration has not been applied.
+- No live email was sent. The exact approved test recipient is still required
+  before the live submission check. No Stalwart setting or admin API credential
+  was used.
 
 ## Phase 3 safe email reading complete
 
