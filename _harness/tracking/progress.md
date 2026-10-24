@@ -67,8 +67,9 @@ scope: progress
 - `AUTH_STALWART_ID`, the existing client's secret and token-auth method, and
   `DATABASE_URL` are now configured locally. The ID matches `webmail`; the
   idempotent migration created the application session table and expiry index.
-- Latest local verification: 22 unit tests, `pnpm typecheck`, and `pnpm build`
-  passed. The reviewed diagnostics and OIDC subject fix are deployed to
+- Current local verification: all 24 unit tests and `pnpm typecheck` passed.
+  The latest `pnpm build` passed before the test-only outage-coverage change.
+  The reviewed diagnostics and OIDC subject fix are deployed to
   Vercel production as `dpl_D8oi6i3YB1iwfvF1bUcXBbb7eYaY` at
   `https://webmail.rekad.id`.
 - Production callback diagnostics identified the `validate_oauth_response`
@@ -87,9 +88,10 @@ scope: progress
 - No mailbox content was returned, no message or mailbox was mutated, and no
   Stalwart client or global registration setting was changed. The admin key
   was not used for application authentication or mailbox access.
-- Phase 1 remains active for natural-expiry refresh verification and a safe
-  server-outage error check; invalid-credential rejection and multi-account
-  isolation passed. The normal production login,
+- Phase 1 remains active for natural-expiry refresh verification. Invalid-
+  credential rejection and multi-account isolation passed. Local tests cover
+  sanitized JMAP HTTP 503 and network-failure errors; a production outage was
+  not simulated. The normal production login,
   mailbox-access, bounded-expiry, and logout paths have passed; do not begin
   Phase 2 automatically.
 - No Stalwart client or server-wide setting has been changed. Keep
@@ -99,8 +101,8 @@ scope: progress
 
 ## Next
 
-Complete natural-expiry refresh verification and a safe server-outage error
-check within Phase 1. Multi-account isolation and invalid-credential rejection
-are verified.
+Complete natural-expiry refresh verification within Phase 1. Multi-account
+isolation, invalid-credential rejection, and sanitized JMAP outage errors are
+verified at the current client boundary.
 Keep Phase 2 pending until Phase 1 is closed; do not change global Stalwart
 registration settings.

@@ -264,6 +264,42 @@ test("verifies OAuth mailbox access with a user bearer token without returning m
   assert.equal(calls[2].options.redirect, "manual");
 });
 
+test("converts an unavailable JMAP session endpoint into a sanitized error", async () => {
+  const syntheticResponseBody = "synthetic upstream diagnostic";
+
+  await assert.rejects(
+    runJmapOAuthAccessCheck({
+      accessToken: randomBytes(32).toString("base64url"),
+      sessionUrl: `${TEST_ORIGIN}/.well-known/jmap`,
+      fetchImpl: async () =>
+        new Response(syntheticResponseBody, { status: 503 }),
+    }),
+    (error: unknown) =>
+      error instanceof Error &&
+      error.message === "JMAP session discovery returned HTTP 503." &&
+      !error.message.includes(syntheticResponseBody),
+  );
+});
+
+test("converts a JMAP transport failure into a sanitized error", async () => {
+  const syntheticNetworkError = "synthetic connection detail";
+
+  await assert.rejects(
+    runJmapOAuthAccessCheck({
+      accessToken: randomBytes(32).toString("base64url"),
+      sessionUrl: `${TEST_ORIGIN}/.well-known/jmap`,
+      fetchImpl: async () => {
+        throw new Error(syntheticNetworkError);
+      },
+    }),
+    (error: unknown) =>
+      error instanceof Error &&
+      error.message ===
+        "Could not reach the configured JMAP session endpoint (network or TLS failure)." &&
+      !error.message.includes(syntheticNetworkError),
+  );
+});
+
 test("rejects malformed OAuth bearer tokens before making a JMAP request", async () => {
   let fetchCount = 0;
 

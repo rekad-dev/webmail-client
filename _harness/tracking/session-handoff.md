@@ -94,7 +94,8 @@ access. The provider-settings audit can remain deferred.
 The core production login, session persistence, OAuth-backed read-only mailbox
 access, bounded expiry, invalid-credential rejection, account isolation, and
 guarded logout button now pass. Phase 1 remains open for natural-expiry refresh
-verification and a safe server-outage error check. The first account's refresh
+verification. Local tests cover sanitized JMAP HTTP 503 and network-failure
+errors; a production outage was not simulated. The first account's refresh
 check is scheduled for its existing expiry window; no token or database state
 was altered to force it. Do not start Phase 2 automatically. Keep
 `requireClientRegistration` and `anonymousClientRegistration` unchanged; do not
