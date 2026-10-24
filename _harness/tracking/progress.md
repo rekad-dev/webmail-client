@@ -36,12 +36,16 @@ scope: progress
   read-only browser review at desktop and 390px phone widths is recorded in
   `phase-5-production-ui-review`; the first Inbox listing rendered without a
   visible error and no horizontal overflow appeared on phone. No message was
-  opened and no mailbox action was taken. Search results, thread details,
-  action persistence, and draft persistence remain unverified pending separate
-  approval. The independent final code review found no actionable issues; its
-  artifact is `phase-5-hardening-parser-rereview-2026-10-24`. The implementation
-  is in commits `1e8dc87` and `27f09aa`. Phase 5 remains in progress until
-  remaining production verification is explicitly authorized and completed.
+  opened and no mailbox action was taken. A separately approved `Test` search
+  in All mail returned two conversation summaries; neither displayed subject
+  was exactly `Test`. The check is recorded in
+  `phase-5-production-search-check`; thread members were not opened, so exact
+  target-message membership remains unconfirmed. Further search cases, thread
+  details, action persistence, and draft persistence need separate approval.
+  The independent final code review found no actionable issues; its artifact is
+  `phase-5-hardening-parser-rereview-2026-10-24`. The implementation is in
+  commits `1e8dc87` and `27f09aa`. Phase 5 remains in progress until remaining
+  production verification is explicitly authorized and completed.
 
 ## Phase 4 compose and send complete
 

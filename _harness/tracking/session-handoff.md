@@ -40,7 +40,11 @@ review completed at desktop and 390px phone widths after approval for one
 read-only first-page Inbox listing. It rendered one conversation with no visible
 error and no horizontal overflow on phone. No message was opened and no mailbox
 action was taken. The full record is in `phase-5-production-ui-review`.
-Search results, thread detail, action persistence, and draft persistence remain
+The separately approved search for `Test` in All mail returned two conversation
+summaries, neither with a displayed subject exactly `Test`. The record is in
+`phase-5-production-search-check`. Because results are grouped by thread and no
+thread was opened, exact target-message membership is unconfirmed. Further
+search cases, thread detail, action persistence, and draft persistence remain
 unverified and need separate authorization. The source-level UI review is in
 `phase-5-ui-antislop-review`. The final independent code review found no
 actionable issues; see `phase-5-hardening-parser-rereview-2026-10-24`. Keep the
