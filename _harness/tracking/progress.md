@@ -96,12 +96,16 @@ scope: progress
   fetched, no Inbox listing was opened, and no mailbox state changed. Full
   record: `phase-5-production-search-check`.
 
-- The remaining Phase 5 production acceptance checks are still open: persistence
-  of read/unread and starred state, mailbox association actions (move/archive/
-  trash), draft persistence across reload, and live reply/forward prefill. The
-  project safety rules require explicit approval before production mailbox
-  mutations or opening messages that may load content or alter read state. Keep
-  Phase 5 `in_progress`; do not start Phase 6.
+- The temporary no-recipient JMAP draft survived a page reload and reopened
+  with the exact saved subject/body and empty recipient fields, then was moved
+  to Trash successfully. The live draft check is recorded in
+  `phase-5-draft-persistence-check`; no message was sent or permanently
+  deleted. Remaining live acceptance checks are read/unread and star
+  persistence, move/archive on a regular message, and reply/forward prefill.
+  Trash was confirmed for the temporary draft; regular-message trash behavior
+  remains unverified. The project safety rules require explicit approval before
+  further production mailbox mutations or opening messages that may load
+  content or alter read state. Keep Phase 5 `in_progress`; do not start Phase 6.
 
 ## Phase 4 compose and send complete
 
