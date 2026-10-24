@@ -317,9 +317,14 @@ access. The provider-settings audit can remain deferred.
 ## Current safe step
 
 Continue Phase 5 verification only; do not start Phase 6. The exact-subject
-lookup for `Re: Fwd: Test Send` returned `thread_not_found`; the broader
-subject-only candidate search was already authorized but remains to be run. No
-Trash action or other mailbox mutation was attempted in this latest run.
+lookup for `Re: Fwd: Test Send` returned `thread_not_found` with
+`subject_query_empty` and zero candidates. The known sibling subject
+`Fwd: Test Send` returned the same result. The authorized broader text-based
+candidate search found four candidates in two threads, with two exact target
+subject matches. The session account matched JMAP's primary account, so the
+current evidence points to the subject-filter query path and leaves the target
+ambiguous. No Trash action, exact mailbox-location request, or other mailbox
+mutation was attempted.
 
 The new authenticated, body-free `/api/mail/location?emailId=...` endpoint was
 deployed to `https://webmail.rekad.id` as
@@ -329,13 +334,13 @@ discovery plus reads to an 8-second operation deadline. Local validation passed:
 `pnpm typecheck`, `pnpm test` (130 tests), and `pnpm build`. Commits are
 `f768144`, `22a1c57`, and `5c0f64f`.
 
-The Ego TaskSpace used for this final production check was finished after the
-404 result. The only remaining signed-in space is user-owned, so get the user's
-explicit authorization before claiming it to continue the authorized
-metadata-only diagnostics and one-message Trash→Sent check. Do not load message
-bodies or previews, act on any other message, permanently delete anything, or
-send email. Keep `requireClientRegistration` and
-`anonymousClientRegistration` unchanged, and do not use the admin API key.
+The user explicitly authorized claiming the signed-in Ego TaskSpace. Return
+control to the user while waiting for either a unique message identifier or
+approval to inspect bounded header metadata (sender/date) for only the two
+exact-subject candidates. Do not load message bodies or previews, act on any
+other message, permanently delete anything, or send email. Keep
+`requireClientRegistration` and `anonymousClientRegistration` unchanged, and do
+not use the admin API key.
 
 ## Skill installation note
 
