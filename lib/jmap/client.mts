@@ -1,12 +1,19 @@
 import { isIP } from "node:net";
+import { sanitizeEmailHtml } from "../mail/sanitize-email-html.mts";
 
 const CORE_CAPABILITY = "urn:ietf:params:jmap:core";
 const MAIL_CAPABILITY = "urn:ietf:params:jmap:mail";
 const METHOD_CALL_ID = "phase0-mailboxes";
 const EMAIL_QUERY_CALL_ID = "phase2-email-query";
 const EMAIL_GET_CALL_ID = "phase2-email-get";
+const EMAIL_DETAIL_GET_CALL_ID = "phase3-email-detail-get";
+const EMAIL_MARK_READ_CALL_ID = "phase3-email-mark-read";
 const MAX_SESSION_REDIRECTS = 5;
 const REQUEST_TIMEOUT_MS = 15_000;
+const JMAP_RESPONSE_MAX_BYTES = 2 * 1024 * 1024;
+const EMAIL_DETAIL_RESPONSE_MAX_BYTES = 1024 * 1024;
+const EMAIL_BODY_VALUE_MAX_BYTES = 256 * 1024;
+const EMAIL_BODY_VALUE_MAX_CHARS = 256 * 1024;
 export const MAIL_PAGE_SIZE = 25;
 export const MAX_MAIL_POSITION = 1_000_000;
 
@@ -96,6 +103,35 @@ export interface JmapMailboxListing {
   messages: JmapEmailSummary[];
 }
 
+export interface JmapEmailAddress {
+  name: string | null;
+  email: string;
+}
+
+export interface JmapEmailAttachmentSummary {
+  name: string | null;
+  type: string | null;
+  size: number | null;
+}
+
+export interface JmapEmailDetail {
+  id: string;
+  from: JmapEmailAddress[];
+  to: JmapEmailAddress[];
+  cc: JmapEmailAddress[];
+  bcc: JmapEmailAddress[];
+  subject: string | null;
+  sentAt: string | null;
+  receivedAt: string | null;
+  isUnread: boolean;
+  textBody: string | null;
+  htmlBody: string | null;
+  externalLinks: string[];
+  bodyTruncated: boolean;
+  attachments: JmapEmailAttachmentSummary[];
+  mailboxIds: string[];
+}
+
 export interface JmapInboxSmokeResult {
   mailboxCount: number;
   roles: string[];
@@ -122,6 +158,13 @@ export class JmapMailboxNotFoundError extends JmapPocError {
   constructor() {
     super("The selected mailbox is unavailable.");
     this.name = "JmapMailboxNotFoundError";
+  }
+}
+
+export class JmapEmailNotFoundError extends JmapPocError {
+  constructor() {
+    super("The selected email is unavailable.");
+    this.name = "JmapEmailNotFoundError";
   }
 }
 
@@ -537,12 +580,14 @@ async function postJmapApi({
   requestBody,
   methodName,
   fetchImpl,
+  maxResponseBytes = JMAP_RESPONSE_MAX_BYTES,
 }: {
   apiUrl: URL;
   authorization: string;
   requestBody: Record<string, unknown>;
   methodName: string;
   fetchImpl: typeof fetch;
+  maxResponseBytes?: number;
 }): Promise<unknown> {
   let response;
   try {
@@ -572,9 +617,48 @@ async function postJmapApi({
     throw new JmapPocError(`JMAP ${methodName} returned HTTP ${response.status}.`);
   }
 
+  const contentLength = Number(response.headers.get("content-length"));
+  if (Number.isSafeInteger(contentLength) && contentLength > maxResponseBytes) {
+    throw new JmapPocError(`JMAP ${methodName} response exceeded the size limit.`);
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new JmapPocError(`JMAP ${methodName} returned an empty response.`);
+  }
+
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxResponseBytes) {
+        void reader.cancel().catch(() => undefined);
+        throw new JmapPocError(
+          `JMAP ${methodName} response exceeded the size limit.`,
+        );
+      }
+      chunks.push(value);
+    }
+  } catch (error) {
+    if (error instanceof JmapPocError) throw error;
+    throw new JmapPocError(`Could not read the JMAP ${methodName} response.`);
+  } finally {
+    reader.releaseLock();
+  }
+
+  const responseBytes = new Uint8Array(totalBytes);
+  let responseOffset = 0;
+  for (const chunk of chunks) {
+    responseBytes.set(chunk, responseOffset);
+    responseOffset += chunk.byteLength;
+  }
+
   let responseJson: unknown;
   try {
-    responseJson = await response.json();
+    responseJson = JSON.parse(new TextDecoder().decode(responseBytes)) as unknown;
   } catch {
     throw new JmapPocError(`JMAP ${methodName} returned invalid JSON.`);
   }
@@ -695,7 +779,7 @@ function boundedString(value: unknown, maxLength: number): string | null {
 
 function parseEmailAddresses(value: unknown): JmapEmailSummary["from"] {
   if (!Array.isArray(value)) return [];
-  return value.flatMap((rawAddress) => {
+  return value.slice(0, 20).flatMap((rawAddress) => {
     if (!rawAddress || typeof rawAddress !== "object" || Array.isArray(rawAddress)) {
       return [];
     }
@@ -791,6 +875,256 @@ async function fetchEmailPage({
   const query = parseEmailQuery(responseJson);
   const messages = parseEmailSummaries(responseJson, query.ids);
   return { ...query, messages };
+}
+
+interface JmapBodyPart {
+  partId: string;
+  type: string | null;
+  name: string | null;
+  size: number | null;
+}
+
+function parseBodyParts(value: unknown): JmapBodyPart[] {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 50).flatMap((rawPart) => {
+    if (!rawPart || typeof rawPart !== "object" || Array.isArray(rawPart)) {
+      return [];
+    }
+    const part = rawPart as Record<string, unknown>;
+    if (
+      typeof part.partId !== "string" ||
+      part.partId.length === 0 ||
+      part.partId.length > 256
+    ) {
+      return [];
+    }
+    return [
+      {
+        partId: part.partId,
+        type: boundedString(part.type, 128),
+        name: boundedString(part.name, 256),
+        size:
+          typeof part.size === "number" &&
+          Number.isSafeInteger(part.size) &&
+          part.size >= 0
+            ? part.size
+            : null,
+      },
+    ];
+  });
+}
+
+function firstBodyValue(
+  parts: JmapBodyPart[],
+  bodyValues: Record<string, unknown>,
+  preferredType: string,
+): { value: string | null; truncated: boolean } {
+  const candidates = parts.filter(
+    (part) => part.type?.toLowerCase() === preferredType,
+  );
+  for (const part of candidates) {
+    const rawBodyValue = bodyValues[part.partId];
+    if (
+      !rawBodyValue ||
+      typeof rawBodyValue !== "object" ||
+      Array.isArray(rawBodyValue)
+    ) {
+      continue;
+    }
+    const bodyValue = rawBodyValue as Record<string, unknown>;
+    if (
+      typeof bodyValue.value !== "string" ||
+      bodyValue.isEncodingProblem === true
+    ) {
+      continue;
+    }
+    const bounded = bodyValue.value.slice(0, EMAIL_BODY_VALUE_MAX_CHARS);
+    return {
+      value: bounded,
+      truncated:
+        bodyValue.isTruncated === true ||
+        bodyValue.value.length > EMAIL_BODY_VALUE_MAX_CHARS,
+    };
+  }
+  return { value: null, truncated: false };
+}
+
+function parseEmailAttachments(value: unknown): JmapEmailAttachmentSummary[] {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 50).flatMap((rawPart) => {
+    if (!rawPart || typeof rawPart !== "object" || Array.isArray(rawPart)) {
+      return [];
+    }
+    const part = rawPart as Record<string, unknown>;
+    return [
+      {
+        name: boundedString(part.name, 256),
+        type: boundedString(part.type, 128),
+        size:
+          typeof part.size === "number" &&
+          Number.isSafeInteger(part.size) &&
+          part.size >= 0
+            ? part.size
+            : null,
+      },
+    ];
+  });
+}
+
+function parseEmailMailboxIds(value: unknown): string[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  return Object.keys(value as Record<string, unknown>)
+    .filter((id) => id.length > 0 && id.length <= 256)
+    .slice(0, 64);
+}
+
+function detailGetRequest(accountId: string, emailId: string) {
+  return {
+    using: [CORE_CAPABILITY, MAIL_CAPABILITY],
+    methodCalls: [
+      [
+        "Email/get",
+        {
+          accountId,
+          ids: [emailId],
+          properties: [
+            "id",
+            "from",
+            "to",
+            "cc",
+            "bcc",
+            "subject",
+            "sentAt",
+            "receivedAt",
+            "keywords",
+            "textBody",
+            "htmlBody",
+            "bodyValues",
+            "attachments",
+            "mailboxIds",
+          ],
+          bodyProperties: ["partId", "type", "name", "size"],
+          fetchTextBodyValues: true,
+          fetchHTMLBodyValues: true,
+          maxBodyValueBytes: EMAIL_BODY_VALUE_MAX_BYTES,
+        },
+        EMAIL_DETAIL_GET_CALL_ID,
+      ],
+    ],
+  };
+}
+
+function parseEmailDetail(responseJson: unknown, expectedId: string): JmapEmailDetail {
+  const { payload } = getMethodResponse(
+    responseJson,
+    EMAIL_DETAIL_GET_CALL_ID,
+    "Email/get",
+  );
+  if (!Array.isArray(payload.list)) {
+    throw new JmapPocError("The JMAP API returned an invalid email detail response.");
+  }
+
+  const rawEmail = payload.list.find(
+    (candidate) =>
+      candidate &&
+      typeof candidate === "object" &&
+      !Array.isArray(candidate) &&
+      (candidate as Record<string, unknown>).id === expectedId,
+  );
+  if (!rawEmail) throw new JmapEmailNotFoundError();
+  if (typeof rawEmail !== "object" || Array.isArray(rawEmail)) {
+    throw new JmapPocError("The JMAP API returned an invalid email detail.");
+  }
+
+  const email = rawEmail as Record<string, unknown>;
+  const bodyValues =
+    email.bodyValues &&
+    typeof email.bodyValues === "object" &&
+    !Array.isArray(email.bodyValues)
+      ? (email.bodyValues as Record<string, unknown>)
+      : {};
+  const text = firstBodyValue(
+    parseBodyParts(email.textBody),
+    bodyValues,
+    "text/plain",
+  );
+  const rawHtml = firstBodyValue(
+    parseBodyParts(email.htmlBody),
+    bodyValues,
+    "text/html",
+  );
+  const safeHtml = rawHtml.value ? sanitizeEmailHtml(rawHtml.value) : null;
+  const keywords =
+    email.keywords &&
+    typeof email.keywords === "object" &&
+    !Array.isArray(email.keywords)
+      ? (email.keywords as Record<string, unknown>)
+      : {};
+
+  return {
+    id: expectedId,
+    from: parseEmailAddresses(email.from),
+    to: parseEmailAddresses(email.to),
+    cc: parseEmailAddresses(email.cc),
+    bcc: parseEmailAddresses(email.bcc),
+    subject: boundedString(email.subject, 512),
+    sentAt: parseReceivedAt(email.sentAt),
+    receivedAt: parseReceivedAt(email.receivedAt),
+    isUnread: keywords["$seen"] !== true,
+    textBody: text.value,
+    htmlBody: safeHtml?.html ?? null,
+    externalLinks: safeHtml?.externalLinks ?? [],
+    bodyTruncated: text.truncated || rawHtml.truncated,
+    attachments: parseEmailAttachments(email.attachments),
+    mailboxIds: parseEmailMailboxIds(email.mailboxIds),
+  };
+}
+
+function emailMarkReadRequest(accountId: string, emailId: string) {
+  return {
+    using: [CORE_CAPABILITY, MAIL_CAPABILITY],
+    methodCalls: [
+      [
+        "Email/set",
+        {
+          accountId,
+          update: {
+            [emailId]: { "keywords/$seen": true },
+          },
+        },
+        EMAIL_MARK_READ_CALL_ID,
+      ],
+    ],
+  };
+}
+
+function verifyEmailMarkRead(responseJson: unknown, emailId: string): void {
+  const { payload } = getMethodResponse(
+    responseJson,
+    EMAIL_MARK_READ_CALL_ID,
+    "Email/set",
+  );
+  const notUpdated =
+    payload.notUpdated &&
+    typeof payload.notUpdated === "object" &&
+    !Array.isArray(payload.notUpdated)
+      ? (payload.notUpdated as Record<string, unknown>)[emailId]
+      : undefined;
+  if (notUpdated && typeof notUpdated === "object" && !Array.isArray(notUpdated)) {
+    const error = notUpdated as Record<string, unknown>;
+    if (error.type === "notFound") throw new JmapEmailNotFoundError();
+    throw new JmapPocError("The JMAP API could not update the message read state.");
+  }
+
+  const updated =
+    payload.updated &&
+    typeof payload.updated === "object" &&
+    !Array.isArray(payload.updated)
+      ? payload.updated as Record<string, unknown>
+      : {};
+  if (!Object.hasOwn(updated, emailId)) {
+    throw new JmapPocError("The JMAP API did not confirm the message read state.");
+  }
 }
 
 interface JmapApiContext {
@@ -1031,6 +1365,96 @@ export async function runJmapOAuthMailboxListing({
         : position + page.ids.length < page.total),
     messages: page.messages,
   };
+}
+
+function validateEmailId(emailId: string): void {
+  if (
+    emailId.length === 0 ||
+    emailId.length > 256 ||
+    /[\u0000-\u001f\u007f]/.test(emailId)
+  ) {
+    throw new JmapPocError("The requested email ID is invalid.");
+  }
+}
+
+export async function runJmapOAuthEmailDetail({
+  accessToken,
+  expectedAccountId,
+  emailId,
+  sessionUrl = "https://mail.rekad.id/.well-known/jmap",
+  trustedOrigins = ["https://mail.rekad.id"],
+  allowInsecureHttp = false,
+  fetchImpl = fetch,
+}: {
+  accessToken: string;
+  expectedAccountId: string;
+  emailId: string;
+  sessionUrl?: string;
+  trustedOrigins?: string[];
+  allowInsecureHttp?: boolean;
+  fetchImpl?: typeof fetch;
+}): Promise<JmapEmailDetail> {
+  validateEmailId(emailId);
+  const context = await createJmapApiContext({
+    sessionUrl,
+    trustedOrigins,
+    allowInsecureHttp,
+    authorization: makeOAuthAuthorization(accessToken),
+    fetchImpl,
+  });
+  if (context.accountId !== expectedAccountId) {
+    throw new JmapAccountMismatchError();
+  }
+
+  const responseJson = await postJmapApi({
+    apiUrl: context.apiUrl,
+    authorization: context.authorization,
+    requestBody: detailGetRequest(context.accountId, emailId),
+    methodName: "Email/get",
+    fetchImpl,
+    maxResponseBytes: EMAIL_DETAIL_RESPONSE_MAX_BYTES,
+  });
+  return parseEmailDetail(responseJson, emailId);
+}
+
+export async function runJmapOAuthMarkEmailRead({
+  accessToken,
+  expectedAccountId,
+  emailId,
+  sessionUrl = "https://mail.rekad.id/.well-known/jmap",
+  trustedOrigins = ["https://mail.rekad.id"],
+  allowInsecureHttp = false,
+  fetchImpl = fetch,
+}: {
+  accessToken: string;
+  expectedAccountId: string;
+  emailId: string;
+  sessionUrl?: string;
+  trustedOrigins?: string[];
+  allowInsecureHttp?: boolean;
+  fetchImpl?: typeof fetch;
+}): Promise<void> {
+  validateEmailId(emailId);
+  const context = await createJmapApiContext({
+    sessionUrl,
+    trustedOrigins,
+    allowInsecureHttp,
+    authorization: makeOAuthAuthorization(accessToken),
+    fetchImpl,
+  });
+  if (context.accountId !== expectedAccountId) {
+    throw new JmapAccountMismatchError();
+  }
+
+  const responseJson = await postJmapApi({
+    apiUrl: context.apiUrl,
+    authorization: context.authorization,
+    requestBody: emailMarkReadRequest(context.accountId, emailId),
+    methodName: "Email/set",
+    fetchImpl,
+    maxResponseBytes: 256 * 1024,
+  });
+  verifyEmailMarkRead(responseJson, emailId);
 }
 
 export async function runJmapInboxSmoke({
