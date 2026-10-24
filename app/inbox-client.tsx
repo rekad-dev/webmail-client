@@ -444,7 +444,7 @@ export function InboxClient() {
   const skipMailboxFetch = useRef<string | null>(null);
   const detailBackButtonRef = useRef<HTMLButtonElement | null>(null);
   const detailHeadingRef = useRef<HTMLHeadingElement | null>(null);
-  const lastOpenedMessageButtonRef = useRef<HTMLButtonElement | null>(null);
+  const lastOpenedMessageIdRef = useRef<string | null>(null);
   const restoreMessageFocus = useRef(false);
 
   useEffect(() => {
@@ -610,9 +610,14 @@ export function InboxClient() {
     if (!restoreMessageFocus.current) return;
 
     restoreMessageFocus.current = false;
-    if (lastOpenedMessageButtonRef.current?.isConnected) {
-      lastOpenedMessageButtonRef.current.focus();
-    }
+    const messageId = lastOpenedMessageIdRef.current;
+    lastOpenedMessageIdRef.current = null;
+    if (!messageId) return;
+
+    const messageButton = Array.from(
+      document.querySelectorAll<HTMLButtonElement>(".message-row"),
+    ).find((button) => button.dataset.emailId === messageId);
+    messageButton?.focus();
   }, [openEmailId]);
 
   useEffect(() => {
@@ -675,9 +680,9 @@ export function InboxClient() {
     setReadUpdateError(false);
   }
 
-  function openMessage(emailId: string, button: HTMLButtonElement) {
+  function openMessage(emailId: string) {
     restoreMessageFocus.current = true;
-    lastOpenedMessageButtonRef.current = button;
+    lastOpenedMessageIdRef.current = emailId;
     setDetailLoading(true);
     setDetailError(null);
     setReadUpdateError(false);
@@ -831,8 +836,9 @@ export function InboxClient() {
                 <button
                   type="button"
                   className={`message-row${message.isUnread ? " is-unread" : ""}`}
+                  data-email-id={message.id}
                   aria-label={`Open ${message.isUnread ? "unread" : "read"} message from ${senderLabel(message)}: ${message.subject?.trim() || "(no subject)"}`}
-                  onClick={(event) => openMessage(message.id, event.currentTarget)}
+                  onClick={() => openMessage(message.id)}
                 >
                   <span className="message-state-dot" aria-hidden="true" />
                   <span className="message-copy">
