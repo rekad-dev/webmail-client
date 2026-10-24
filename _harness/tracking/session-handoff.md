@@ -7,6 +7,15 @@ scope: session-handoff
 
 ## Current status
 
+Phase 5 essential mailbox actions, search, threads, and drafts is in progress.
+The plan is recorded in the Traycer artifact
+`phase-5-mailbox-actions-search-threads-drafts-plan`. The user selected
+all-mail search with an optional mailbox filter, grouped JMAP threads, JMAP
+Drafts autosave, and thread-wide conversation actions with individual message
+controls. Do not use the admin API key or change server-wide settings. Do not
+mutate production mailboxes without separate explicit approval. Stop after
+Phase 5; do not start Phase 6.
+
 Phase 4 compose and send implementation and live verification are complete;
 see the Traycer artifacts `phase-4-compose-send-plan` and
 `phase-4-live-send-verification`, plus commits `fd9df24`, `931496a`,
@@ -161,11 +170,10 @@ missing `stalwart-webui` record is a future hardening prerequisite and not an
 MVP blocker. The admin API key is never used for app authentication or mailbox
 access. The provider-settings audit can remain deferred.
 
-## Next safe step
+## Current safe step
 
-Phase 4 is complete. Do not start Phase 5 until the user directs it. Keep
-`requireClientRegistration` and `anonymousClientRegistration` unchanged, and
-do not use the admin API key.
+Continue Phase 5 implementation only. Keep `requireClientRegistration` and
+`anonymousClientRegistration` unchanged, and do not use the admin API key.
 
 ## Skill installation note
 

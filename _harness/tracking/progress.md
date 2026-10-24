@@ -5,6 +5,19 @@ scope: progress
 
 # Progress
 
+## Phase 5 essential mailbox actions, search, threads, and drafts in progress
+
+- The plan is recorded in the Traycer artifact
+  `phase-5-mailbox-actions-search-threads-drafts-plan`.
+- The user selected all-mail search with an optional mailbox scope, grouped
+  JMAP threads, JMAP Drafts autosave, and thread-wide conversation actions with
+  separate per-message controls. The UI will receive its antislop review after
+  construction.
+- Implementation will use only each authenticated user's OAuth-backed JMAP
+  account. The admin API key and Stalwart server-wide settings are out of scope.
+- Do not run live production mailbox mutations without separate explicit
+  approval. Phase 6 remains pending.
+
 ## Phase 4 compose and send complete
 
 - The technical plan is recorded in the Traycer artifact
