@@ -37,8 +37,9 @@ in successfully; its session identity differed from the second account, and
 its status also returned `200` with mailbox access. The browser is currently
 signed in as the first test account. No message data was read and no mailbox
 state was changed. During the first account's login, an agent-side parsing bug
-caused one rejected credential attempt; the corrected configured credentials
-succeeded, and the rejected attempt created no app session.
+caused one rejected credential attempt; Stalwart showed its generic invalid
+username-or-password response, and the corrected configured credentials
+succeeded without creating an app session for the rejected attempt.
 
 The Phase 1 home page now starts the existing `stalwart` OAuth flow with a
 server-side sign-in action and shows an active-session confirmation after
@@ -91,9 +92,11 @@ access. The provider-settings audit can remain deferred.
 ## Next safe step
 
 The core production login, session persistence, OAuth-backed read-only mailbox
-access, bounded expiry, and guarded logout button now pass. Phase 1 remains open
-for invalid-credential handling and forced refresh behavior; multi-account
-isolation passed on 2026-10-24. Do not start Phase 2 automatically. Keep
+access, bounded expiry, invalid-credential rejection, account isolation, and
+guarded logout button now pass. Phase 1 remains open for natural-expiry refresh
+verification and a safe server-outage error check. The first account's refresh
+check is scheduled for its existing expiry window; no token or database state
+was altered to force it. Do not start Phase 2 automatically. Keep
 `requireClientRegistration` and `anonymousClientRegistration` unchanged; do not
 use the admin API key for app authentication or mailbox access.
 

@@ -56,8 +56,8 @@ scope: progress
   differed, and the first account's status returned `200` with mailbox access.
   The browser is signed in as the first test account. No message data was read
   or mailbox state changed. A parsing mistake caused one rejected credential
-  attempt before the corrected login; no app session was created by that
-  attempt.
+  attempt before the corrected login; Stalwart showed its generic invalid
+  username-or-password message, and the rejected attempt created no app session.
 - Deleted the accidental Vercel project `rekad/mail-client`. The requested
   `mail-client-nine.vercel.app` alias and its generated project alias are now
   absent; `rekad/webmail-client` and `webmail.rekad.id` remain.
@@ -87,8 +87,9 @@ scope: progress
 - No mailbox content was returned, no message or mailbox was mutated, and no
   Stalwart client or global registration setting was changed. The admin key
   was not used for application authentication or mailbox access.
-- Phase 1 remains active for invalid-credential handling and forced refresh
-  behavior; multi-account isolation passed. The normal production login,
+- Phase 1 remains active for natural-expiry refresh verification and a safe
+  server-outage error check; invalid-credential rejection and multi-account
+  isolation passed. The normal production login,
   mailbox-access, bounded-expiry, and logout paths have passed; do not begin
   Phase 2 automatically.
 - No Stalwart client or server-wide setting has been changed. Keep
@@ -98,7 +99,8 @@ scope: progress
 
 ## Next
 
-Complete the remaining Phase 1 acceptance checks for invalid credentials and
-forced refresh. Multi-account isolation is verified.
+Complete natural-expiry refresh verification and a safe server-outage error
+check within Phase 1. Multi-account isolation and invalid-credential rejection
+are verified.
 Keep Phase 2 pending until Phase 1 is closed; do not change global Stalwart
 registration settings.
