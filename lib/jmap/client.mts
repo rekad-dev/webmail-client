@@ -3448,7 +3448,7 @@ function parseThreadSubjects(
     }
     members.set(email.id, {
       id: email.id,
-      subject: email.subject,
+      subject: boundedString(email.subject, 512),
     });
   }
   if (emailIds.some((emailId) => !members.has(emailId) && !notFoundIds.has(emailId))) {

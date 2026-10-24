@@ -27,6 +27,7 @@ function createFetch(options: {
   omitSubjectProperty?: boolean;
   malformedThreadCoverage?: boolean;
   candidateSubject?: string;
+  longMemberSubject?: string;
   queryTotal?: number;
 } = {}) {
   const memberIds = options.memberIds ?? ["email-1", "email-2"];
@@ -95,7 +96,11 @@ function createFetch(options: {
           id,
           ...(options.omitSubjectProperty
             ? {}
-            : { subject: id === targetId ? (options.candidateSubject ?? TARGET_SUBJECT) : `Subject ${id}` }),
+            : {
+              subject: id === targetId
+                ? (options.candidateSubject ?? TARGET_SUBJECT)
+                : (options.longMemberSubject ?? `Subject ${id}`),
+            }),
         }));
     return responseJson({
       methodResponses: [["Email/get", { list, notFound: [] }, callId]],
@@ -239,6 +244,22 @@ test("does not treat a longer subject as an exact match after the input limit", 
     }),
     JmapEmailNotFoundError,
   );
+});
+
+test("bounds member subjects in the response without affecting exact candidate matching", async () => {
+  const longMemberSubject = "x".repeat(2048);
+  const { fetchImpl } = createFetch({ longMemberSubject });
+  const result = await runJmapOAuthThreadSubjects({
+    accessToken: randomBytes(32).toString("base64url"),
+    expectedAccountId: "account-1",
+    subject: TARGET_SUBJECT,
+    sessionUrl: `${ORIGIN}/.well-known/jmap`,
+    fetchImpl,
+  });
+
+  assert.equal(result.members[0]?.subject, longMemberSubject.slice(0, 512));
+  assert.equal(result.members[0]?.subject?.length, 512);
+  assert.equal(result.members.at(-1)?.subject, TARGET_SUBJECT);
 });
 
 test("reports a bounded but incomplete subject query without claiming ambiguity", async () => {
