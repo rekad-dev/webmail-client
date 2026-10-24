@@ -5,11 +5,22 @@ scope: progress
 
 # Progress
 
-## Phase 1 authentication complete
+## Phase 2 inbox and mailbox listing in progress
+
+- Phase 1 authentication is complete, including production account isolation
+  and natural-expiry refresh verification.
+- The Phase 2 plan is recorded in the Traycer artifact
+  `phase-2-inbox-listing-plan`.
+- Scope is read-only mailbox navigation and paginated message summaries with
+  plaintext preview, loading/empty/error states, and manual refresh. Message
+  detail, mutations, search, and attachments remain out of scope.
+- No mailbox or Stalwart settings will be changed.
+
+## Completed Phase 1 authentication
 
 - Auth.js OIDC login is implemented for the existing Stalwart client `webmail`.
 - The home page now has a server-side “Sign in with Stalwart” action and shows
-  a signed-in state after the OAuth callback; mailbox browsing remains Phase 2.
+  a signed-in state after the OAuth callback; mailbox listing is Phase 2.
 - The callback is the registered exact URI
   `https://webmail.rekad.id/api/auth/callback/stalwart`.
 - The callback requires PKCE, state, and nonce checks, validates the OIDC
@@ -98,8 +109,8 @@ scope: progress
 - Phase 1 is complete. Production login, mailbox access, bounded expiry,
   invalid-credential rejection, account isolation, guarded logout, and
   natural-expiry refresh passed. Local tests cover sanitized JMAP HTTP 503 and
-  network-failure errors; a production outage was not simulated. Phase 2
-  remains pending; do not begin it automatically.
+  network-failure errors; a production outage was not simulated. Phase 2 is
+  now in progress.
 - No Stalwart client or server-wide setting has been changed. Keep
   `requireClientRegistration` and `anonymousClientRegistration` unchanged.
   `stalwart-webui` registration remains a future hardening prerequisite, not
@@ -107,7 +118,5 @@ scope: progress
 
 ## Next
 
-Phase 1 acceptance checks are complete, including multi-account isolation,
-invalid-credential rejection, natural-expiry refresh, and sanitized JMAP
-outage errors at the current client boundary. Phase 2 remains pending; do not
-begin it automatically. Do not change global Stalwart registration settings.
+Implement the planned read-only mailbox list and paginated message summaries.
+Keep Phase 3 pending and do not change global Stalwart registration settings.

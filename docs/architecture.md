@@ -69,8 +69,8 @@ Auth.js to clear the cookie. If session-ID lookup or revocation throws, it
 returns `503` without invoking Auth.js, leaving the cookie available for a
 retry. This path is covered by local unit tests and deployed as
 `dpl_CAdcJ8jV2a7aozyYrEAfaVEQviyS` at `https://webmail.rekad.id`. Its normal
-production logout check is pending a fresh test-account sign-in; no production
-database outage was simulated.
+production logout, account-isolation, and natural-expiry refresh checks passed;
+no production database outage was simulated.
 
 The user confirmed that the existing `webmail` client is the app client; its
 registered callback matches this implementation. The audit did not find
@@ -94,10 +94,10 @@ The first callback diagnostic identified a bad identity comparison: Auth.js
 generates `user.id` as an app identifier while `account.providerAccountId`
 contains the OIDC subject. Reviewed commit `58f5ccd` removed that check and is
 deployed as `dpl_D8oi6i3YB1iwfvF1bUcXBbb7eYaY`. No mailbox data was returned or
-mutated. Phase 1 remains active for invalid-credential handling, multi-account
-isolation, forced refresh behavior, and production verification of guarded
-logout failure handling. No Stalwart client or global registration setting was
-changed.
+mutated during Phase 1. Phase 1 is complete. Production login,
+invalid-credential rejection, multi-account isolation, natural-expiry refresh,
+and guarded logout passed. Phase 2 is in progress for read-only mailbox
+listing. No Stalwart client or global registration setting was changed.
 
 ## Phase 0 proof of concept
 

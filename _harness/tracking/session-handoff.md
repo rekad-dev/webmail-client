@@ -100,14 +100,13 @@ access. The provider-settings audit can remain deferred.
 
 ## Next safe step
 
-Phase 1 is complete: production login, session persistence, OAuth-backed
-read-only mailbox access, bounded expiry, invalid-credential rejection,
-account isolation, guarded logout, and natural-expiry refresh all pass. All 24
-local tests, `pnpm typecheck`, and the latest `pnpm build` pass. Local tests
-cover sanitized JMAP HTTP 503 and network-failure errors; a production outage
-was not simulated. Phase 2 remains pending; do not start it automatically.
-Keep `requireClientRegistration` and `anonymousClientRegistration` unchanged;
-do not use the admin API key for app authentication or mailbox access.
+Phase 2 is in progress. The plan is recorded in the
+`phase-2-inbox-listing-plan` artifact. Implement authenticated, read-only
+mailbox navigation, paginated message summaries, and manual refresh with
+loading/empty/error states. Do not read full message bodies, mutate mailbox
+state, change Stalwart settings, or begin Phase 3. Keep
+`requireClientRegistration` and `anonymousClientRegistration` unchanged; do not
+use the admin API key for app authentication or mailbox access.
 
 ## Skill installation note
 
