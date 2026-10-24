@@ -126,22 +126,28 @@ mailbox action was submitted. It remains in Trash. See
 `phase-5-archive-action-check`. Archive behavior remains unverified because
 this account exposes no Archive role.
 
-The user approved trash/restore only if the exact regular message was uniquely
-in Inbox. `Re: Fwd: Test Send` was uniquely in Sent, so the trash action was
-skipped. The user also approved reply/forward prefill on that exact message.
-Both modes prefilled their expected metadata and quoted text; each was
-autosaved as a JMAP draft and moved from Drafts to Trash. The original message
-was already read and remained read. No send occurred and body text was not
-included in the report. Full result: `phase-5-reply-forward-prefill-check`.
+The user approved trash/restore on the exact `Re: Fwd: Test Send` member only
+if it was uniquely in Inbox; it was uniquely in Sent, so that initial condition
+did not run. The user separately approved reply/forward prefill on that member.
+Both modes filled expected metadata and quoted text; each was autosaved as a
+JMAP draft and moved from Drafts to Trash. The original message was already
+read and remained read. No send occurred and body text was not included in the
+report. See `phase-5-reply-forward-prefill-check`.
 
-Remaining live acceptance is a regular-message trash/move check with a target
-whose original mailbox can be restored. The account has no Archive role, so
-archive behavior is unavailable for verification there. Under
+The user then approved the same reversible trash/restore test from Sent. The
+exact message was confirmed uniquely in Sent and read. The JMAP Trash update
+returned HTTP 200, but a bounded 10-second exact-ID listing poll did not show
+it in Trash. The restore update returned HTTP 200; the exact ID then appeared
+in Sent and was absent from Trash, with read state unchanged. The intermediate
+Trash membership remains unverified. See `phase-5-regular-sent-trash-check`.
+The account has no Archive role, so archive behavior is unavailable for
+verification there. Completing the intermediate Trash check without loading a
+body may require a read-only exact-message mailbox-membership endpoint. Under
 `_harness/rules.md` and `PROMPT.md`'s email safety requirements, do not perform
-further mailbox writes or open messages that may fetch content/change read
-state without separate explicit authorization. A specific target, exact
-routes, state restoration plan, and content scope must be agreed before those
-checks.
+further production mailbox writes or open messages that may fetch content or
+change read state without separate explicit authorization. A specific target,
+exact routes, state restoration plan, and content scope must be agreed before
+those checks.
 
 The user approved a read/star test on the regular email whose exact subject is
 `Re: Fwd: Test Send`. The exact-subject `/api/mail/thread-subjects` request

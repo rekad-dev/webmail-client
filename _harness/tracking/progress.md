@@ -109,15 +109,20 @@ scope: progress
   The test is recorded in `phase-5-move-action-check`; the test draft remains
   in Trash. The regular-message trash test was authorized only for an exact
   message uniquely in Inbox; `Re: Fwd: Test Send` was uniquely in Sent, so the
-  action was skipped. Reply and Forward prefill were verified for that exact
-  message; each generated draft was moved to Trash, the original unread state
-  remained false, and no send occurred. See
+  action was skipped under that condition. Reply and Forward prefill were
+  verified for that exact message; each generated draft was moved to Trash,
+  the original unread state remained false, and no send occurred. See
   `phase-5-reply-forward-prefill-check`. The first account has no Archive role,
-  so archive behavior remains unavailable for verification. Only a regular
-  message trash/move check remains, requiring a target whose original
-  mailbox can be restored and explicit approval. The project safety rules
-  require explicit approval before further production mailbox mutations or
-  opening messages that may load content or alter read state. Keep Phase 5
+  so archive behavior remains unavailable for verification.
+
+- The user later approved a reversible Trash→Sent check on the same message.
+  It was uniquely in Sent and read before the action. JMAP confirmed the Trash
+  update with HTTP 200, but even a bounded 10-second mailbox-listing poll did
+  not show the exact ID in Trash. The approved restore update returned HTTP
+  200; the exact ID then appeared in Sent and was absent from Trash, with read
+  state unchanged. The intermediate Trash location remains unverified; see
+  `phase-5-regular-sent-trash-check`. Resolving this without reading a body may
+  require a new exact-message mailbox-membership metadata route. Keep Phase 5
   `in_progress`; do not start Phase 6.
 
 - A separately approved read/star check on the regular message with exact
