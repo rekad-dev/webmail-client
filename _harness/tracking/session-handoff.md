@@ -108,13 +108,17 @@ Phase 5 remains `in_progress`; do not start Phase 6. The temporary no-recipient
 JMAP draft survived page reload, reopened with the exact saved subject/body and
 empty recipient fields, then moved to Trash successfully. No message was sent
 or permanently deleted. The result is in `phase-5-draft-persistence-check`.
-Remaining live acceptance checks are read/unread and star persistence,
-move/archive on a regular message, regular-message trash, and live reply/forward
-prefill. Under `_harness/rules.md` and `PROMPT.md`'s email safety requirements,
-do not perform further mailbox writes or open messages that may fetch
-content/change read state without separate explicit authorization. A specific
-target, exact routes, state restoration plan, and content scope must be agreed
-before those checks.
+A separately approved action check on that exact draft in Trash returned JMAP
+HTTP 200 for `mark_unread`, `mark_read`, `star`, and `unstar`; the sequence
+restored the draft's creation defaults (read and unstarred). No body or preview
+was requested. The result is in `phase-5-state-actions-check`.
+
+Remaining live acceptance checks are move/archive/trash on a regular message
+and reply/forward prefill. Under `_harness/rules.md` and `PROMPT.md`'s email
+safety requirements, do not perform further mailbox writes or open messages
+that may fetch content/change read state without separate explicit
+authorization. A specific target, exact routes, state restoration plan, and
+content scope must be agreed before those checks.
 
 Phase 4 compose and send implementation and live verification are complete;
 see the Traycer artifacts `phase-4-compose-send-plan` and

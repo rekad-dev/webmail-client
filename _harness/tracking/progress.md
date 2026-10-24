@@ -100,12 +100,15 @@ scope: progress
   with the exact saved subject/body and empty recipient fields, then was moved
   to Trash successfully. The live draft check is recorded in
   `phase-5-draft-persistence-check`; no message was sent or permanently
-  deleted. Remaining live acceptance checks are read/unread and star
-  persistence, move/archive on a regular message, and reply/forward prefill.
-  Trash was confirmed for the temporary draft; regular-message trash behavior
-  remains unverified. The project safety rules require explicit approval before
-  further production mailbox mutations or opening messages that may load
-  content or alter read state. Keep Phase 5 `in_progress`; do not start Phase 6.
+  deleted. A separately approved flag check on that exact draft returned JMAP
+  HTTP 200 for mark-unread/read and star/unstar, restoring its original
+  read/unstarred defaults. No body or preview was requested. The check is in
+  `phase-5-state-actions-check`. Remaining live acceptance checks are
+  move/archive/trash on a regular message and reply/forward prefill. Trash was
+  confirmed for the temporary draft; regular-message trash behavior remains
+  unverified. The project safety rules require explicit approval before further
+  production mailbox mutations or opening messages that may load content or
+  alter read state. Keep Phase 5 `in_progress`; do not start Phase 6.
 
 ## Phase 4 compose and send complete
 
