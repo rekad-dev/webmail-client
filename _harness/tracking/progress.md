@@ -67,8 +67,8 @@ scope: progress
 - `AUTH_STALWART_ID`, the existing client's secret and token-auth method, and
   `DATABASE_URL` are now configured locally. The ID matches `webmail`; the
   idempotent migration created the application session table and expiry index.
-- Current local verification: all 24 unit tests and `pnpm typecheck` passed.
-  The latest `pnpm build` passed before the test-only outage-coverage change.
+- Current local verification: all 24 unit tests, `pnpm typecheck`, and the
+  latest `pnpm build` passed.
   The reviewed diagnostics and OIDC subject fix are deployed to
   Vercel production as `dpl_D8oi6i3YB1iwfvF1bUcXBbb7eYaY` at
   `https://webmail.rekad.id`.
