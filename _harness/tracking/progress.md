@@ -17,6 +17,14 @@ scope: progress
   account. The admin API key and Stalwart server-wide settings are out of scope.
 - Do not run live production mailbox mutations without separate explicit
   approval. Phase 6 remains pending.
+- The working tree now includes server-side all-mail/current-mailbox search,
+  collapsed thread listing and bounded conversation reads, account-scoped
+  per-message and thread mailbox actions, reply/forward prefills, and JMAP
+  Drafts autosave/revision handling. Saved drafts use new immutable JMAP Email
+  revisions; sending submits the saved ID through the existing attempt flow.
+- `pnpm typecheck` passes. Tests, browser checks, and live mailbox operations
+  have not been run for Phase 5. Independent code review and the planned UI
+  review are pending.
 
 ## Phase 4 compose and send complete
 

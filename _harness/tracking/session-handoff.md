@@ -16,6 +16,14 @@ controls. Do not use the admin API key or change server-wide settings. Do not
 mutate production mailboxes without separate explicit approval. Stop after
 Phase 5; do not start Phase 6.
 
+The working tree currently implements server-side search, bounded conversation
+reads, safe JMAP message actions, reply/forward prefills, JMAP Drafts revisions,
+and submission of saved draft IDs through the Phase 4 idempotent send path.
+`pnpm typecheck` passes. Phase 5 tests, browser checks, and live mailbox
+operations have not been run. Independent review and the planned UI review are
+pending; keep the phase in progress until remaining review and authorization
+gates are resolved.
+
 Phase 4 compose and send implementation and live verification are complete;
 see the Traycer artifacts `phase-4-compose-send-plan` and
 `phase-4-live-send-verification`, plus commits `fd9df24`, `931496a`,
