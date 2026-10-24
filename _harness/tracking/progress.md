@@ -26,15 +26,18 @@ scope: progress
   JMAP keyword and conditional state updates. Thread summaries aggregate unread
   and starred state across members, bound membership per thread, respect
   `maxObjectsInGet`, and skip aggregation in count-only smoke checks.
-- `pnpm typecheck` and `git diff --check` pass after the hardening changes.
-  Tests and Phase 5 JMAP/mailbox checks have not been run. An approved
-  read-only production browser check still showed the pre-Phase 5 UI; rendered
-  phone/contrast review remains pending a Phase 5 deployment. No Phase 5
-  mailbox mutations were performed. The independent final code review found
-  no actionable issues; its artifact is
+- Local Phase 5 verification passes: `pnpm test` (87/87), `pnpm typecheck`,
+  `pnpm build`, and `git diff --check`. Test fixtures now cover the default
+  `$seen` draft keyword and thread-wide unread/star aggregation; commit
+  `413ad2c` records those updates. The build's generated `next-env.d.ts`
+  change was restored. No live JMAP/mailbox checks or deployment were run.
+  An approved read-only production browser check still showed the pre-Phase 5
+  UI; rendered phone/contrast review remains pending a Phase 5 deployment. No
+  Phase 5 mailbox mutations were performed. The independent final code review
+  found no actionable issues; its artifact is
   `phase-5-hardening-parser-rereview-2026-10-24`. The implementation is in
-  commits `1e8dc87` and `27f09aa`. Phase 5 remains in progress until its
-  requested verification is completed.
+  commits `1e8dc87` and `27f09aa`. Phase 5 remains in progress until remaining
+  production verification is explicitly authorized and completed.
 
 ## Phase 4 compose and send complete
 
