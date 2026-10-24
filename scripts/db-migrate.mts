@@ -34,16 +34,23 @@ if (process.exitCode !== 1) {
     });
 
     try {
-      const migration = await readFile(
-        new URL("../db/migrations/0001-oauth-sessions.sql", import.meta.url),
-        "utf8",
+      const migrationFiles = [
+        "0001-oauth-sessions.sql",
+        "0002-mail-send-attempts.sql",
+      ];
+      const migrations = await Promise.all(
+        migrationFiles.map((file) =>
+          readFile(new URL(`../db/migrations/${file}`, import.meta.url), "utf8"),
+        ),
       );
       await sql.begin(async (transaction) => {
-        await transaction.unsafe(migration);
+        for (const migration of migrations) {
+          await transaction.unsafe(migration);
+        }
       });
-      console.log("Applied the OAuth session schema.");
+      console.log("Applied the application database schema.");
     } catch {
-      console.error("Could not apply the OAuth session schema.");
+      console.error("Could not apply the application database schema.");
       process.exitCode = 1;
     } finally {
       await sql.end({ timeout: 5 });

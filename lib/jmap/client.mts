@@ -10,6 +10,12 @@ const EMAIL_GET_CALL_ID = "phase2-email-get";
 const EMAIL_DETAIL_GET_CALL_ID = "phase3-email-detail-get";
 const EMAIL_MARK_READ_CALL_ID = "phase3-email-mark-read";
 const IDENTITY_GET_CALL_ID = "phase4-identity-get";
+const EMAIL_CREATE_DRAFT_CALL_ID = "phase4-email-create-draft";
+const EMAIL_SUBMISSION_SET_CALL_ID = "phase4-email-submission-set";
+const EMAIL_UPDATE_SENT_CALL_ID = "phase4-email-update-sent";
+const EMAIL_SUBMISSION_QUERY_CALL_ID = "phase4-email-submission-query";
+const EMAIL_RECONCILE_GET_CALL_ID = "phase4-email-reconcile-get";
+const EMAIL_DESTROY_DRAFT_CALL_ID = "phase4-email-destroy-draft";
 const MAX_SESSION_REDIRECTS = 5;
 const REQUEST_TIMEOUT_MS = 15_000;
 const JMAP_RESPONSE_MAX_BYTES = 2 * 1024 * 1024;
@@ -127,6 +133,16 @@ export interface JmapComposePreflight {
   identities: JmapComposeIdentity[];
 }
 
+export interface JmapMailSendInput {
+  identityId: string;
+  fromEmail?: string;
+  to: JmapEmailAddress[];
+  cc: JmapEmailAddress[];
+  bcc: JmapEmailAddress[];
+  subject: string;
+  body: string;
+}
+
 export interface JmapEmailAttachmentSummary {
   name: string | null;
   type: string | null;
@@ -184,6 +200,27 @@ export class JmapEmailNotFoundError extends JmapPocError {
   constructor() {
     super("The selected email is unavailable.");
     this.name = "JmapEmailNotFoundError";
+  }
+}
+
+export type JmapSendRejectionReason =
+  | "submission_unavailable"
+  | "identity_invalid"
+  | "recipient_invalid"
+  | "no_recipients"
+  | "too_many_recipients"
+  | "message_too_large"
+  | "sender_forbidden"
+  | "send_forbidden"
+  | "server_rejected";
+
+export class JmapSendRejectedError extends JmapPocError {
+  readonly reason: JmapSendRejectionReason;
+
+  constructor(reason: JmapSendRejectionReason) {
+    super("Stalwart rejected the email submission.");
+    this.name = "JmapSendRejectedError";
+    this.reason = reason;
   }
 }
 
@@ -1240,7 +1277,10 @@ function identityAddresses(value: unknown): JmapEmailAddress[] {
     ) {
       return [];
     }
-    return [{ name: boundedString(address.name, 128), email: address.email }];
+    return [{
+      name: boundedString(address.name, 128)?.replace(/[\u0000-\u001f\u007f]/g, "") ?? null,
+      email: address.email,
+    }];
   });
 }
 
@@ -1281,7 +1321,7 @@ function parseIdentityList(responseJson: unknown): JmapComposeIdentity[] {
 
     return [{
       id: identity.id,
-      name: boundedString(identity.name, 256) ?? "",
+      name: boundedString(identity.name, 256)?.replace(/[\u0000-\u001f\u007f]/g, "") ?? "",
       email: identity.email,
       isWildcard,
       replyTo: identityAddresses(identity.replyTo),
@@ -1300,6 +1340,102 @@ async function fetchIdentityList(context: JmapApiContext): Promise<JmapComposeId
     fetchImpl: context.fetchImpl,
   });
   return parseIdentityList(responseJson);
+}
+
+function hasSubmissionCapability(context: JmapApiContext): boolean {
+  const accountCapability = context.accountCapabilities[SUBMISSION_CAPABILITY];
+  return (
+    Object.hasOwn(context.capabilities, SUBMISSION_CAPABILITY) &&
+    Boolean(context.capabilities[SUBMISSION_CAPABILITY]) &&
+    typeof accountCapability === "object" &&
+    accountCapability !== null &&
+    !Array.isArray(accountCapability)
+  );
+}
+
+function isValidJmapEmailAddress(value: string): boolean {
+  if (
+    value.length === 0 ||
+    value.length > 254 ||
+    /[\u0000-\u0020\u007f<>,;:"\\]/.test(value)
+  ) {
+    return false;
+  }
+  const at = value.lastIndexOf("@");
+  if (at < 1 || at !== value.indexOf("@") || at > 64) return false;
+  const local = value.slice(0, at);
+  const domain = value.slice(at + 1);
+  if (
+    local.startsWith(".") ||
+    local.endsWith(".") ||
+    local.includes("..") ||
+    domain.length === 0 ||
+    domain.startsWith(".") ||
+    domain.endsWith(".")
+  ) {
+    return false;
+  }
+  return domain.split(".").every((label) =>
+    label.length > 0 &&
+    label.length <= 63 &&
+    !label.startsWith("-") &&
+    !label.endsWith("-") &&
+    /^[\p{L}\p{N}-]+$/u.test(label),
+  );
+}
+
+function getIdentityFromAddress(
+  identity: JmapComposeIdentity,
+  requestedFrom: string | undefined,
+): string {
+  if (!identity.isWildcard) {
+    if (
+      requestedFrom !== undefined &&
+      requestedFrom.toLowerCase() !== identity.email.toLowerCase()
+    ) {
+      throw new JmapSendRejectedError("identity_invalid");
+    }
+    return identity.email;
+  }
+
+  const identityDomain = identity.email.slice(2).toLowerCase();
+  if (
+    !requestedFrom ||
+    !isValidJmapEmailAddress(requestedFrom) ||
+    requestedFrom.slice(requestedFrom.lastIndexOf("@") + 1).toLowerCase() !==
+      identityDomain
+  ) {
+    throw new JmapSendRejectedError("identity_invalid");
+  }
+  return requestedFrom;
+}
+
+function uniqueEmailAddresses(
+  addresses: JmapEmailAddress[],
+): JmapEmailAddress[] {
+  const seen = new Set<string>();
+  return addresses.filter((address) => {
+    const key = address.email.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+async function fetchComposePreflightFromContext(
+  context: JmapApiContext,
+): Promise<JmapComposePreflight> {
+  const submissionAvailable = hasSubmissionCapability(context);
+  const mailboxes = await fetchMailboxList(context);
+  const draftsMailboxId =
+    mailboxes.find((mailbox) => mailbox.role === "drafts")?.id ?? null;
+  const sentMailboxId =
+    mailboxes.find((mailbox) => mailbox.role === "sent")?.id ?? null;
+  const identities = submissionAvailable
+    ? await fetchIdentityList(context)
+    : [];
+
+  return { submissionAvailable, draftsMailboxId, sentMailboxId, identities };
 }
 
 function makeOAuthAuthorization(accessToken: string): string {
@@ -1454,31 +1590,506 @@ export async function runJmapOAuthComposePreflight({
     throw new JmapAccountMismatchError();
   }
 
-  const accountSubmissionCapability =
-    context.accountCapabilities[SUBMISSION_CAPABILITY];
-  const submissionAvailable =
-    Object.hasOwn(context.capabilities, SUBMISSION_CAPABILITY) &&
-    Boolean(context.capabilities[SUBMISSION_CAPABILITY]) &&
-    typeof accountSubmissionCapability === "object" &&
-    accountSubmissionCapability !== null &&
-    !Array.isArray(accountSubmissionCapability);
+  return fetchComposePreflightFromContext(context);
+}
 
-  const mailboxes = await fetchMailboxList(context);
-  const draftsMailboxId =
-    mailboxes.find((mailbox) => mailbox.role === "drafts")?.id ?? null;
-  const sentMailboxId =
-    mailboxes.find((mailbox) => mailbox.role === "sent")?.id ?? null;
+function objectValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
 
-  const identities = submissionAvailable
-    ? await fetchIdentityList(context)
-    : [];
+function rejectionReason(value: unknown): JmapSendRejectionReason {
+  const error = objectValue(value);
+  switch (error?.type) {
+    case "forbiddenFrom":
+    case "forbiddenMailFrom":
+      return "sender_forbidden";
+    case "forbiddenToSend":
+      return "send_forbidden";
+    case "tooManyRecipients":
+      return "too_many_recipients";
+    case "noRecipients":
+      return "no_recipients";
+    case "invalidRecipients":
+    case "invalidEmail":
+      return "recipient_invalid";
+    case "tooLarge":
+      return "message_too_large";
+    default:
+      return "server_rejected";
+  }
+}
+
+function getCreatedId(
+  payload: Record<string, unknown>,
+  creationId: string,
+  typeName: string,
+): string {
+  const created = objectValue(payload.created);
+  const createdItem = objectValue(created?.[creationId]);
+  if (typeof createdItem?.id === "string" && createdItem.id.length > 0) {
+    return createdItem.id;
+  }
+  const notCreated = objectValue(payload.notCreated);
+  if (notCreated && Object.hasOwn(notCreated, creationId)) {
+    throw new JmapSendRejectedError(rejectionReason(notCreated[creationId]));
+  }
+  throw new JmapPocError(`The JMAP API did not confirm ${typeName} creation.`);
+}
+
+function emailCreateDraftRequest(
+  accountId: string,
+  draftsMailboxId: string,
+  identity: JmapComposeIdentity,
+  fromEmail: string,
+  input: JmapMailSendInput,
+) {
+  const bcc = uniqueEmailAddresses([...identity.bcc, ...input.bcc]);
+  const recipients = [...input.to, ...input.cc, ...bcc];
+  if (recipients.length === 0) {
+    throw new JmapSendRejectedError("no_recipients");
+  }
+  if (
+    recipients.length > 50 ||
+    recipients.some((address) => !isValidJmapEmailAddress(address.email))
+  ) {
+    throw new JmapSendRejectedError(
+      recipients.length > 50 ? "too_many_recipients" : "recipient_invalid",
+    );
+  }
+  if (
+    input.subject.length > 998 ||
+    /[\u0000-\u0008\u000a-\u001f\u007f]/.test(input.subject) ||
+    Buffer.byteLength(input.subject, "utf8") > 998
+  ) {
+    throw new JmapSendRejectedError("message_too_large");
+  }
+  if (
+    Buffer.byteLength(input.body, "utf8") > EMAIL_BODY_VALUE_MAX_BYTES ||
+    input.body.includes("\u0000")
+  ) {
+    throw new JmapSendRejectedError("message_too_large");
+  }
+
+  const email: Record<string, unknown> = {
+    mailboxIds: { [draftsMailboxId]: true },
+    keywords: { $draft: true },
+    from: [{ name: identity.name || null, email: fromEmail }],
+    to: input.to,
+    cc: input.cc,
+    bcc,
+    subject: input.subject,
+    bodyStructure: { type: "text/plain", partId: "rekad-text-body" },
+    bodyValues: { "rekad-text-body": { value: input.body } },
+  };
+  if (identity.replyTo.length > 0) email.replyTo = identity.replyTo;
 
   return {
-    submissionAvailable,
-    draftsMailboxId,
-    sentMailboxId,
-    identities,
+    using: [CORE_CAPABILITY, MAIL_CAPABILITY],
+    methodCalls: [
+      [
+        "Email/set",
+        { accountId, create: { draft: email } },
+        EMAIL_CREATE_DRAFT_CALL_ID,
+      ],
+    ],
   };
+}
+
+async function createOAuthJmapContext({
+  accessToken,
+  expectedAccountId,
+  sessionUrl,
+  trustedOrigins,
+  allowInsecureHttp,
+  fetchImpl,
+}: {
+  accessToken: string;
+  expectedAccountId: string;
+  sessionUrl: string;
+  trustedOrigins: string[];
+  allowInsecureHttp: boolean;
+  fetchImpl: typeof fetch;
+}): Promise<JmapApiContext> {
+  const context = await createJmapApiContext({
+    sessionUrl,
+    trustedOrigins,
+    allowInsecureHttp,
+    authorization: makeOAuthAuthorization(accessToken),
+    fetchImpl,
+  });
+  if (context.accountId !== expectedAccountId) {
+    throw new JmapAccountMismatchError();
+  }
+  return context;
+}
+
+export async function runJmapOAuthCreateDraft({
+  accessToken,
+  expectedAccountId,
+  input,
+  sessionUrl = "https://mail.rekad.id/.well-known/jmap",
+  trustedOrigins = ["https://mail.rekad.id"],
+  allowInsecureHttp = false,
+  fetchImpl = fetch,
+}: {
+  accessToken: string;
+  expectedAccountId: string;
+  input: JmapMailSendInput;
+  sessionUrl?: string;
+  trustedOrigins?: string[];
+  allowInsecureHttp?: boolean;
+  fetchImpl?: typeof fetch;
+}): Promise<{ emailId: string }> {
+  const context = await createOAuthJmapContext({
+    accessToken,
+    expectedAccountId,
+    sessionUrl,
+    trustedOrigins,
+    allowInsecureHttp,
+    fetchImpl,
+  });
+  const preflight = await fetchComposePreflightFromContext(context);
+  if (
+    !preflight.submissionAvailable ||
+    !preflight.draftsMailboxId ||
+    !preflight.sentMailboxId
+  ) {
+    throw new JmapSendRejectedError("submission_unavailable");
+  }
+
+  const identity = preflight.identities.find((item) => item.id === input.identityId);
+  if (!identity) throw new JmapSendRejectedError("identity_invalid");
+  const fromEmail = getIdentityFromAddress(identity, input.fromEmail);
+
+  const responseJson = await postJmapApi({
+    apiUrl: context.apiUrl,
+    authorization: context.authorization,
+    requestBody: emailCreateDraftRequest(
+      context.accountId,
+      preflight.draftsMailboxId,
+      identity,
+      fromEmail,
+      input,
+    ),
+    methodName: "Email/set",
+    fetchImpl,
+  });
+  const { payload } = getMethodResponse(
+    responseJson,
+    EMAIL_CREATE_DRAFT_CALL_ID,
+    "Email/set",
+  );
+  return { emailId: getCreatedId(payload, "draft", "draft") };
+}
+
+function responseEntries(responseJson: unknown, callId: string): unknown[][] {
+  const responses = objectValue(responseJson)?.methodResponses;
+  if (!Array.isArray(responses)) {
+    throw new JmapPocError("The JMAP API response did not contain methodResponses.");
+  }
+  return responses.filter(
+    (entry): entry is unknown[] =>
+      Array.isArray(entry) && entry[2] === callId,
+  );
+}
+
+function isEmailUpdateConfirmed(response: unknown, emailId: string): boolean {
+  const entry = responseEntries(response, EMAIL_SUBMISSION_SET_CALL_ID).find(
+    (item) => item[0] === "Email/set",
+  );
+  if (!entry) return false;
+  const payload = objectValue(entry[1]);
+  const updated = objectValue(payload?.updated);
+  return Boolean(updated && Object.hasOwn(updated, emailId));
+}
+
+export async function runJmapOAuthSubmitEmail({
+  accessToken,
+  expectedAccountId,
+  identityId,
+  emailId,
+  sessionUrl = "https://mail.rekad.id/.well-known/jmap",
+  trustedOrigins = ["https://mail.rekad.id"],
+  allowInsecureHttp = false,
+  fetchImpl = fetch,
+}: {
+  accessToken: string;
+  expectedAccountId: string;
+  identityId: string;
+  emailId: string;
+  sessionUrl?: string;
+  trustedOrigins?: string[];
+  allowInsecureHttp?: boolean;
+  fetchImpl?: typeof fetch;
+}): Promise<{ submissionId: string; sentUpdateApplied: boolean }> {
+  validateEmailId(emailId);
+  const context = await createOAuthJmapContext({
+    accessToken,
+    expectedAccountId,
+    sessionUrl,
+    trustedOrigins,
+    allowInsecureHttp,
+    fetchImpl,
+  });
+  const preflight = await fetchComposePreflightFromContext(context);
+  if (
+    !preflight.submissionAvailable ||
+    !preflight.draftsMailboxId ||
+    !preflight.sentMailboxId ||
+    !preflight.identities.some((identity) => identity.id === identityId)
+  ) {
+    throw new JmapSendRejectedError("submission_unavailable");
+  }
+
+  const responseJson = await postJmapApi({
+    apiUrl: context.apiUrl,
+    authorization: context.authorization,
+    requestBody: {
+      using: [CORE_CAPABILITY, MAIL_CAPABILITY, SUBMISSION_CAPABILITY],
+      methodCalls: [[
+        "EmailSubmission/set",
+        {
+          accountId: context.accountId,
+          create: {
+            submission: { identityId, emailId },
+          },
+          onSuccessUpdateEmail: {
+            "#submission": {
+              [`mailboxIds/${preflight.draftsMailboxId}`]: null,
+              [`mailboxIds/${preflight.sentMailboxId}`]: true,
+              "keywords/$draft": null,
+            },
+          },
+        },
+        EMAIL_SUBMISSION_SET_CALL_ID,
+      ]],
+    },
+    methodName: "EmailSubmission/set",
+    fetchImpl,
+  });
+
+  const submissionResponse = responseEntries(
+    responseJson,
+    EMAIL_SUBMISSION_SET_CALL_ID,
+  ).find((entry) => entry[0] === "EmailSubmission/set");
+  if (!submissionResponse) {
+    throw new JmapPocError("The JMAP API omitted the email submission response.");
+  }
+  const payload = objectValue(submissionResponse[1]);
+  if (!payload) {
+    throw new JmapPocError("The JMAP API returned an invalid email submission response.");
+  }
+  const submissionId = getCreatedId(payload, "submission", "email submission");
+
+  return {
+    submissionId,
+    sentUpdateApplied: isEmailUpdateConfirmed(
+      responseJson,
+      emailId,
+    ),
+  };
+}
+
+export async function runJmapOAuthUpdateSent({
+  accessToken,
+  expectedAccountId,
+  emailId,
+  sessionUrl = "https://mail.rekad.id/.well-known/jmap",
+  trustedOrigins = ["https://mail.rekad.id"],
+  allowInsecureHttp = false,
+  fetchImpl = fetch,
+}: {
+  accessToken: string;
+  expectedAccountId: string;
+  emailId: string;
+  sessionUrl?: string;
+  trustedOrigins?: string[];
+  allowInsecureHttp?: boolean;
+  fetchImpl?: typeof fetch;
+}): Promise<boolean> {
+  validateEmailId(emailId);
+  const context = await createOAuthJmapContext({
+    accessToken,
+    expectedAccountId,
+    sessionUrl,
+    trustedOrigins,
+    allowInsecureHttp,
+    fetchImpl,
+  });
+  const mailboxes = await fetchMailboxList(context);
+  const draftsMailboxId = mailboxes.find((item) => item.role === "drafts")?.id;
+  const sentMailboxId = mailboxes.find((item) => item.role === "sent")?.id;
+  if (!draftsMailboxId || !sentMailboxId) return false;
+
+  const responseJson = await postJmapApi({
+    apiUrl: context.apiUrl,
+    authorization: context.authorization,
+    requestBody: {
+      using: [CORE_CAPABILITY, MAIL_CAPABILITY],
+      methodCalls: [[
+        "Email/set",
+        {
+          accountId: context.accountId,
+          update: {
+            [emailId]: {
+              [`mailboxIds/${draftsMailboxId}`]: null,
+              [`mailboxIds/${sentMailboxId}`]: true,
+              "keywords/$draft": null,
+            },
+          },
+        },
+        EMAIL_UPDATE_SENT_CALL_ID,
+      ]],
+    },
+    methodName: "Email/set",
+    fetchImpl,
+  });
+  const { payload } = getMethodResponse(
+    responseJson,
+    EMAIL_UPDATE_SENT_CALL_ID,
+    "Email/set",
+  );
+  const updated = objectValue(payload.updated);
+  return Boolean(updated && Object.hasOwn(updated, emailId));
+}
+
+export async function runJmapOAuthReconcileSend({
+  accessToken,
+  expectedAccountId,
+  emailId,
+  sessionUrl = "https://mail.rekad.id/.well-known/jmap",
+  trustedOrigins = ["https://mail.rekad.id"],
+  allowInsecureHttp = false,
+  fetchImpl = fetch,
+}: {
+  accessToken: string;
+  expectedAccountId: string;
+  emailId: string;
+  sessionUrl?: string;
+  trustedOrigins?: string[];
+  allowInsecureHttp?: boolean;
+  fetchImpl?: typeof fetch;
+}): Promise<{ submissionId: string | null; inSentMailbox: boolean }> {
+  validateEmailId(emailId);
+  const context = await createOAuthJmapContext({
+    accessToken,
+    expectedAccountId,
+    sessionUrl,
+    trustedOrigins,
+    allowInsecureHttp,
+    fetchImpl,
+  });
+  const preflight = await fetchComposePreflightFromContext(context);
+  if (!preflight.submissionAvailable) {
+    return { submissionId: null, inSentMailbox: false };
+  }
+
+  const responseJson = await postJmapApi({
+    apiUrl: context.apiUrl,
+    authorization: context.authorization,
+    requestBody: {
+      using: [CORE_CAPABILITY, MAIL_CAPABILITY, SUBMISSION_CAPABILITY],
+      methodCalls: [
+        [
+          "EmailSubmission/query",
+          {
+            accountId: context.accountId,
+            filter: { emailIds: [emailId] },
+            limit: 5,
+          },
+          EMAIL_SUBMISSION_QUERY_CALL_ID,
+        ],
+        [
+          "Email/get",
+          {
+            accountId: context.accountId,
+            ids: [emailId],
+            properties: ["id", "mailboxIds"],
+          },
+          EMAIL_RECONCILE_GET_CALL_ID,
+        ],
+      ],
+    },
+    methodName: "EmailSubmission/query",
+    fetchImpl,
+  });
+  const query = getMethodResponse(
+    responseJson,
+    EMAIL_SUBMISSION_QUERY_CALL_ID,
+    "EmailSubmission/query",
+  ).payload;
+  const ids = Array.isArray(query.ids)
+    ? query.ids.filter((id): id is string => typeof id === "string")
+    : [];
+  const emailGet = responseEntries(responseJson, EMAIL_RECONCILE_GET_CALL_ID)
+    .find((entry) => entry[0] === "Email/get");
+  const emailPayload = objectValue(emailGet?.[1]);
+  const emailList = Array.isArray(emailPayload?.list) ? emailPayload.list : [];
+  const email = emailList
+    .map(objectValue)
+    .find((item) => item?.id === emailId);
+  const mailboxIds = objectValue(email?.mailboxIds);
+  const sentMailboxId = preflight.sentMailboxId;
+
+  return {
+    submissionId: ids[0] ?? null,
+    inSentMailbox: Boolean(
+      sentMailboxId && mailboxIds && mailboxIds[sentMailboxId] === true,
+    ),
+  };
+}
+
+export async function runJmapOAuthDestroyDraft({
+  accessToken,
+  expectedAccountId,
+  emailId,
+  sessionUrl = "https://mail.rekad.id/.well-known/jmap",
+  trustedOrigins = ["https://mail.rekad.id"],
+  allowInsecureHttp = false,
+  fetchImpl = fetch,
+}: {
+  accessToken: string;
+  expectedAccountId: string;
+  emailId: string;
+  sessionUrl?: string;
+  trustedOrigins?: string[];
+  allowInsecureHttp?: boolean;
+  fetchImpl?: typeof fetch;
+}): Promise<void> {
+  validateEmailId(emailId);
+  const context = await createOAuthJmapContext({
+    accessToken,
+    expectedAccountId,
+    sessionUrl,
+    trustedOrigins,
+    allowInsecureHttp,
+    fetchImpl,
+  });
+  const responseJson = await postJmapApi({
+    apiUrl: context.apiUrl,
+    authorization: context.authorization,
+    requestBody: {
+      using: [CORE_CAPABILITY, MAIL_CAPABILITY],
+      methodCalls: [[
+        "Email/set",
+        { accountId: context.accountId, destroy: [emailId] },
+        EMAIL_DESTROY_DRAFT_CALL_ID,
+      ]],
+    },
+    methodName: "Email/set",
+    fetchImpl,
+  });
+  const { payload } = getMethodResponse(
+    responseJson,
+    EMAIL_DESTROY_DRAFT_CALL_ID,
+    "Email/set",
+  );
+  const destroyed = Array.isArray(payload.destroyed) ? payload.destroyed : [];
+  if (!destroyed.includes(emailId)) {
+    throw new JmapPocError("The JMAP API did not confirm the temporary draft cleanup.");
+  }
 }
 
 export async function runJmapOAuthMailboxListing({
