@@ -119,8 +119,15 @@ listings confirmed its location after each step. It remains in Trash; no body
 was requested, and the listing preview field was ignored. See
 `phase-5-move-action-check`.
 
-Remaining live acceptance checks are move/archive/trash on a regular message
-and reply/forward prefill. Under
+The user also authorized an archive check on the same temporary draft. The
+first account's read-only mailbox role scan found Inbox and Trash but no
+Archive role; the draft was already in Trash, so archive was skipped and no
+mailbox action was submitted. It remains in Trash. See
+`phase-5-archive-action-check`. Archive behavior remains unverified because
+this account exposes no Archive role.
+
+Remaining live acceptance checks are move/trash on a regular message, if still
+desired, and reply/forward prefill. Under
 `_harness/rules.md` and `PROMPT.md`'s email safety requirements, do not perform
 further mailbox writes or open messages that may fetch content/change read
 state without separate explicit authorization. A specific target, exact

@@ -125,6 +125,13 @@ scope: progress
   Preview fields were ignored, no body was requested, and no other message was
   touched. Full result: `phase-5-regular-message-flags-check`.
 
+- The user authorized an archive check using only the temporary no-recipient
+  draft `[rekad Phase 5 draft persistence check]`. The first account's
+  read-only role scan found Inbox and Trash, with no Archive role. The exact
+  draft was already in Trash, so archive was skipped and no mailbox action was
+  submitted. The draft remains in Trash. No body or other message was
+  inspected. Full result: `phase-5-archive-action-check`.
+
 ## Phase 4 compose and send complete
 
 - The technical plan is recorded in the Traycer artifact
