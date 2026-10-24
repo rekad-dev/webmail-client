@@ -96,6 +96,13 @@ scope: progress
   fetched, no Inbox listing was opened, and no mailbox state changed. Full
   record: `phase-5-production-search-check`.
 
+- The remaining Phase 5 production acceptance checks are still open: persistence
+  of read/unread and starred state, mailbox association actions (move/archive/
+  trash), draft persistence across reload, and live reply/forward prefill. The
+  project safety rules require explicit approval before production mailbox
+  mutations or opening messages that may load content or alter read state. Keep
+  Phase 5 `in_progress`; do not start Phase 6.
+
 ## Phase 4 compose and send complete
 
 - The technical plan is recorded in the Traycer artifact

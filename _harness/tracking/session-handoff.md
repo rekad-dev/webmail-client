@@ -104,6 +104,17 @@ TaskSpace was finished with no pages retained. No Inbox listing was opened,
 message body or preview was fetched, and no mailbox state changed. Full record
 is in `phase-5-production-search-check`.
 
+Phase 5 remains `in_progress`; do not start Phase 6. The latest read-only
+production search/thread metadata check passed. Still-open production acceptance
+checks are read/unread and star persistence, move/archive/trash persistence,
+Drafts surviving reload, and live reply/forward prefill. Under
+`_harness/rules.md` and `PROMPT.md`'s email safety requirements, do not perform
+mailbox writes or open messages that may fetch content/change read state without
+separate explicit authorization. The next safe step is to get approval for the
+specific target message and exact reversible action test, or approval to create
+and clean up a temporary no-recipient JMAP draft. No Phase 5 action or draft
+mutation has been performed in this continuation.
+
 Phase 4 compose and send implementation and live verification are complete;
 see the Traycer artifacts `phase-4-compose-send-plan` and
 `phase-4-live-send-verification`, plus commits `fd9df24`, `931496a`,
