@@ -26,9 +26,10 @@ scope: progress
   `dpl_5xekSb6sLYAwedgKp22aczkXeeBx` reached Ready and aliased
   `https://webmail.rekad.id`.
 - The read-only OAuth preflight is still pending. The approved GET to
-  `/api/mail/identities` returned `401 sign_in_required` because the available
-  browser session was not authenticated. A sign-in request is now waiting in
-  the browser. No mailbox was mutated and no live send was attempted.
+  `/api/mail/identities` returned `401 sign_in_required`. After the user
+  reported signing in, the same primary browser tab's cookie-authenticated GET
+  still returned `401 sign_in_required`; the exact browser session is parked
+  again for sign-in. No mailbox was mutated and no live send was attempted.
 - No live email was sent. The exact approved test recipient is still required
   before the live submission check. No Stalwart setting or admin API credential
   was used.

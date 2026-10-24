@@ -18,12 +18,13 @@ The user approved deployment, the additive application database migration, and
 one read-only production check. `pnpm db:migrate` succeeded, and production
 deployment `dpl_5xekSb6sLYAwedgKp22aczkXeeBx` is Ready at
 `https://webmail.rekad.id`. The `/api/mail/identities` GET returned
-`401 sign_in_required` because the available browser session was not signed in.
-The browser is parked for the user to sign in with the first dedicated test
-account; after that, continue with only the approved read-only preflight. No
-mailbox was mutated and no email was sent. The exact approved recipient is
-still required before a live send. No Stalwart settings changed, and the admin
-API key was not used.
+`401 sign_in_required`. On 2026-10-24, after the user reported signing in, the
+same primary browser tab and its cookie-authenticated GET still returned
+`401 sign_in_required`. The browser is parked again for sign-in with the first
+dedicated test account in that exact session; after that, continue with only
+the approved read-only preflight. No mailbox was mutated and no email was
+sent. The exact approved recipient is still required before a live send. No
+Stalwart settings changed, and the admin API key was not used.
 
 Phase 3 safe email reading is complete. Local code now includes an
 authenticated detail route, bounded JMAP body retrieval, server-side HTML
