@@ -5,6 +5,21 @@ scope: progress
 
 # Progress
 
+## Phase 4 compose and send planning complete
+
+- The technical plan is recorded in the Traycer artifact
+  `phase-4-compose-send-plan`. The user selected durable Postgres send-attempt
+  metadata so duplicate requests can be reconciled; unknown submission results
+  must never trigger automatic resend.
+- Planned scope is plain-text compose through the signed-in user's JMAP
+  `Identity/get`, `Email/set`, and `EmailSubmission/set`, with a Sent mailbox
+  update after successful submission. No SMTP client, draft editor, attachments,
+  or server-wide Stalwart changes are included.
+- Implementation remains pending. First verify read-only JMAP submission
+  capability, available identities, and Drafts/Sent roles using the user's
+  OAuth session. The exact authorized test recipient is required before a live
+  send; no email was sent during planning.
+
 ## Phase 3 safe email reading complete
 
 - The plan is recorded in the Traycer artifact
@@ -162,7 +177,7 @@ scope: progress
 
 ## Next
 
-Stop before Phase 3 and wait for the user's direction. If live message-row and
-page-turn verification is needed, use a populated dedicated test mailbox and
-do not send or mutate messages without explicit authorization. Keep global
-Stalwart registration settings unchanged.
+Phase 4 planning is complete. Wait for the user's direction before
+implementation. Do not send a live test email until the exact recipient is
+explicitly authorized. Keep Stalwart's global OAuth and registration settings
+unchanged.

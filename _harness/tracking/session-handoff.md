@@ -7,6 +7,13 @@ scope: session-handoff
 
 ## Current status
 
+Phase 4 compose and send planning is complete; see the Traycer artifact
+`phase-4-compose-send-plan`. The user selected a durable Postgres send-attempt
+record; ambiguous outcomes must fail closed and never auto-resend. Implementation
+is still pending. Before live verification, check submission capability,
+identities, and Drafts/Sent roles with the user's OAuth session, then obtain the
+exact test recipient. No email or server setting was changed during planning.
+
 Phase 3 safe email reading is complete. Local code now includes an
 authenticated detail route, bounded JMAP body retrieval, server-side HTML
 sanitization and sandboxed display, attachment metadata, and a same-origin
@@ -141,9 +148,9 @@ access. The provider-settings audit can remain deferred.
 
 ## Next safe step
 
-Phase 3 is complete. Stop here and wait for the user's direction before Phase
-4. The configured test message was marked read by the approved check; no email
-was sent or deleted. Keep `requireClientRegistration` and
+Phase 4 planning is complete. Wait for the user's direction before
+implementation. Do not send a live test email until the exact recipient is
+explicitly authorized. Keep `requireClientRegistration` and
 `anonymousClientRegistration` unchanged, and do not use the admin API key.
 
 ## Skill installation note
