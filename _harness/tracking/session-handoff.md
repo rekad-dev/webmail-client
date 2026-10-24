@@ -33,10 +33,12 @@ Local Phase 5 verification passes: `pnpm test` (87/87), `pnpm typecheck`,
 `pnpm build`, and `git diff --check`. Commit `413ad2c` updates the mock JMAP
 responses for thread membership/state aggregation and asserts the default
 read keyword on created drafts. The build's generated `next-env.d.ts` change
-was restored. No live JMAP/mailbox checks or deployment were run. The approved
-production browser check still showed the pre-Phase 5 UI, so rendered
-phone/contrast review remains pending a Phase 5 deployment. No Phase 5 mailbox
-mutation or deployment was performed. The source-level UI review is in
+was restored. With the user's approval, production deployment
+`dpl_4Qec3Yi6Wep7z1DNGvUsjyhTsgLn` is Ready and aliased to
+`https://webmail.rekad.id`; Vercel's remote build passed. The signed-in browser
+review is pending authorization for the single read-only `/api/mail` listing
+that the inbox page needs to render. No production mailbox actions, message
+opens, or live JMAP checks were performed. The source-level UI review is in
 `phase-5-ui-antislop-review`. The final independent code review found no
 actionable issues; see `phase-5-hardening-parser-rereview-2026-10-24`. Keep the
 phase in progress and do not start Phase 6.
