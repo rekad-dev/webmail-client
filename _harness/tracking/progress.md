@@ -103,10 +103,13 @@ scope: progress
   deleted. A separately approved flag check on that exact draft returned JMAP
   HTTP 200 for mark-unread/read and star/unstar, restoring its original
   read/unstarred defaults. No body or preview was requested. The check is in
-  `phase-5-state-actions-check`. Remaining live acceptance checks are
-  move/archive/trash on a regular message and reply/forward prefill. Trash was
-  confirmed for the temporary draft; regular-message trash behavior remains
-  unverified. The project safety rules require explicit approval before further
+  `phase-5-state-actions-check`. A separately approved `move` test moved the
+  same draft from Trash to Drafts and back; both transitions returned
+  JMAP-confirmed success and listings confirmed its location after each step.
+  The test is recorded in `phase-5-move-action-check`; the test draft remains
+  in Trash. Remaining live acceptance checks are read/unread and star on a
+  regular message, move/archive/trash on a regular message, and reply/forward
+  prefill. The project safety rules require explicit approval before further
   production mailbox mutations or opening messages that may load content or
   alter read state. Keep Phase 5 `in_progress`; do not start Phase 6.
 

@@ -113,12 +113,19 @@ HTTP 200 for `mark_unread`, `mark_read`, `star`, and `unstar`; the sequence
 restored the draft's creation defaults (read and unstarred). No body or preview
 was requested. The result is in `phase-5-state-actions-check`.
 
-Remaining live acceptance checks are move/archive/trash on a regular message
-and reply/forward prefill. Under `_harness/rules.md` and `PROMPT.md`'s email
-safety requirements, do not perform further mailbox writes or open messages
-that may fetch content/change read state without separate explicit
-authorization. A specific target, exact routes, state restoration plan, and
-content scope must be agreed before those checks.
+A separately approved `move` test moved the same test draft from Trash to
+Drafts and back. Both JMAP action requests returned HTTP 200, and mailbox
+listings confirmed its location after each step. It remains in Trash; no body
+was requested, and the listing preview field was ignored. See
+`phase-5-move-action-check`.
+
+Remaining live acceptance checks are read/unread and star on a regular message,
+move/archive/trash on a regular message, and reply/forward prefill. Under
+`_harness/rules.md` and `PROMPT.md`'s email safety requirements, do not perform
+further mailbox writes or open messages that may fetch content/change read
+state without separate explicit authorization. A specific target, exact
+routes, state restoration plan, and content scope must be agreed before those
+checks.
 
 Phase 4 compose and send implementation and live verification are complete;
 see the Traycer artifacts `phase-4-compose-send-plan` and
