@@ -7,8 +7,8 @@ scope: session-handoff
 
 ## Current status
 
-Phase 0 and Phase 1 are complete. Phase 2 inbox/mailbox listing is implemented
-locally. The authenticated `/api/mail` route verifies the JMAP primary account
+Phase 0, Phase 1, and Phase 2 are complete. The authenticated `/api/mail` route
+verifies the JMAP primary account
 against the app session, validates selected mailboxes against that account,
 and returns only mailbox counts plus paginated sender/subject/date/unread/plain
 preview fields. The React inbox provides mailbox selection, previous/next page,
@@ -16,13 +16,18 @@ manual refresh, empty/loading/error states, and the existing sign-out action.
 The configured dedicated test account has an empty inbox, so no sample messages
 are presented.
 
-Phase 2 local verification passed: all 45 tests, `pnpm typecheck`, `pnpm build`,
+Phase 2 verification passed: all 45 tests, `pnpm typecheck`, `pnpm build`,
 and a live read-only `pnpm jmap:smoke` result of five mailboxes, zero inbox IDs,
 and zero summaries. An unauthenticated local request to `/api/mail` returned
 `401 sign_in_required` with `Cache-Control: no-store` and `Vary: Cookie`.
-Deployment and shared-browser verification have not been approved or run, so
-Phase 2 remains in progress. Pagination is covered by tests but the current
-inbox has no messages to paginate.
+Production deployment `dpl_DbN32jRh6FHVYRmV83AWC9JP1uBj` is Ready at
+`https://webmail.rekad.id`. In the signed-in first dedicated test account, the
+UI displayed five mailboxes and the true empty Inbox state. Selecting Drafts,
+returning to Inbox, and manual refresh worked; refresh generated a new
+`/api/mail` request. Previous/next controls were disabled at zero messages.
+Live row display and page turns could not be exercised because the Inbox is
+empty. No message was opened, sent, or changed. The user browser tab was
+returned on Inbox without signing out.
 
 Phase 0 and Phase 1 are complete. Production Authorization Code + PKCE sign-in
 now succeeds with the existing `webmail` client and exact registered callback
@@ -117,14 +122,10 @@ access. The provider-settings audit can remain deferred.
 
 ## Next safe step
 
-After the user explicitly approves deployment and browser use, deploy the
-local Phase 2 implementation to the existing `rekad/webmail-client` project
-and verify it at `https://webmail.rekad.id` using the signed-in dedicated
-account. Check that real mailboxes load, the empty inbox is rendered, selecting
-a mailbox stays within that account, and manual refresh retries successfully.
-Pagination can be exercised when a populated dedicated test mailbox is
-available. Keep Phase 3 pending; do not read full message bodies, mutate mailbox
-state, or change Stalwart settings. Keep `requireClientRegistration` and
+Phase 2 is complete. Stop before Phase 3 and wait for the user's direction. If
+live message-row and page-turn verification is needed, use a populated
+dedicated test mailbox without sending or mutating messages unless explicitly
+authorized. Keep `requireClientRegistration` and
 `anonymousClientRegistration` unchanged; do not use the admin API key for app
 authentication or mailbox access.
 

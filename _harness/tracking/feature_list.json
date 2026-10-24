@@ -19,7 +19,7 @@
       "name": "Inbox and mailbox listing",
       "description": "Show the authenticated user's real mailbox and messages with pagination, refresh, and clear states.",
       "dependencies": ["phase-1"],
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "id": "phase-3",

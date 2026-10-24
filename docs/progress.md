@@ -1,6 +1,6 @@
 # Progress
 
-## Current milestone: Phase 2 inbox listing implemented locally
+## Current milestone: Phase 2 inbox and mailbox listing complete
 
 - Phase 1 authentication completed on 2026-10-24. Production Authorization
   Code + PKCE sign-in uses the existing `webmail` client and exact callback
@@ -21,10 +21,16 @@
   mailboxes, zero inbox messages, and zero summaries fetched. It logged counts
   only. No mailbox or Stalwart settings were changed. No message bodies were
   requested or mailbox state mutated. The admin API key was not used.
-- The authenticated UI is implemented locally but has not been deployed or
-  checked in the shared browser. Keep Phase 2 in progress until the user
-  approves the exact deployment and browser checklist; the Vercel project,
-  domain, and Stalwart settings were not changed.
+- Production deployment `dpl_DbN32jRh6FHVYRmV83AWC9JP1uBj` is Ready at
+  `https://webmail.rekad.id`. The signed-in test account showed five mailboxes
+  and the true empty Inbox state. Selecting Drafts, returning to Inbox, and
+  refreshing all worked; refresh issued a new `/api/mail` request. Pagination
+  controls remained disabled for the empty inbox. No message was opened, sent,
+  or changed. Live message-row and page-turn behavior could not be exercised
+  without existing test messages; JMAP mapping, bounded route input, and max
+  offset behavior are covered by tests.
+- The Vercel project and domain remained `rekad/webmail-client` and
+  `webmail.rekad.id`. No Stalwart clients or global settings changed.
 
 ## Phase 0 record
 
@@ -43,9 +49,12 @@
 
 ## Phase 2 work
 
-After explicit approval, deploy the local Phase 2 implementation to the
-existing `rekad/webmail-client` project and verify it using the signed-in
-dedicated account. Its inbox is currently empty, so confirm the real mailbox
-navigation, empty state, and refresh; pagination requires a populated test
-mailbox. Keep Phase 3 pending and leave all global Stalwart registration
-settings unchanged.
+Phase 2 is complete. Production deployment `dpl_DbN32jRh6FHVYRmV83AWC9JP1uBj`
+is Ready at `https://webmail.rekad.id`. The signed-in first dedicated test
+account showed five mailboxes and an empty Inbox. Selecting Drafts, returning
+to Inbox, and manual refresh worked; refresh generated a new `/api/mail`
+request. Previous/next controls were disabled for the empty Inbox. Live
+message-row display and page turns were not available to exercise without
+existing messages; automated tests cover summary mapping, route pagination
+input, and the max offset. No message was opened, sent, or changed. Keep Phase 3
+pending and leave all global Stalwart registration settings unchanged.

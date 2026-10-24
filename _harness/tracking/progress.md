@@ -5,7 +5,7 @@ scope: progress
 
 # Progress
 
-## Phase 2 inbox and mailbox listing implemented locally
+## Phase 2 inbox and mailbox listing complete
 
 - Phase 1 authentication is complete, including production account isolation
   and natural-expiry refresh verification.
@@ -20,8 +20,14 @@ scope: progress
 - The dedicated-account `pnpm jmap:smoke` passed with five mailboxes and an
   empty inbox (0 IDs and 0 summaries). Output contained counts only. No mailbox
   data was mutated and no Stalwart setting changed.
-- The UI has not been deployed or verified in the shared browser. Phase 2 stays
-  in progress until the user approves deployment and a browser checklist.
+- Production deployment `dpl_DbN32jRh6FHVYRmV83AWC9JP1uBj` is Ready at
+  `https://webmail.rekad.id`. The signed-in test account showed five mailboxes
+  and a real empty Inbox. Selecting Drafts, returning to Inbox, and refreshing
+  worked; refresh issued a new `/api/mail` request. The empty Inbox correctly
+  disabled previous/next controls. No message was opened, sent, or changed.
+- Live message-row display and page turns remain unexercised because the test
+  Inbox has no messages. JMAP summary mapping, route pagination input, and the
+  max page-position boundary are covered by tests. Phase 3 remains pending.
 
 ## Completed Phase 1 authentication
 
@@ -117,7 +123,7 @@ scope: progress
   invalid-credential rejection, account isolation, guarded logout, and
   natural-expiry refresh passed. Local tests cover sanitized JMAP HTTP 503 and
   network-failure errors; a production outage was not simulated. Phase 2 is
-  now in progress.
+  complete.
 - No Stalwart client or server-wide setting has been changed. Keep
   `requireClientRegistration` and `anonymousClientRegistration` unchanged.
   `stalwart-webui` registration remains a future hardening prerequisite, not
@@ -125,5 +131,7 @@ scope: progress
 
 ## Next
 
-Implement the planned read-only mailbox list and paginated message summaries.
-Keep Phase 3 pending and do not change global Stalwart registration settings.
+Stop before Phase 3 and wait for the user's direction. If live message-row and
+page-turn verification is needed, use a populated dedicated test mailbox and
+do not send or mutate messages without explicit authorization. Keep global
+Stalwart registration settings unchanged.

@@ -96,8 +96,10 @@ contains the OIDC subject. Reviewed commit `58f5ccd` removed that check and is
 deployed as `dpl_D8oi6i3YB1iwfvF1bUcXBbb7eYaY`. No mailbox data was returned or
 mutated during Phase 1. Phase 1 is complete. Production login,
 invalid-credential rejection, multi-account isolation, natural-expiry refresh,
-and guarded logout passed. Phase 2 is in progress for read-only mailbox
-listing. No Stalwart client or global registration setting was changed.
+and guarded logout passed. Phase 2 read-only mailbox listing is complete and
+deployed as `dpl_DbN32jRh6FHVYRmV83AWC9JP1uBj` at
+`https://webmail.rekad.id`. No Stalwart client or global registration setting
+was changed.
 
 ## Phase 2 mailbox listing
 
@@ -113,8 +115,12 @@ queries a fixed 25-message page newest-first and fetches only sender, subject,
 received date, keywords, and plaintext preview. It does not request body values,
 HTML, or attachment data. Responses are application-shaped, uncached, and vary
 by cookie. The browser receives no Stalwart token, JMAP account ID, or raw JMAP
-response. The dedicated account's live read-only check currently finds an
-empty inbox, so the UI renders the real empty state.
+response. The dedicated account's production read-only check found five
+mailboxes and an empty inbox, so the UI rendered the real empty state. The
+signed-in production browser check confirmed mailbox selection, return to
+Inbox, and manual refresh. Live message-row display and pagination could not be
+exercised because the test inbox contains no messages; JMAP summary mapping,
+route pagination input, and the page-position cap are covered by tests.
 
 ## Phase 0 proof of concept
 
