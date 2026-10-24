@@ -15,11 +15,13 @@ sanitization and sandboxed display, attachment metadata, and a same-origin
 independent security review's three findings were fixed: local origin checks
 require the exact app origin, message detail moves focus and restores it on
 return, and an in-flight read update reconciles or refreshes the listing. The
-read-only `pnpm jmap:smoke` check found five mailboxes and zero Inbox messages,
-so live body display is not yet verified. No message was mutated and no Phase 3
-deployment or browser review has happened. The next verification needs a
-dedicated populated test message; the user must explicitly approve changing
-its read state before live verification.
+read-only `pnpm jmap:smoke` check found five mailboxes and zero Inbox messages.
+The signed-in production Inbox does show the target subject “Test”, but
+production serves the Phase 2 message list with no opening control; `/inbox`
+returns 404. No body was opened and the message remains unread. No Phase 3
+deployment or message-detail browser review has happened. The user authorized
+opening “Test” and its `$seen` mutation once Phase 3 is live. Ask for separate
+approval before deploying Phase 3 to production.
 
 Phase 0, Phase 1, and Phase 2 are complete. The authenticated `/api/mail` route
 verifies the JMAP primary account
@@ -137,13 +139,12 @@ access. The provider-settings audit can remain deferred.
 ## Next safe step
 
 Local implementation, security review fixes, tests, type checking, and build
-are complete. To verify the real read flow, use a populated dedicated test
-mailbox after the user explicitly authorizes changing that message's read
-state. Browser review requires the project-approved browser setup; Obscura is
-not configured in this repository, and ego-browser needs explicit
-route/session/checklist approval. Do not deploy Phase 3 or use the admin API
-key unless separately authorized. Keep `requireClientRegistration` and
-`anonymousClientRegistration` unchanged.
+are complete. The production Inbox contains “Test” but still runs the Phase 2
+UI, so the user must explicitly authorize deployment to the existing
+`rekad/webmail-client` project before the approved message-detail check can run.
+The user has already authorized opening “Test” and its `$seen` change once the
+new code is live. Do not use the admin API key. Keep
+`requireClientRegistration` and `anonymousClientRegistration` unchanged.
 
 ## Skill installation note
 

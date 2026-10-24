@@ -149,10 +149,11 @@ displayed; attachment downloads are outside Phase 3.
 Local tests (63/63), type checking, and production build pass. Review findings
 were resolved: development read-state requests require an exact same origin,
 opening and closing a message moves and restores keyboard focus, and a pending
-read-state update reconciles or refreshes the retained list. The dedicated
-Stalwart account currently has an empty Inbox, so real body display and the
-live read mutation remain unverified. No production deployment or browser
-session check has been performed for Phase 3.
+read-state update reconciles or refreshes the retained list. The locally
+configured dedicated account has an empty Inbox. The signed-in production
+Inbox shows the test subject “Test”, but its deployed Phase 2 list has no
+message-opening control. Real body display and the live read mutation remain
+unverified, and Phase 3 has not been deployed.
 
 ## Phase 0 proof of concept
 

@@ -14,11 +14,13 @@
   a different localhost port before session lookup. Focus is moved to the
   message detail and restored to the triggering inbox row; a pending read-state
   update reconciles the list or triggers a refresh.
-- `pnpm jmap:smoke` succeeds against the dedicated Stalwart account and reports
-  five mailboxes but zero inbox messages. No body can be opened against the
-  real account yet. No message was mutated and no deployment or browser check
-  was performed. A dedicated test message is required for live body and read
-  state verification; changing `$seen` on it needs explicit approval.
+- The local read-only `pnpm jmap:smoke` check reports five mailboxes and zero
+  Inbox messages. The signed-in production Inbox shows nine messages, including
+  the target subject “Test”, but production still serves the Phase 2 list with
+  no message-opening control; `/inbox` returns 404. No message body was opened
+  and no read state was changed. Phase 3 has not been deployed. The user has
+  authorized opening “Test” and its read-state change once Phase 3 is live; a
+  separate approval is needed before deploying to production.
 - Independent review findings for development-origin trust, keyboard focus,
   and an in-flight read update were resolved and covered by the local route
   tests and code paths. Phase 3 remains in progress pending populated-message

@@ -16,10 +16,12 @@ scope: progress
 - The independent review's findings are fixed: localhost port trust is exact,
   focus moves into message detail and returns to the triggering row, and a
   pending read-state update reconciles the listing or refreshes it on failure.
-- The read-only dedicated-account smoke check reports five mailboxes and an
-  empty Inbox. Live body display, browser flow, and read-state update remain
-  unverified. No message was changed and no deployment occurred. A live test
-  needs a dedicated message and explicit approval to mark it read.
+- The local read-only dedicated-account smoke check reports five mailboxes and
+  an empty Inbox. The signed-in production Inbox shows nine messages, including
+  subject “Test”, but production still serves the Phase 2 list with no
+  message-opening control; `/inbox` returns 404. No body was opened and no
+  message state changed. The user authorized opening “Test” and marking it read
+  once Phase 3 is live; production deployment needs separate approval.
 - Phase 3 remains in progress pending populated-message verification. No
   Stalwart client or global settings changed.
 
