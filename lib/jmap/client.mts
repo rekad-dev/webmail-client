@@ -3429,10 +3429,13 @@ function parseSubjectQueryIds(responseJson: unknown, limit: number): string[] {
   if (
     !Array.isArray(payload.ids) ||
     payload.ids.length > limit ||
-    (payload.total !== undefined && payload.total !== null &&
-      (typeof payload.total !== "number" ||
-        !Number.isSafeInteger(payload.total) ||
-        payload.total < payload.ids.length))
+    typeof payload.total !== "number" ||
+    !Number.isSafeInteger(payload.total) ||
+    payload.total < payload.ids.length ||
+    (payload.ids.length > 0 && payload.position !== 0) ||
+    (payload.ids.length === 0 &&
+      payload.position !== undefined &&
+      payload.position !== 0)
   ) {
     throw new JmapPocError("The JMAP API returned invalid subject search results.");
   }
@@ -3451,8 +3454,7 @@ function parseSubjectQueryIds(responseJson: unknown, limit: number): string[] {
     ids.push(rawId);
   }
   if (
-    (typeof payload.total === "number" && payload.total > ids.length) ||
-    (payload.total === undefined || payload.total === null) && ids.length === limit
+    payload.total > ids.length
   ) {
     throw new JmapThreadSubjectSearchIncompleteError();
   }

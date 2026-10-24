@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   JmapAccountMismatchError,
   JmapPocError,
+  JmapThreadSubjectSearchIncompleteError,
   runJmapOAuthSubjectMatchMetadata,
 } from "../lib/jmap/client.mts";
 
@@ -23,6 +24,9 @@ function createFetch(options: {
   primaryAccountId?: string;
   queryIds?: string[];
   queryTotal?: number;
+  queryPosition?: number;
+  omitQueryPosition?: boolean;
+  omitQueryTotal?: boolean;
   candidateSubjects?: Record<string, string>;
   missingMetadataIds?: string[];
   malformedMetadataCoverage?: boolean;
@@ -65,10 +69,18 @@ function createFetch(options: {
     const jmapRequest = JSON.parse(String(init.body));
     const [method, args, callId] = jmapRequest.methodCalls[0];
     if (method === "Email/query") {
+      const queryResult: Record<string, unknown> = {
+        ids: queryIds,
+        total: options.queryTotal ?? queryIds.length,
+      };
+      if (!options.omitQueryPosition) {
+        queryResult.position = options.queryPosition ?? 0;
+      }
+      if (options.omitQueryTotal) delete queryResult.total;
       return responseJson({
         methodResponses: [[
           "Email/query",
-          { ids: queryIds, total: options.queryTotal ?? queryIds.length },
+          queryResult,
           callId,
         ]],
       });
@@ -280,4 +292,52 @@ test("rejects malformed metadata coverage and account mismatch", async () => {
     mismatch.calls.some((call) => call.url.pathname === "/jmap/"),
     false,
   );
+});
+
+test("requires a complete zero-position Email/query response", async () => {
+  for (const queryOptions of [
+    { omitQueryTotal: true },
+    { queryPosition: 1 },
+    { omitQueryPosition: true },
+  ]) {
+    const { fetchImpl } = createFetch({
+      ...queryOptions,
+      queryIds: ["email-1", "email-2"],
+      candidateSubjects: { "email-2": SUBJECT },
+    });
+    await assert.rejects(
+      runJmapOAuthSubjectMatchMetadata({ ...commonOptions, fetchImpl }),
+      JmapPocError,
+    );
+  }
+});
+
+test("marks a truncated query as incomplete instead of reporting a complete candidate set", async () => {
+  const { fetchImpl } = createFetch({
+    queryIds: ["email-1"],
+    queryTotal: 2,
+    candidateSubjects: { "email-1": SUBJECT },
+  });
+  await assert.rejects(
+    runJmapOAuthSubjectMatchMetadata({ ...commonOptions, fetchImpl }),
+    JmapThreadSubjectSearchIncompleteError,
+  );
+});
+
+test("accepts an empty complete query when position is omitted", async () => {
+  const { fetchImpl } = createFetch({
+    queryIds: [],
+    queryTotal: 0,
+    omitQueryPosition: true,
+  });
+  const result = await runJmapOAuthSubjectMatchMetadata({
+    ...commonOptions,
+    fetchImpl,
+  });
+  assert.deepEqual(result, {
+    queryCandidateCount: 0,
+    exactSubjectMatchCount: 0,
+    metadataComplete: true,
+    candidates: [],
+  });
 });

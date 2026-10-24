@@ -86,7 +86,11 @@ function createFetch(options: {
       return responseJson({
         methodResponses: [[
           "Email/query",
-          { ids: queryIds, total: options.queryTotal ?? queryIds.length },
+          {
+            ids: queryIds,
+            position: 0,
+            total: options.queryTotal ?? queryIds.length,
+          },
           callId,
         ]],
       });
