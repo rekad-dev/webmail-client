@@ -20,11 +20,13 @@ deployment `dpl_5xekSb6sLYAwedgKp22aczkXeeBx` is Ready at
 `https://webmail.rekad.id`. The `/api/mail/identities` GET returned
 `401 sign_in_required`. On 2026-10-24, after the user reported signing in, the
 same primary browser tab and its cookie-authenticated GET still returned
-`401 sign_in_required`. The browser is parked again for sign-in with the first
-dedicated test account in that exact session; after that, continue with only
-the approved read-only preflight. No mailbox was mutated and no email was
-sent. The exact approved recipient is still required before a live send. No
-Stalwart settings changed, and the admin API key was not used.
+`401 sign_in_required`. The user then asked to use ego-browser; the exact
+production endpoint succeeded there for the first dedicated account. It
+reported JMAP submission available, Drafts and Sent roles present, and one
+non-wildcard identity (`mail-client@rekad.id`). The payload has no explicit
+default flag; compose auto-selects the sole identity. No mailbox was mutated
+and no email was sent. The exact approved recipient is still required before
+a live send. No Stalwart settings changed, and the admin API key was not used.
 
 Phase 3 safe email reading is complete. Local code now includes an
 authenticated detail route, bounded JMAP body retrieval, server-side HTML
@@ -161,12 +163,12 @@ access. The provider-settings audit can remain deferred.
 ## Next safe step
 
 Phase 4 code is committed, the migration is applied, and the production build
-is deployed. The user approved one read-only GET to `/api/mail/identities` for
-the signed-in first dedicated test account. The available browser returned
-`401 sign_in_required` and is parked for that account to sign in; finish the
-preflight after sign-in. Do not send a live test email until the exact
-recipient is explicitly authorized. Keep `requireClientRegistration` and
-`anonymousClientRegistration` unchanged, and do not use the admin API key.
+is deployed. The approved read-only GET to `/api/mail/identities` passed in
+ego-browser for the first dedicated test account: JMAP submission, Drafts, and
+Sent are available, and one identity is returned. Wait for the exact approved
+test recipient before performing any live send. Keep
+`requireClientRegistration` and `anonymousClientRegistration` unchanged, and
+do not use the admin API key.
 
 ## Skill installation note
 

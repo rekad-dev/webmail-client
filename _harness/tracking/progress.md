@@ -25,11 +25,12 @@ scope: progress
   table migration, and Vercel production deployment
   `dpl_5xekSb6sLYAwedgKp22aczkXeeBx` reached Ready and aliased
   `https://webmail.rekad.id`.
-- The read-only OAuth preflight is still pending. The approved GET to
-  `/api/mail/identities` returned `401 sign_in_required`. After the user
-  reported signing in, the same primary browser tab's cookie-authenticated GET
-  still returned `401 sign_in_required`; the exact browser session is parked
-  again for sign-in. No mailbox was mutated and no live send was attempted.
+- The read-only OAuth preflight passed in ego-browser for the first dedicated
+  test account. `/api/mail/identities` reported JMAP submission available,
+  Drafts and Sent roles present, and one non-wildcard identity
+  (`mail-client@rekad.id`). The payload has no explicit default flag; compose
+  auto-selects the sole identity. No mailbox was mutated and no live send was
+  attempted.
 - No live email was sent. The exact approved test recipient is still required
   before the live submission check. No Stalwart setting or admin API credential
   was used.
