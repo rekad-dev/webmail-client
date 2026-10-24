@@ -19,6 +19,8 @@ const EMAIL_RECONCILE_GET_CALL_ID = "phase4-email-reconcile-get";
 const EMAIL_DESTROY_DRAFT_CALL_ID = "phase4-email-destroy-draft";
 const EMAIL_THREAD_GET_CALL_ID = "phase5-thread-get";
 const EMAIL_THREAD_EMAIL_GET_CALL_ID = "phase5-thread-email-get";
+const EMAIL_THREAD_LIST_GET_CALL_ID = "phase5-thread-list-get";
+const EMAIL_THREAD_STATE_GET_CALL_ID = "phase5-thread-state-get";
 const EMAIL_ACTION_GET_CALL_ID = "phase5-action-email-get";
 const EMAIL_ACTION_SET_CALL_ID = "phase5-action-email-set";
 const EMAIL_DRAFT_GET_CALL_ID = "phase5-draft-get";
@@ -871,41 +873,57 @@ function emailPageRequest(
   position: number,
   searchText?: string,
   searchScope: "all" | "mailbox" = "all",
+  includeSummaryGet = true,
 ) {
   const filter: Record<string, unknown> = {};
   if (searchText) filter.text = searchText;
   if (!searchText || searchScope === "mailbox") filter.inMailbox = mailboxId;
 
+  const methodCalls: unknown[][] = [
+    [
+      "Email/query",
+      {
+        accountId,
+        filter,
+        sort: [{ property: "receivedAt", isAscending: false }],
+        collapseThreads: true,
+        position,
+        limit: MAIL_PAGE_SIZE,
+        calculateTotal: true,
+      },
+      EMAIL_QUERY_CALL_ID,
+    ],
+  ];
+  if (includeSummaryGet) {
+    methodCalls.push([
+      "Email/get",
+      {
+        accountId,
+        "#ids": {
+          resultOf: EMAIL_QUERY_CALL_ID,
+          name: "Email/query",
+          path: "/ids",
+        },
+        properties: EMAIL_SUMMARY_PROPERTIES,
+      },
+      EMAIL_GET_CALL_ID,
+    ]);
+  }
+
   return {
     using: [CORE_CAPABILITY, MAIL_CAPABILITY],
-    methodCalls: [
-      [
-        "Email/query",
-        {
-          accountId,
-          filter,
-          sort: [{ property: "receivedAt", isAscending: false }],
-          collapseThreads: true,
-          position,
-          limit: MAIL_PAGE_SIZE,
-          calculateTotal: true,
-        },
-        EMAIL_QUERY_CALL_ID,
-      ],
-      [
-        "Email/get",
-        {
-          accountId,
-          "#ids": {
-            resultOf: EMAIL_QUERY_CALL_ID,
-            name: "Email/query",
-            path: "/ids",
-          },
-          properties: EMAIL_SUMMARY_PROPERTIES,
-        },
-        EMAIL_GET_CALL_ID,
-      ],
-    ],
+    methodCalls,
+  };
+}
+
+function emailSummaryGetRequest(accountId: string, emailIds: string[]) {
+  return {
+    using: [CORE_CAPABILITY, MAIL_CAPABILITY],
+    methodCalls: [[
+      "Email/get",
+      { accountId, ids: emailIds, properties: EMAIL_SUMMARY_PROPERTIES },
+      EMAIL_GET_CALL_ID,
+    ]],
   };
 }
 
@@ -987,8 +1005,22 @@ function parseEmailSummaries(
   if (!Array.isArray(payload.list)) {
     throw new JmapPocError("The JMAP API returned an invalid Email/get response.");
   }
+  if (!Array.isArray(payload.notFound)) {
+    throw new JmapPocError("The JMAP API returned an invalid Email/get response.");
+  }
 
   const allowedIds = new Set(queryIds);
+  const notFoundIds = new Set<string>();
+  for (const rawId of payload.notFound) {
+    if (
+      typeof rawId !== "string" ||
+      !allowedIds.has(rawId) ||
+      notFoundIds.has(rawId)
+    ) {
+      throw new JmapPocError("The JMAP API returned an invalid Email/get response.");
+    }
+    notFoundIds.add(rawId);
+  }
   const summaries = new Map<string, JmapEmailSummary>();
   for (const rawEmail of payload.list) {
     if (!rawEmail || typeof rawEmail !== "object" || Array.isArray(rawEmail)) {
@@ -998,7 +1030,8 @@ function parseEmailSummaries(
     if (
       typeof email.id !== "string" ||
       !allowedIds.has(email.id) ||
-      summaries.has(email.id)
+      summaries.has(email.id) ||
+      notFoundIds.has(email.id)
     ) {
       throw new JmapPocError("The JMAP API returned an invalid email summary.");
     }
@@ -1027,32 +1060,264 @@ function parseEmailSummaries(
     });
   }
 
+  if (queryIds.some((id) => !summaries.has(id) && !notFoundIds.has(id))) {
+    throw new JmapPocError("The JMAP API omitted an email summary.");
+  }
+
   return queryIds.flatMap((id) => {
     const summary = summaries.get(id);
     return summary ? [summary] : [];
   });
 }
 
+function parseThreadMemberIds(
+  responseJson: unknown,
+  expectedThreadIds: string[],
+): {
+  emailIds: string[];
+  threadByEmailId: Map<string, string>;
+  missingThreadIds: Set<string>;
+} {
+  const { payload } = getMethodResponse(
+    responseJson,
+    EMAIL_THREAD_LIST_GET_CALL_ID,
+    "Thread/get",
+  );
+  if (!Array.isArray(payload.list)) {
+    throw new JmapPocError("The JMAP API returned an invalid thread list response.");
+  }
+  if (!Array.isArray(payload.notFound)) {
+    throw new JmapPocError("The JMAP API returned an invalid thread list response.");
+  }
+
+  const expected = new Set(expectedThreadIds);
+  const seenThreads = new Set<string>();
+  const missingThreadIds = new Set<string>();
+  for (const rawId of payload.notFound) {
+    if (
+      typeof rawId !== "string" ||
+      !expected.has(rawId) ||
+      missingThreadIds.has(rawId)
+    ) {
+      throw new JmapPocError("The JMAP API returned an invalid thread list.");
+    }
+    missingThreadIds.add(rawId);
+  }
+  const threadByEmailId = new Map<string, string>();
+  for (const rawThread of payload.list) {
+    const thread = objectValue(rawThread);
+    if (
+      !thread ||
+      typeof thread.id !== "string" ||
+      !expected.has(thread.id) ||
+      seenThreads.has(thread.id) ||
+      missingThreadIds.has(thread.id) ||
+      !Array.isArray(thread.emailIds) ||
+      thread.emailIds.length === 0 ||
+      thread.emailIds.length > MAX_THREAD_STATE_EMAILS_PER_THREAD
+    ) {
+      throw new JmapPocError("The JMAP API returned an invalid thread list.");
+    }
+    seenThreads.add(thread.id);
+
+    const memberIds = new Set<string>();
+    for (const emailId of thread.emailIds) {
+      if (
+        typeof emailId !== "string" ||
+        emailId.length === 0 ||
+        emailId.length > 256 ||
+        memberIds.has(emailId) ||
+        threadByEmailId.has(emailId)
+      ) {
+        throw new JmapPocError("The JMAP API returned invalid thread members.");
+      }
+      memberIds.add(emailId);
+      threadByEmailId.set(emailId, thread.id);
+    }
+  }
+
+  if ([...expected].some((threadId) =>
+    !seenThreads.has(threadId) && !missingThreadIds.has(threadId),
+  )) {
+    throw new JmapPocError("The JMAP API omitted a thread result.");
+  }
+  return {
+    emailIds: [...threadByEmailId.keys()],
+    threadByEmailId,
+    missingThreadIds,
+  };
+}
+
+function maxObjectsInGet(context: JmapApiContext): number {
+  const core = objectValue(context.capabilities[CORE_CAPABILITY]);
+  const advertised = core?.maxObjectsInGet;
+  if (typeof advertised !== "number" || !Number.isSafeInteger(advertised) || advertised < 1) {
+    return THREAD_STATE_EMAIL_GET_BATCH_SIZE;
+  }
+  return Math.min(advertised, THREAD_STATE_EMAIL_GET_BATCH_SIZE);
+}
+
+async function aggregateThreadSummaryState(
+  context: JmapApiContext,
+  messages: JmapEmailSummary[],
+): Promise<JmapEmailSummary[]> {
+  if (messages.length === 0) return messages;
+
+  const threadIds = [...new Set(messages.map((message) => message.threadId))];
+  const threadByEmailId = new Map<string, string>();
+  const emailIds: string[] = [];
+  const staleThreadIds = new Set<string>();
+  const threadBatchSize = maxObjectsInGet(context);
+  for (let start = 0; start < threadIds.length; start += threadBatchSize) {
+    const requestedThreadIds = threadIds.slice(start, start + threadBatchSize);
+    const threadResponse = await postJmapApi({
+      apiUrl: context.apiUrl,
+      authorization: context.authorization,
+      requestBody: {
+        using: [CORE_CAPABILITY, MAIL_CAPABILITY],
+        methodCalls: [[
+          "Thread/get",
+          {
+            accountId: context.accountId,
+            ids: requestedThreadIds,
+            properties: ["id", "emailIds"],
+          },
+          EMAIL_THREAD_LIST_GET_CALL_ID,
+        ]],
+      },
+      methodName: "Thread/get",
+      fetchImpl: context.fetchImpl,
+      maxResponseBytes: 2 * 1024 * 1024,
+    });
+    const result = parseThreadMemberIds(threadResponse, requestedThreadIds);
+    for (const threadId of result.missingThreadIds) {
+      staleThreadIds.add(threadId);
+    }
+    for (const [emailId, threadId] of result.threadByEmailId) {
+      if (threadByEmailId.has(emailId)) {
+        throw new JmapPocError("The JMAP API returned duplicate thread members.");
+      }
+      threadByEmailId.set(emailId, threadId);
+      emailIds.push(emailId);
+    }
+  }
+  const threads = { emailIds, threadByEmailId };
+  const aggregateByThread = new Map<string, { isUnread: boolean; isStarred: boolean }>();
+  const staleEmailIds = new Set<string>();
+  const batchSize = maxObjectsInGet(context);
+
+  for (let start = 0; start < threads.emailIds.length; start += batchSize) {
+    const emailIds = threads.emailIds.slice(start, start + batchSize);
+    const stateResponse = await postJmapApi({
+      apiUrl: context.apiUrl,
+      authorization: context.authorization,
+      requestBody: {
+        using: [CORE_CAPABILITY, MAIL_CAPABILITY],
+        methodCalls: [[
+          "Email/get",
+          {
+            accountId: context.accountId,
+            ids: emailIds,
+            properties: ["id", "threadId", "keywords"],
+          },
+          EMAIL_THREAD_STATE_GET_CALL_ID,
+        ]],
+      },
+      methodName: "Email/get thread state",
+      fetchImpl: context.fetchImpl,
+      maxResponseBytes: 512 * 1024,
+    });
+    const { payload } = getMethodResponse(
+      stateResponse,
+      EMAIL_THREAD_STATE_GET_CALL_ID,
+      "Email/get",
+    );
+    if (!Array.isArray(payload.list)) {
+      throw new JmapPocError("The JMAP API returned invalid thread state.");
+    }
+    if (!Array.isArray(payload.notFound)) {
+      throw new JmapPocError("The JMAP API returned invalid thread state.");
+    }
+
+    const requested = new Set(emailIds);
+    const received = new Set<string>();
+    const notFound = new Set<string>();
+    for (const rawId of payload.notFound) {
+      if (
+        typeof rawId !== "string" ||
+        !requested.has(rawId) ||
+        notFound.has(rawId)
+      ) {
+        throw new JmapPocError("The JMAP API returned invalid thread state.");
+      }
+      notFound.add(rawId);
+      staleEmailIds.add(rawId);
+    }
+    for (const rawEmail of payload.list) {
+      const email = objectValue(rawEmail);
+      if (
+        !email ||
+        typeof email.id !== "string" ||
+        !requested.has(email.id) ||
+        received.has(email.id) ||
+        notFound.has(email.id)
+      ) {
+        throw new JmapPocError("The JMAP API returned invalid thread state.");
+      }
+      received.add(email.id);
+      if (email.threadId !== threads.threadByEmailId.get(email.id)) {
+        staleEmailIds.add(email.id);
+        continue;
+      }
+
+      const keywords = objectValue(email.keywords) ?? {};
+      const current = aggregateByThread.get(email.threadId as string) ?? {
+        isUnread: false,
+        isStarred: false,
+      };
+      current.isUnread ||= keywords["$seen"] !== true;
+      current.isStarred ||= keywords["$flagged"] === true;
+      aggregateByThread.set(email.threadId as string, current);
+    }
+    if (emailIds.some((emailId) => !received.has(emailId) && !notFound.has(emailId))) {
+      throw new JmapPocError("The JMAP API omitted thread member state.");
+    }
+  }
+
+  for (const message of messages) {
+    if (
+      staleThreadIds.has(message.threadId) ||
+      threadByEmailId.get(message.id) !== message.threadId
+    ) {
+      staleEmailIds.add(message.id);
+    }
+  }
+
+  return messages.flatMap((message) => {
+    if (staleEmailIds.has(message.id)) return [];
+    const aggregate = aggregateByThread.get(message.threadId);
+    return aggregate ? [{ ...message, ...aggregate }] : [];
+  });
+}
+
 async function fetchEmailPage({
-  apiUrl,
-  accountId,
+  context,
   mailboxId,
   position,
   searchText,
   searchScope = "all",
-  authorization,
-  fetchImpl,
+  includeThreadState = false,
 }: {
-  apiUrl: URL;
-  accountId: string;
+  context: JmapApiContext;
   mailboxId: string;
   position: number;
   searchText?: string;
   searchScope?: "all" | "mailbox";
-  authorization: string;
-  fetchImpl: typeof fetch;
+  includeThreadState?: boolean;
 }): Promise<{ ids: string[]; total: number | null; messages: JmapEmailSummary[] }> {
+  const { apiUrl, accountId, authorization, fetchImpl } = context;
   validateMailboxListingPosition(position);
+  const getBatchSize = maxObjectsInGet(context);
 
   const responseJson = await postJmapApi({
     apiUrl,
@@ -1063,13 +1328,36 @@ async function fetchEmailPage({
       position,
       searchText,
       searchScope,
+      getBatchSize >= MAIL_PAGE_SIZE,
     ),
-    methodName: "Email/query and Email/get",
+    methodName: getBatchSize >= MAIL_PAGE_SIZE
+      ? "Email/query and Email/get"
+      : "Email/query",
     fetchImpl,
   });
   const query = parseEmailQuery(responseJson);
-  const messages = parseEmailSummaries(responseJson, query.ids);
-  return { ...query, messages };
+  const messages: JmapEmailSummary[] = [];
+  if (getBatchSize >= MAIL_PAGE_SIZE) {
+    messages.push(...parseEmailSummaries(responseJson, query.ids));
+  } else {
+    for (let start = 0; start < query.ids.length; start += getBatchSize) {
+      const emailIds = query.ids.slice(start, start + getBatchSize);
+      const summaryResponse = await postJmapApi({
+        apiUrl,
+        authorization,
+        requestBody: emailSummaryGetRequest(accountId, emailIds),
+        methodName: "Email/get mailbox summaries",
+        fetchImpl,
+      });
+      messages.push(...parseEmailSummaries(summaryResponse, emailIds));
+    }
+  }
+  return {
+    ...query,
+    messages: includeThreadState
+      ? await aggregateThreadSummaryState(context, messages)
+      : messages,
+  };
 }
 
 interface JmapBodyPart {
@@ -2791,11 +3079,12 @@ export async function runJmapOAuthMailboxListing({
   }
 
   const page = await fetchEmailPage({
-    ...context,
+    context,
     mailboxId: selectedMailbox.id,
     position,
     searchText,
     searchScope,
+    includeThreadState: true,
   });
   return {
     mailboxes,
@@ -2957,17 +3246,25 @@ export async function runJmapOAuthThreadView({
   }
   const allIds = await fetchThreadEmailIds(context, threadId);
   const visibleIds = allIds.slice(-MAX_THREAD_EMAILS);
-  const responseJson = await postJmapApi({
-    apiUrl: context.apiUrl,
-    authorization: context.authorization,
-    requestBody: threadEmailGetRequest(context.accountId, visibleIds),
-    methodName: "Thread/get and Email/get",
-    fetchImpl,
-    maxResponseBytes: 512 * 1024,
-  });
+  const messages: JmapThreadMessageSummary[] = [];
+  const batchSize = maxObjectsInGet(context);
+  for (let start = 0; start < visibleIds.length; start += batchSize) {
+    const emailIds = visibleIds.slice(start, start + batchSize);
+    const responseJson = await postJmapApi({
+      apiUrl: context.apiUrl,
+      authorization: context.authorization,
+      requestBody: threadEmailGetRequest(context.accountId, emailIds),
+      methodName: "Thread/get and Email/get",
+      fetchImpl,
+      maxResponseBytes: 512 * 1024,
+    });
+    messages.push(...parseThreadMessages(responseJson, emailIds, threadId));
+  }
   return {
     threadId,
-    messages: parseThreadMessages(responseJson, visibleIds, threadId),
+    messages: messages.sort((left, right) =>
+      (left.receivedAt ?? "").localeCompare(right.receivedAt ?? ""),
+    ),
     truncated: allIds.length > visibleIds.length,
   };
 }
@@ -2980,53 +3277,57 @@ async function getEmailActionState(
   context: JmapApiContext,
   emailIds: string[],
 ): Promise<Map<string, { mailboxIds: string[] }>> {
-  const responseJson = await postJmapApi({
-    apiUrl: context.apiUrl,
-    authorization: context.authorization,
-    requestBody: {
-      using: [CORE_CAPABILITY, MAIL_CAPABILITY],
-      methodCalls: [[
-        "Email/get",
-        {
-          accountId: context.accountId,
-          ids: emailIds,
-          properties: ["id", "mailboxIds"],
-        },
-        EMAIL_ACTION_GET_CALL_ID,
-      ]],
-    },
-    methodName: "Email/get",
-    fetchImpl: context.fetchImpl,
-    maxResponseBytes: 256 * 1024,
-  });
-  const { payload } = getMethodResponse(
-    responseJson,
-    EMAIL_ACTION_GET_CALL_ID,
-    "Email/get",
-  );
-  if (!Array.isArray(payload.list)) {
-    throw new JmapPocError("The JMAP API returned an invalid email action response.");
-  }
-  const requested = new Set(emailIds);
   const state = new Map<string, { mailboxIds: string[] }>();
-  for (const rawEmail of payload.list) {
-    const email = objectValue(rawEmail);
-    if (
-      !email ||
-      typeof email.id !== "string" ||
-      !requested.has(email.id) ||
-      state.has(email.id)
-    ) {
-      throw new JmapPocError("The JMAP API returned invalid email action state.");
-    }
-    const rawMailboxIds = objectValue(email.mailboxIds) ?? {};
-    state.set(email.id, {
-      mailboxIds: Object.entries(rawMailboxIds)
-        .filter(([id, present]) => id.length > 0 && id.length <= 256 && present === true)
-        .map(([id]) => id),
+  const batchSize = maxObjectsInGet(context);
+  for (let start = 0; start < emailIds.length; start += batchSize) {
+    const requestedIds = emailIds.slice(start, start + batchSize);
+    const responseJson = await postJmapApi({
+      apiUrl: context.apiUrl,
+      authorization: context.authorization,
+      requestBody: {
+        using: [CORE_CAPABILITY, MAIL_CAPABILITY],
+        methodCalls: [[
+          "Email/get",
+          {
+            accountId: context.accountId,
+            ids: requestedIds,
+            properties: ["id", "mailboxIds"],
+          },
+          EMAIL_ACTION_GET_CALL_ID,
+        ]],
+      },
+      methodName: "Email/get action state",
+      fetchImpl: context.fetchImpl,
+      maxResponseBytes: 256 * 1024,
     });
+    const { payload } = getMethodResponse(
+      responseJson,
+      EMAIL_ACTION_GET_CALL_ID,
+      "Email/get",
+    );
+    if (!Array.isArray(payload.list)) {
+      throw new JmapPocError("The JMAP API returned an invalid email action response.");
+    }
+    const requested = new Set(requestedIds);
+    for (const rawEmail of payload.list) {
+      const email = objectValue(rawEmail);
+      if (
+        !email ||
+        typeof email.id !== "string" ||
+        !requested.has(email.id) ||
+        state.has(email.id)
+      ) {
+        throw new JmapPocError("The JMAP API returned invalid email action state.");
+      }
+      const rawMailboxIds = objectValue(email.mailboxIds) ?? {};
+      state.set(email.id, {
+        mailboxIds: Object.entries(rawMailboxIds)
+          .filter(([id, present]) => id.length > 0 && id.length <= 256 && present === true)
+          .map(([id]) => id),
+      });
+    }
+    if (requestedIds.some((id) => !state.has(id))) throw new JmapEmailNotFoundError();
   }
-  if (state.size !== emailIds.length) throw new JmapEmailNotFoundError();
   return state;
 }
 
@@ -3310,7 +3611,7 @@ export async function runJmapInboxSmoke({
   }
 
   const page = await fetchEmailPage({
-    ...context,
+    context,
     mailboxId: inbox.id,
     position: 0,
   });
