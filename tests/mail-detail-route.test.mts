@@ -17,7 +17,9 @@ const accessToken = randomBytes(32).toString("base64url");
 const sessionId = randomBytes(32).toString("base64url");
 const detail: JmapEmailDetail = {
   id: "email-1",
+  threadId: "thread-1",
   from: [{ name: "Sender", email: "sender@example.test" }],
+  replyTo: [],
   to: [],
   cc: [],
   bcc: [],
@@ -25,6 +27,11 @@ const detail: JmapEmailDetail = {
   sentAt: null,
   receivedAt: "2026-05-03T08:16:00.000Z",
   isUnread: true,
+  isStarred: false,
+  isDraft: false,
+  messageId: [],
+  inReplyTo: [],
+  references: [],
   textBody: "Safe plain text",
   htmlBody: "<p>Safe formatted content</p>",
   externalLinks: [],

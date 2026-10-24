@@ -6,6 +6,8 @@ import {
 export interface MailListingRequest {
   mailboxId?: string;
   position: number;
+  searchText?: string;
+  searchScope: "all" | "mailbox";
 }
 
 export class InvalidMailListingRequest extends Error {
@@ -48,5 +50,27 @@ export function parseMailListingRequest(
     throw new InvalidMailListingRequest();
   }
 
-  return { ...(mailboxId ? { mailboxId } : {}), position };
+  const searchValues = searchParams.getAll("q");
+  if (searchValues.length > 1) throw new InvalidMailListingRequest();
+  const searchText = searchValues[0]?.trim();
+  if (
+    searchText !== undefined &&
+    (searchText.length > 256 || /[\u0000-\u001f\u007f]/.test(searchText))
+  ) {
+    throw new InvalidMailListingRequest();
+  }
+
+  const scopeValues = searchParams.getAll("searchScope");
+  if (scopeValues.length > 1) throw new InvalidMailListingRequest();
+  const searchScope = scopeValues[0] ?? "all";
+  if (searchScope !== "all" && searchScope !== "mailbox") {
+    throw new InvalidMailListingRequest();
+  }
+
+  return {
+    ...(mailboxId ? { mailboxId } : {}),
+    position,
+    ...(searchText ? { searchText } : {}),
+    searchScope,
+  };
 }

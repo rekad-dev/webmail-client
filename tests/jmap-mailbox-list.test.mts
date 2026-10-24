@@ -162,19 +162,25 @@ test("lists the authenticated mailbox and only ordered message summaries", async
   assert.deepEqual(result.messages, [
     {
       id: "email-1",
+      threadId: "email-1",
       from: [{ name: "Sender One", email: "one@example.test" }],
       subject: "First subject",
       receivedAt: "2026-02-01T12:00:00.000Z",
       preview: "First preview",
       isUnread: false,
+      isStarred: false,
+      isDraft: false,
     },
     {
       id: "email-2",
+      threadId: "email-2",
       from: [{ name: "Sender Two", email: "two@example.test" }],
       subject: null,
       receivedAt: "2026-02-02T12:00:00.000Z",
       preview: "<em>still plain text</em>",
       isUnread: true,
+      isStarred: false,
+      isDraft: false,
     },
   ]);
 
@@ -199,12 +205,14 @@ test("lists the authenticated mailbox and only ordered message summaries", async
     accountId: "account-1",
     filter: { inMailbox: "inbox-id" },
     sort: [{ property: "receivedAt", isAscending: false }],
+    collapseThreads: true,
     position: 0,
     limit: 25,
     calculateTotal: true,
   });
   assert.deepEqual(emailRequest.methodCalls[1][1].properties, [
     "id",
+    "threadId",
     "from",
     "subject",
     "receivedAt",

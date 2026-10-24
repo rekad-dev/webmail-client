@@ -113,6 +113,7 @@ test("passes the stored OAuth identity and bounded request to JMAP", async () =>
     expectedAccountId: "account-1",
     mailboxId: "inbox-id",
     position: 25,
+    searchScope: "all",
     sessionUrl: "https://mail.example.test/.well-known/jmap",
     trustedOrigins: ["https://mail.example.test"],
     allowInsecureHttp: false,

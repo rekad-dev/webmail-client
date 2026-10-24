@@ -6,6 +6,7 @@ export const MAX_MAIL_SEND_RECIPIENTS = 50;
 
 export interface MailSendRequest extends JmapMailSendInput {
   attemptKey: string;
+  draftId?: string;
 }
 
 export class InvalidMailSendRequest extends Error {
@@ -117,6 +118,7 @@ export async function parseMailSendRequest(
   if (!body) throw new InvalidMailSendRequest();
   const allowedKeys = new Set([
     "attemptKey",
+    "draftId",
     "identityId",
     "fromEmail",
     "to",
@@ -124,6 +126,8 @@ export async function parseMailSendRequest(
     "bcc",
     "subject",
     "body",
+    "inReplyTo",
+    "references",
   ]);
   if (Object.keys(body).some((key) => !allowedKeys.has(key))) {
     throw new InvalidMailSendRequest();
@@ -149,6 +153,37 @@ export async function parseMailSendRequest(
   }
 
   if (
+    body.draftId !== undefined &&
+    (typeof body.draftId !== "string" ||
+      body.draftId.length === 0 ||
+      body.draftId.length > 256 ||
+      /[\u0000-\u001f\u007f]/.test(body.draftId))
+  ) {
+    throw new InvalidMailSendRequest();
+  }
+
+  function messageIds(value: unknown): string[] | undefined {
+    if (value === undefined) return undefined;
+    if (!Array.isArray(value) || value.length > 50) {
+      throw new InvalidMailSendRequest();
+    }
+    return value.map((id) => {
+      if (
+        typeof id !== "string" ||
+        id.length === 0 ||
+        id.length > 998 ||
+        /[\u0000-\u001f\u007f]/.test(id)
+      ) {
+        throw new InvalidMailSendRequest();
+      }
+      return id;
+    });
+  }
+
+  const inReplyTo = messageIds(body.inReplyTo);
+  const references = messageIds(body.references);
+
+  if (
     body.fromEmail !== undefined &&
     (typeof body.fromEmail !== "string" ||
       !isValidEmailAddress(body.fromEmail))
@@ -171,6 +206,7 @@ export async function parseMailSendRequest(
 
   return {
     attemptKey: body.attemptKey,
+    ...(typeof body.draftId === "string" ? { draftId: body.draftId } : {}),
     identityId: body.identityId,
     ...(typeof body.fromEmail === "string" ? { fromEmail: body.fromEmail } : {}),
     to,
@@ -178,5 +214,7 @@ export async function parseMailSendRequest(
     bcc,
     subject: body.subject,
     body: body.body,
+    ...(inReplyTo ? { inReplyTo } : {}),
+    ...(references ? { references } : {}),
   };
 }

@@ -1,5 +1,6 @@
 import {
   JmapAccountMismatchError,
+  JmapDraftMismatchError,
   JmapSendRejectedError,
   type JmapMailSendInput,
   type JmapSendRejectionReason,
@@ -365,6 +366,7 @@ async function runNewAttempt({
       accessToken: session.accessToken,
       expectedAccountId: session.accountId,
       input: sendInput(input),
+      ...(input.draftId ? { existingDraftId: input.draftId } : {}),
       ...jmapSettings,
     });
     const draft = await writeState(
@@ -396,15 +398,17 @@ async function runNewAttempt({
     } catch (error) {
       if (error instanceof JmapSendRejectedError) {
         await markAttemptSafely(dependencies, key, "submitting", "rejected");
-        try {
-          await dependencies.destroyDraft({
-            accessToken: session.accessToken,
-            expectedAccountId: session.accountId,
-            emailId: result.emailId,
-            ...jmapSettings,
-          });
-        } catch {
-          // A temporary draft may remain, but it is never resubmitted here.
+        if (!input.draftId) {
+          try {
+            await dependencies.destroyDraft({
+              accessToken: session.accessToken,
+              expectedAccountId: session.accountId,
+              emailId: result.emailId,
+              ...jmapSettings,
+            });
+          } catch {
+            // A temporary draft may remain, but it is never resubmitted here.
+          }
         }
         return rejectedResponse(error.reason);
       }
@@ -436,6 +440,10 @@ async function runNewAttempt({
     });
     return resultResponse(state);
   } catch (error) {
+    if (error instanceof JmapDraftMismatchError) {
+      await markAttemptSafely(dependencies, key, "reserved", "rejected");
+      return rejectedResponse("draft_changed");
+    }
     if (error instanceof JmapSendRejectedError) {
       await markAttemptSafely(dependencies, key, "reserved", "rejected");
       return rejectedResponse(error.reason);
@@ -450,7 +458,7 @@ async function runNewAttempt({
 }
 
 function sendInput(input: MailSendRequest): JmapMailSendInput {
-  const { attemptKey: _attemptKey, ...sendInputValue } = input;
+  const { attemptKey: _attemptKey, draftId: _draftId, ...sendInputValue } = input;
   return sendInputValue;
 }
 

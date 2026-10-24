@@ -16,12 +16,20 @@ const EMAIL_UPDATE_SENT_CALL_ID = "phase4-email-update-sent";
 const EMAIL_SUBMISSION_QUERY_CALL_ID = "phase4-email-submission-query";
 const EMAIL_RECONCILE_GET_CALL_ID = "phase4-email-reconcile-get";
 const EMAIL_DESTROY_DRAFT_CALL_ID = "phase4-email-destroy-draft";
+const EMAIL_THREAD_GET_CALL_ID = "phase5-thread-get";
+const EMAIL_THREAD_EMAIL_GET_CALL_ID = "phase5-thread-email-get";
+const EMAIL_ACTION_GET_CALL_ID = "phase5-action-email-get";
+const EMAIL_ACTION_SET_CALL_ID = "phase5-action-email-set";
+const EMAIL_DRAFT_GET_CALL_ID = "phase5-draft-get";
+const EMAIL_DRAFT_CREATE_CALL_ID = "phase5-draft-create";
+const EMAIL_DRAFT_DESTROY_CALL_ID = "phase5-draft-destroy";
 const MAX_SESSION_REDIRECTS = 5;
 const REQUEST_TIMEOUT_MS = 15_000;
 const JMAP_RESPONSE_MAX_BYTES = 2 * 1024 * 1024;
 const EMAIL_DETAIL_RESPONSE_MAX_BYTES = 1024 * 1024;
 const EMAIL_BODY_VALUE_MAX_BYTES = 256 * 1024;
 const EMAIL_BODY_VALUE_MAX_CHARS = 256 * 1024;
+const MAX_THREAD_EMAILS = 100;
 export const MAIL_PAGE_SIZE = 25;
 export const MAX_MAIL_POSITION = 1_000_000;
 
@@ -34,6 +42,7 @@ const MAILBOX_PROPERTIES = [
 ] as const;
 const EMAIL_SUMMARY_PROPERTIES = [
   "id",
+  "threadId",
   "from",
   "subject",
   "receivedAt",
@@ -94,11 +103,14 @@ export interface JmapMailboxSummary {
 
 export interface JmapEmailSummary {
   id: string;
+  threadId: string;
   from: Array<{ name: string | null; email: string }>;
   subject: string | null;
   receivedAt: string | null;
   preview: string;
   isUnread: boolean;
+  isStarred: boolean;
+  isDraft: boolean;
 }
 
 export interface JmapMailboxListing {
@@ -141,6 +153,57 @@ export interface JmapMailSendInput {
   bcc: JmapEmailAddress[];
   subject: string;
   body: string;
+  inReplyTo?: string[];
+  references?: string[];
+}
+
+export interface JmapMailDraftInput extends JmapMailSendInput {}
+
+export type JmapMailAction =
+  | "mark_read"
+  | "mark_unread"
+  | "star"
+  | "unstar"
+  | "move"
+  | "archive"
+  | "trash";
+
+export interface JmapMailActionInput {
+  action: JmapMailAction;
+  emailId?: string;
+  threadId?: string;
+  sourceMailboxId?: string;
+  destinationMailboxId?: string;
+}
+
+export interface JmapThreadMessageSummary {
+  id: string;
+  threadId: string;
+  from: JmapEmailAddress[];
+  subject: string | null;
+  receivedAt: string | null;
+  preview: string;
+  isUnread: boolean;
+  isStarred: boolean;
+  isDraft: boolean;
+}
+
+export interface JmapThreadView {
+  threadId: string;
+  messages: JmapThreadMessageSummary[];
+  truncated: boolean;
+}
+
+export interface JmapMailDraft {
+  id: string;
+  from: JmapEmailAddress[];
+  to: JmapEmailAddress[];
+  cc: JmapEmailAddress[];
+  bcc: JmapEmailAddress[];
+  subject: string;
+  body: string;
+  inReplyTo: string[];
+  references: string[];
 }
 
 export interface JmapEmailAttachmentSummary {
@@ -151,7 +214,9 @@ export interface JmapEmailAttachmentSummary {
 
 export interface JmapEmailDetail {
   id: string;
+  threadId: string;
   from: JmapEmailAddress[];
+  replyTo: JmapEmailAddress[];
   to: JmapEmailAddress[];
   cc: JmapEmailAddress[];
   bcc: JmapEmailAddress[];
@@ -159,6 +224,11 @@ export interface JmapEmailDetail {
   sentAt: string | null;
   receivedAt: string | null;
   isUnread: boolean;
+  isStarred: boolean;
+  isDraft: boolean;
+  messageId: string[];
+  inReplyTo: string[];
+  references: string[];
   textBody: string | null;
   htmlBody: string | null;
   externalLinks: string[];
@@ -203,6 +273,23 @@ export class JmapEmailNotFoundError extends JmapPocError {
   }
 }
 
+export class JmapMailActionUnavailableError extends JmapPocError {
+  readonly reason: "archive_unavailable" | "trash_unavailable" | "thread_too_large";
+
+  constructor(reason: JmapMailActionUnavailableError["reason"]) {
+    super("The requested mailbox action is unavailable.");
+    this.name = "JmapMailActionUnavailableError";
+    this.reason = reason;
+  }
+}
+
+export class JmapDraftMismatchError extends JmapPocError {
+  constructor() {
+    super("The saved draft no longer matches the message being submitted.");
+    this.name = "JmapDraftMismatchError";
+  }
+}
+
 export type JmapSendRejectionReason =
   | "submission_unavailable"
   | "identity_invalid"
@@ -212,7 +299,8 @@ export type JmapSendRejectionReason =
   | "message_too_large"
   | "sender_forbidden"
   | "send_forbidden"
-  | "server_rejected";
+  | "server_rejected"
+  | "draft_changed";
 
 export class JmapSendRejectedError extends JmapPocError {
   readonly reason: JmapSendRejectionReason;
@@ -767,7 +855,13 @@ function emailPageRequest(
   accountId: string,
   mailboxId: string,
   position: number,
+  searchText?: string,
+  searchScope: "all" | "mailbox" = "all",
 ) {
+  const filter: Record<string, unknown> = {};
+  if (searchText) filter.text = searchText;
+  if (!searchText || searchScope === "mailbox") filter.inMailbox = mailboxId;
+
   return {
     using: [CORE_CAPABILITY, MAIL_CAPABILITY],
     methodCalls: [
@@ -775,8 +869,9 @@ function emailPageRequest(
         "Email/query",
         {
           accountId,
-          filter: { inMailbox: mailboxId },
+          filter,
           sort: [{ property: "receivedAt", isAscending: false }],
+          collapseThreads: true,
           position,
           limit: MAIL_PAGE_SIZE,
           calculateTotal: true,
@@ -854,6 +949,18 @@ function parseReceivedAt(value: unknown): string | null {
   return new Date(value).toISOString();
 }
 
+function parseMessageIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 50).flatMap((item) =>
+    typeof item === "string" &&
+    item.length > 0 &&
+    item.length <= 998 &&
+    !/[\u0000-\u001f\u007f]/.test(item)
+      ? [item]
+      : [],
+  );
+}
+
 function parseEmailSummaries(
   responseJson: unknown,
   queryIds: string[],
@@ -890,11 +997,19 @@ function parseEmailSummaries(
         : {};
     summaries.set(email.id, {
       id: email.id,
+      threadId:
+        typeof email.threadId === "string" &&
+        email.threadId.length > 0 &&
+        email.threadId.length <= 256
+          ? email.threadId
+          : email.id,
       from: parseEmailAddresses(email.from),
       subject: boundedString(email.subject, 512),
       receivedAt: parseReceivedAt(email.receivedAt),
       preview: boundedString(email.preview, 256) ?? "",
       isUnread: keywords["$seen"] !== true,
+      isStarred: keywords["$flagged"] === true,
+      isDraft: keywords["$draft"] === true,
     });
   }
 
@@ -909,6 +1024,8 @@ async function fetchEmailPage({
   accountId,
   mailboxId,
   position,
+  searchText,
+  searchScope = "all",
   authorization,
   fetchImpl,
 }: {
@@ -916,6 +1033,8 @@ async function fetchEmailPage({
   accountId: string;
   mailboxId: string;
   position: number;
+  searchText?: string;
+  searchScope?: "all" | "mailbox";
   authorization: string;
   fetchImpl: typeof fetch;
 }): Promise<{ ids: string[]; total: number | null; messages: JmapEmailSummary[] }> {
@@ -924,7 +1043,13 @@ async function fetchEmailPage({
   const responseJson = await postJmapApi({
     apiUrl,
     authorization,
-    requestBody: emailPageRequest(accountId, mailboxId, position),
+    requestBody: emailPageRequest(
+      accountId,
+      mailboxId,
+      position,
+      searchText,
+      searchScope,
+    ),
     methodName: "Email/query and Email/get",
     fetchImpl,
   });
@@ -1045,7 +1170,9 @@ function detailGetRequest(accountId: string, emailId: string) {
           ids: [emailId],
           properties: [
             "id",
+            "threadId",
             "from",
+            "replyTo",
             "to",
             "cc",
             "bcc",
@@ -1053,6 +1180,9 @@ function detailGetRequest(accountId: string, emailId: string) {
             "sentAt",
             "receivedAt",
             "keywords",
+            "messageId",
+            "inReplyTo",
+            "references",
             "textBody",
             "htmlBody",
             "bodyValues",
@@ -1119,7 +1249,14 @@ function parseEmailDetail(responseJson: unknown, expectedId: string): JmapEmailD
 
   return {
     id: expectedId,
+    threadId:
+      typeof email.threadId === "string" &&
+      email.threadId.length > 0 &&
+      email.threadId.length <= 256
+        ? email.threadId
+        : expectedId,
     from: parseEmailAddresses(email.from),
+    replyTo: parseEmailAddresses(email.replyTo),
     to: parseEmailAddresses(email.to),
     cc: parseEmailAddresses(email.cc),
     bcc: parseEmailAddresses(email.bcc),
@@ -1127,6 +1264,11 @@ function parseEmailDetail(responseJson: unknown, expectedId: string): JmapEmailD
     sentAt: parseReceivedAt(email.sentAt),
     receivedAt: parseReceivedAt(email.receivedAt),
     isUnread: keywords["$seen"] !== true,
+    isStarred: keywords["$flagged"] === true,
+    isDraft: keywords["$draft"] === true,
+    messageId: parseMessageIds(email.messageId),
+    inReplyTo: parseMessageIds(email.inReplyTo),
+    references: parseMessageIds(email.references),
     textBody: text.value,
     htmlBody: safeHtml?.html ?? null,
     externalLinks: safeHtml?.externalLinks ?? [],
@@ -1644,10 +1786,12 @@ function emailCreateDraftRequest(
   identity: JmapComposeIdentity,
   fromEmail: string,
   input: JmapMailSendInput,
+  allowNoRecipients = false,
+  callId = EMAIL_CREATE_DRAFT_CALL_ID,
 ) {
   const bcc = uniqueEmailAddresses([...identity.bcc, ...input.bcc]);
   const recipients = [...input.to, ...input.cc, ...bcc];
-  if (recipients.length === 0) {
+  if (recipients.length === 0 && !allowNoRecipients) {
     throw new JmapSendRejectedError("no_recipients");
   }
   if (
@@ -1674,7 +1818,7 @@ function emailCreateDraftRequest(
 
   const email: Record<string, unknown> = {
     mailboxIds: { [draftsMailboxId]: true },
-    keywords: { $draft: true },
+    keywords: { $draft: true, $seen: true },
     from: [{ name: identity.name || null, email: fromEmail }],
     to: input.to,
     cc: input.cc,
@@ -1684,6 +1828,12 @@ function emailCreateDraftRequest(
     bodyValues: { "rekad-text-body": { value: input.body } },
   };
   if (identity.replyTo.length > 0) email.replyTo = identity.replyTo;
+  if (input.inReplyTo && input.inReplyTo.length > 0) {
+    email.inReplyTo = input.inReplyTo;
+  }
+  if (input.references && input.references.length > 0) {
+    email.references = input.references;
+  }
 
   return {
     using: [CORE_CAPABILITY, MAIL_CAPABILITY],
@@ -1691,7 +1841,7 @@ function emailCreateDraftRequest(
       [
         "Email/set",
         { accountId, create: { draft: email } },
-        EMAIL_CREATE_DRAFT_CALL_ID,
+        callId,
       ],
     ],
   };
@@ -1725,10 +1875,200 @@ async function createOAuthJmapContext({
   return context;
 }
 
+async function getDraftFromContext(
+  context: JmapApiContext,
+  draftsMailboxId: string,
+  emailId: string,
+): Promise<JmapMailDraft> {
+  validateEmailId(emailId);
+  const responseJson = await postJmapApi({
+    apiUrl: context.apiUrl,
+    authorization: context.authorization,
+    requestBody: detailGetRequest(context.accountId, emailId),
+    methodName: "Email/get",
+    fetchImpl: context.fetchImpl,
+    maxResponseBytes: EMAIL_DETAIL_RESPONSE_MAX_BYTES,
+  });
+  const detail = parseEmailDetail(responseJson, emailId);
+  if (!detail.isDraft || !detail.mailboxIds.includes(draftsMailboxId)) {
+    throw new JmapEmailNotFoundError();
+  }
+  return {
+    id: detail.id,
+    from: detail.from,
+    to: detail.to,
+    cc: detail.cc,
+    bcc: detail.bcc,
+    subject: detail.subject ?? "",
+    body: detail.textBody ?? "",
+    inReplyTo: detail.inReplyTo,
+    references: detail.references,
+  };
+}
+
+function sameAddresses(
+  left: JmapEmailAddress[],
+  right: JmapEmailAddress[],
+): boolean {
+  return left.length === right.length && left.every((address, index) =>
+    address.email.toLowerCase() === right[index]?.email.toLowerCase(),
+  );
+}
+
+function sameStringList(left: string[], right: string[] = []): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function draftMatchesSend(
+  draft: JmapMailDraft,
+  identity: JmapComposeIdentity,
+  fromEmail: string,
+  input: JmapMailSendInput,
+): boolean {
+  const expectedBcc = uniqueEmailAddresses([...identity.bcc, ...input.bcc]);
+  return (
+    draft.from[0]?.email.toLowerCase() === fromEmail.toLowerCase() &&
+    sameAddresses(draft.to, input.to) &&
+    sameAddresses(draft.cc, input.cc) &&
+    sameAddresses(draft.bcc, expectedBcc) &&
+    draft.subject === input.subject &&
+    draft.body === input.body &&
+    sameStringList(draft.inReplyTo, input.inReplyTo) &&
+    sameStringList(draft.references, input.references)
+  );
+}
+
+async function destroyEmailInContext(
+  context: JmapApiContext,
+  emailId: string,
+  callId: string,
+): Promise<void> {
+  const responseJson = await postJmapApi({
+    apiUrl: context.apiUrl,
+    authorization: context.authorization,
+    requestBody: {
+      using: [CORE_CAPABILITY, MAIL_CAPABILITY],
+      methodCalls: [[
+        "Email/set",
+        { accountId: context.accountId, destroy: [emailId] },
+        callId,
+      ]],
+    },
+    methodName: "Email/set",
+    fetchImpl: context.fetchImpl,
+    maxResponseBytes: 256 * 1024,
+  });
+  const { payload } = getMethodResponse(responseJson, callId, "Email/set");
+  const destroyed = Array.isArray(payload.destroyed) ? payload.destroyed : [];
+  if (!destroyed.includes(emailId)) {
+    throw new JmapPocError("The JMAP API did not confirm draft cleanup.");
+  }
+}
+
+export async function runJmapOAuthGetDraft({
+  accessToken,
+  expectedAccountId,
+  draftId,
+  sessionUrl = "https://mail.rekad.id/.well-known/jmap",
+  trustedOrigins = ["https://mail.rekad.id"],
+  allowInsecureHttp = false,
+  fetchImpl = fetch,
+}: {
+  accessToken: string;
+  expectedAccountId: string;
+  draftId: string;
+  sessionUrl?: string;
+  trustedOrigins?: string[];
+  allowInsecureHttp?: boolean;
+  fetchImpl?: typeof fetch;
+}): Promise<JmapMailDraft> {
+  const context = await createOAuthJmapContext({
+    accessToken,
+    expectedAccountId,
+    sessionUrl,
+    trustedOrigins,
+    allowInsecureHttp,
+    fetchImpl,
+  });
+  const draftsMailboxId = (await fetchMailboxList(context))
+    .find((mailbox) => mailbox.role === "drafts")?.id;
+  if (!draftsMailboxId) throw new JmapEmailNotFoundError();
+  return getDraftFromContext(context, draftsMailboxId, draftId);
+}
+
+export async function runJmapOAuthSaveDraft({
+  accessToken,
+  expectedAccountId,
+  input,
+  draftId,
+  sessionUrl = "https://mail.rekad.id/.well-known/jmap",
+  trustedOrigins = ["https://mail.rekad.id"],
+  allowInsecureHttp = false,
+  fetchImpl = fetch,
+}: {
+  accessToken: string;
+  expectedAccountId: string;
+  input: JmapMailDraftInput;
+  draftId?: string;
+  sessionUrl?: string;
+  trustedOrigins?: string[];
+  allowInsecureHttp?: boolean;
+  fetchImpl?: typeof fetch;
+}): Promise<{ emailId: string; previousRemoved: boolean }> {
+  const context = await createOAuthJmapContext({
+    accessToken,
+    expectedAccountId,
+    sessionUrl,
+    trustedOrigins,
+    allowInsecureHttp,
+    fetchImpl,
+  });
+  const preflight = await fetchComposePreflightFromContext(context);
+  if (!preflight.draftsMailboxId) {
+    throw new JmapSendRejectedError("submission_unavailable");
+  }
+  const identity = preflight.identities.find((item) => item.id === input.identityId);
+  if (!identity) throw new JmapSendRejectedError("identity_invalid");
+  const fromEmail = getIdentityFromAddress(identity, input.fromEmail);
+  if (draftId) await getDraftFromContext(context, preflight.draftsMailboxId, draftId);
+
+  const responseJson = await postJmapApi({
+    apiUrl: context.apiUrl,
+    authorization: context.authorization,
+    requestBody: emailCreateDraftRequest(
+      context.accountId,
+      preflight.draftsMailboxId,
+      identity,
+      fromEmail,
+      input,
+      true,
+      EMAIL_DRAFT_CREATE_CALL_ID,
+    ),
+    methodName: "Email/set",
+    fetchImpl,
+  });
+  const { payload } = getMethodResponse(
+    responseJson,
+    EMAIL_DRAFT_CREATE_CALL_ID,
+    "Email/set",
+  );
+  const emailId = getCreatedId(payload, "draft", "draft");
+  let previousRemoved = true;
+  if (draftId) {
+    try {
+      await destroyEmailInContext(context, draftId, EMAIL_DRAFT_DESTROY_CALL_ID);
+    } catch {
+      previousRemoved = false;
+    }
+  }
+  return { emailId, previousRemoved };
+}
+
 export async function runJmapOAuthCreateDraft({
   accessToken,
   expectedAccountId,
   input,
+  existingDraftId,
   sessionUrl = "https://mail.rekad.id/.well-known/jmap",
   trustedOrigins = ["https://mail.rekad.id"],
   allowInsecureHttp = false,
@@ -1737,6 +2077,7 @@ export async function runJmapOAuthCreateDraft({
   accessToken: string;
   expectedAccountId: string;
   input: JmapMailSendInput;
+  existingDraftId?: string;
   sessionUrl?: string;
   trustedOrigins?: string[];
   allowInsecureHttp?: boolean;
@@ -1762,6 +2103,18 @@ export async function runJmapOAuthCreateDraft({
   const identity = preflight.identities.find((item) => item.id === input.identityId);
   if (!identity) throw new JmapSendRejectedError("identity_invalid");
   const fromEmail = getIdentityFromAddress(identity, input.fromEmail);
+
+  if (existingDraftId) {
+    const draft = await getDraftFromContext(
+      context,
+      preflight.draftsMailboxId,
+      existingDraftId,
+    );
+    if (!draftMatchesSend(draft, identity, fromEmail, input)) {
+      throw new JmapDraftMismatchError();
+    }
+    return { emailId: existingDraftId };
+  }
 
   const responseJson = await postJmapApi({
     apiUrl: context.apiUrl,
@@ -2099,6 +2452,8 @@ export async function runJmapOAuthMailboxListing({
   expectedAccountId,
   mailboxId,
   position = 0,
+  searchText,
+  searchScope = "all",
   sessionUrl = "https://mail.rekad.id/.well-known/jmap",
   trustedOrigins = ["https://mail.rekad.id"],
   allowInsecureHttp = false,
@@ -2108,6 +2463,8 @@ export async function runJmapOAuthMailboxListing({
   expectedAccountId: string;
   mailboxId?: string;
   position?: number;
+  searchText?: string;
+  searchScope?: "all" | "mailbox";
   sessionUrl?: string;
   trustedOrigins?: string[];
   allowInsecureHttp?: boolean;
@@ -2138,6 +2495,8 @@ export async function runJmapOAuthMailboxListing({
     ...context,
     mailboxId: selectedMailbox.id,
     position,
+    searchText,
+    searchScope,
   });
   return {
     mailboxes,
@@ -2152,6 +2511,379 @@ export async function runJmapOAuthMailboxListing({
         : position + page.ids.length < page.total),
     messages: page.messages,
   };
+}
+
+async function fetchThreadEmailIds(
+  context: JmapApiContext,
+  threadId: string,
+): Promise<string[]> {
+  const responseJson = await postJmapApi({
+    apiUrl: context.apiUrl,
+    authorization: context.authorization,
+    requestBody: {
+      using: [CORE_CAPABILITY, MAIL_CAPABILITY],
+      methodCalls: [[
+        "Thread/get",
+        {
+          accountId: context.accountId,
+          ids: [threadId],
+          properties: ["id", "emailIds"],
+        },
+        EMAIL_THREAD_GET_CALL_ID,
+      ]],
+    },
+    methodName: "Thread/get",
+    fetchImpl: context.fetchImpl,
+    maxResponseBytes: 256 * 1024,
+  });
+  const { payload } = getMethodResponse(
+    responseJson,
+    EMAIL_THREAD_GET_CALL_ID,
+    "Thread/get",
+  );
+  if (!Array.isArray(payload.list)) {
+    throw new JmapPocError("The JMAP API returned an invalid thread response.");
+  }
+  const rawThread = payload.list.find((item) =>
+    objectValue(item)?.id === threadId,
+  );
+  if (!rawThread) throw new JmapEmailNotFoundError();
+  const thread = objectValue(rawThread);
+  if (!thread || !Array.isArray(thread.emailIds)) {
+    throw new JmapPocError("The JMAP API returned an invalid thread response.");
+  }
+  const emailIds = thread.emailIds.filter(
+    (id): id is string => typeof id === "string" && id.length > 0 && id.length <= 256,
+  );
+  if (emailIds.length !== thread.emailIds.length || emailIds.length === 0) {
+    throw new JmapPocError("The JMAP API returned invalid thread members.");
+  }
+  return [...new Set(emailIds)];
+}
+
+function threadEmailGetRequest(accountId: string, emailIds: string[]) {
+  return {
+    using: [CORE_CAPABILITY, MAIL_CAPABILITY],
+    methodCalls: [[
+      "Email/get",
+      {
+        accountId,
+        ids: emailIds,
+        properties: [
+          "id",
+          "threadId",
+          "from",
+          "subject",
+          "receivedAt",
+          "keywords",
+          "preview",
+        ],
+      },
+      EMAIL_THREAD_EMAIL_GET_CALL_ID,
+    ]],
+  };
+}
+
+function parseThreadMessages(
+  responseJson: unknown,
+  emailIds: string[],
+  threadId: string,
+): JmapThreadMessageSummary[] {
+  const { payload } = getMethodResponse(
+    responseJson,
+    EMAIL_THREAD_EMAIL_GET_CALL_ID,
+    "Email/get",
+  );
+  if (!Array.isArray(payload.list)) {
+    throw new JmapPocError("The JMAP API returned an invalid thread message response.");
+  }
+  const allowedIds = new Set(emailIds);
+  const messages = new Map<string, JmapThreadMessageSummary>();
+  for (const rawEmail of payload.list) {
+    const email = objectValue(rawEmail);
+    if (
+      !email ||
+      typeof email.id !== "string" ||
+      !allowedIds.has(email.id) ||
+      messages.has(email.id)
+    ) {
+      throw new JmapPocError("The JMAP API returned an invalid thread message.");
+    }
+    const keywords = objectValue(email.keywords) ?? {};
+    messages.set(email.id, {
+      id: email.id,
+      threadId,
+      from: parseEmailAddresses(email.from),
+      subject: boundedString(email.subject, 512),
+      receivedAt: parseReceivedAt(email.receivedAt),
+      preview: boundedString(email.preview, 256) ?? "",
+      isUnread: keywords["$seen"] !== true,
+      isStarred: keywords["$flagged"] === true,
+      isDraft: keywords["$draft"] === true,
+    });
+  }
+  return emailIds.flatMap((id) => {
+    const message = messages.get(id);
+    return message ? [message] : [];
+  }).sort((a, b) => (a.receivedAt ?? "").localeCompare(b.receivedAt ?? ""));
+}
+
+export async function runJmapOAuthThreadView({
+  accessToken,
+  expectedAccountId,
+  threadId,
+  sessionUrl = "https://mail.rekad.id/.well-known/jmap",
+  trustedOrigins = ["https://mail.rekad.id"],
+  allowInsecureHttp = false,
+  fetchImpl = fetch,
+}: {
+  accessToken: string;
+  expectedAccountId: string;
+  threadId: string;
+  sessionUrl?: string;
+  trustedOrigins?: string[];
+  allowInsecureHttp?: boolean;
+  fetchImpl?: typeof fetch;
+}): Promise<JmapThreadView> {
+  validateEmailId(threadId);
+  const context = await createJmapApiContext({
+    sessionUrl,
+    trustedOrigins,
+    allowInsecureHttp,
+    authorization: makeOAuthAuthorization(accessToken),
+    fetchImpl,
+  });
+  if (context.accountId !== expectedAccountId) {
+    throw new JmapAccountMismatchError();
+  }
+  const allIds = await fetchThreadEmailIds(context, threadId);
+  const visibleIds = allIds.slice(-MAX_THREAD_EMAILS);
+  const responseJson = await postJmapApi({
+    apiUrl: context.apiUrl,
+    authorization: context.authorization,
+    requestBody: threadEmailGetRequest(context.accountId, visibleIds),
+    methodName: "Thread/get and Email/get",
+    fetchImpl,
+    maxResponseBytes: 512 * 1024,
+  });
+  return {
+    threadId,
+    messages: parseThreadMessages(responseJson, visibleIds, threadId),
+    truncated: allIds.length > visibleIds.length,
+  };
+}
+
+function escapeJsonPointerSegment(value: string): string {
+  return value.replace(/~/g, "~0").replace(/\//g, "~1");
+}
+
+async function getEmailActionState(
+  context: JmapApiContext,
+  emailIds: string[],
+): Promise<Map<string, { mailboxIds: string[] }>> {
+  const responseJson = await postJmapApi({
+    apiUrl: context.apiUrl,
+    authorization: context.authorization,
+    requestBody: {
+      using: [CORE_CAPABILITY, MAIL_CAPABILITY],
+      methodCalls: [[
+        "Email/get",
+        {
+          accountId: context.accountId,
+          ids: emailIds,
+          properties: ["id", "mailboxIds"],
+        },
+        EMAIL_ACTION_GET_CALL_ID,
+      ]],
+    },
+    methodName: "Email/get",
+    fetchImpl: context.fetchImpl,
+    maxResponseBytes: 256 * 1024,
+  });
+  const { payload } = getMethodResponse(
+    responseJson,
+    EMAIL_ACTION_GET_CALL_ID,
+    "Email/get",
+  );
+  if (!Array.isArray(payload.list)) {
+    throw new JmapPocError("The JMAP API returned an invalid email action response.");
+  }
+  const requested = new Set(emailIds);
+  const state = new Map<string, { mailboxIds: string[] }>();
+  for (const rawEmail of payload.list) {
+    const email = objectValue(rawEmail);
+    if (
+      !email ||
+      typeof email.id !== "string" ||
+      !requested.has(email.id) ||
+      state.has(email.id)
+    ) {
+      throw new JmapPocError("The JMAP API returned invalid email action state.");
+    }
+    const rawMailboxIds = objectValue(email.mailboxIds) ?? {};
+    state.set(email.id, {
+      mailboxIds: Object.entries(rawMailboxIds)
+        .filter(([id, present]) => id.length > 0 && id.length <= 256 && present === true)
+        .map(([id]) => id),
+    });
+  }
+  if (state.size !== emailIds.length) throw new JmapEmailNotFoundError();
+  return state;
+}
+
+function verifyEmailActionUpdate(responseJson: unknown, emailIds: string[]): void {
+  const { payload } = getMethodResponse(
+    responseJson,
+    EMAIL_ACTION_SET_CALL_ID,
+    "Email/set",
+  );
+  const notUpdated = objectValue(payload.notUpdated) ?? {};
+  for (const emailId of emailIds) {
+    const error = objectValue(notUpdated[emailId]);
+    if (error) {
+      if (error.type === "notFound") throw new JmapEmailNotFoundError();
+      throw new JmapPocError("The JMAP API rejected a mailbox action.");
+    }
+  }
+  const updated = objectValue(payload.updated) ?? {};
+  if (emailIds.some((emailId) => !Object.hasOwn(updated, emailId))) {
+    throw new JmapPocError("The JMAP API did not confirm the mailbox action.");
+  }
+}
+
+export async function runJmapOAuthMailAction({
+  accessToken,
+  expectedAccountId,
+  input,
+  sessionUrl = "https://mail.rekad.id/.well-known/jmap",
+  trustedOrigins = ["https://mail.rekad.id"],
+  allowInsecureHttp = false,
+  fetchImpl = fetch,
+}: {
+  accessToken: string;
+  expectedAccountId: string;
+  input: JmapMailActionInput;
+  sessionUrl?: string;
+  trustedOrigins?: string[];
+  allowInsecureHttp?: boolean;
+  fetchImpl?: typeof fetch;
+}): Promise<void> {
+  const context = await createJmapApiContext({
+    sessionUrl,
+    trustedOrigins,
+    allowInsecureHttp,
+    authorization: makeOAuthAuthorization(accessToken),
+    fetchImpl,
+  });
+  if (context.accountId !== expectedAccountId) {
+    throw new JmapAccountMismatchError();
+  }
+
+  const inputId = input.emailId ?? input.threadId;
+  if (!inputId) throw new JmapPocError("A mail action target is required.");
+  validateEmailId(inputId);
+  if (input.threadId && input.emailId) {
+    throw new JmapPocError("A mail action must target one message or one thread.");
+  }
+  const emailIds = input.threadId
+    ? await fetchThreadEmailIds(context, input.threadId)
+    : [input.emailId as string];
+  if (emailIds.length > MAX_THREAD_EMAILS) {
+    throw new JmapMailActionUnavailableError("thread_too_large");
+  }
+
+  const mailboxes = await fetchMailboxList(context);
+  const mailboxById = new Map(mailboxes.map((mailbox) => [mailbox.id, mailbox]));
+  const inbox = mailboxes.find((mailbox) => mailbox.role === "inbox");
+  const trash = mailboxes.find((mailbox) => mailbox.role === "trash");
+  const source = input.sourceMailboxId
+    ? mailboxById.get(input.sourceMailboxId)
+    : null;
+  const destination = input.destinationMailboxId
+    ? mailboxById.get(input.destinationMailboxId)
+    : null;
+  if (input.sourceMailboxId && !source) throw new JmapMailboxNotFoundError();
+  if (input.destinationMailboxId && !destination) {
+    throw new JmapMailboxNotFoundError();
+  }
+  if (input.action === "move" && !destination) {
+    throw new JmapPocError("A destination mailbox is required.");
+  }
+  if (input.action === "archive" && !inbox) {
+    throw new JmapMailActionUnavailableError("archive_unavailable");
+  }
+  if (input.action === "trash" && !trash) {
+    throw new JmapMailActionUnavailableError("trash_unavailable");
+  }
+
+  const state = await getEmailActionState(context, emailIds);
+  const updates: Record<string, Record<string, unknown>> = {};
+  for (const emailId of emailIds) {
+    const mailboxIds = state.get(emailId)?.mailboxIds ?? [];
+    const update: Record<string, unknown> = {};
+    switch (input.action) {
+      case "mark_read":
+        update["keywords/$seen"] = true;
+        break;
+      case "mark_unread":
+        update["keywords/$seen"] = null;
+        break;
+      case "star":
+        update["keywords/$flagged"] = true;
+        break;
+      case "unstar":
+        update["keywords/$flagged"] = null;
+        break;
+      case "archive": {
+        const archive = mailboxes.find((mailbox) => mailbox.role === "archive");
+        if (archive && !mailboxIds.includes(archive.id)) {
+          update[`mailboxIds/${escapeJsonPointerSegment(archive.id)}`] = true;
+        }
+        if (mailboxIds.includes(inbox!.id)) {
+          update[`mailboxIds/${escapeJsonPointerSegment(inbox!.id)}`] = null;
+        }
+        const remaining = mailboxIds.filter((id) => id !== inbox!.id);
+        if (remaining.length === 0 && !archive) {
+          throw new JmapMailActionUnavailableError("archive_unavailable");
+        }
+        break;
+      }
+      case "trash": {
+        for (const mailboxId of mailboxIds) {
+          if (mailboxId !== trash!.id) {
+            update[`mailboxIds/${escapeJsonPointerSegment(mailboxId)}`] = null;
+          }
+        }
+        update[`mailboxIds/${escapeJsonPointerSegment(trash!.id)}`] = true;
+        break;
+      }
+      case "move": {
+        if (source && source.id !== destination!.id && mailboxIds.includes(source.id)) {
+          update[`mailboxIds/${escapeJsonPointerSegment(source.id)}`] = null;
+        }
+        update[`mailboxIds/${escapeJsonPointerSegment(destination!.id)}`] = true;
+        break;
+      }
+    }
+    updates[emailId] = update;
+  }
+
+  const responseJson = await postJmapApi({
+    apiUrl: context.apiUrl,
+    authorization: context.authorization,
+    requestBody: {
+      using: [CORE_CAPABILITY, MAIL_CAPABILITY],
+      methodCalls: [[
+        "Email/set",
+        { accountId: context.accountId, update: updates },
+        EMAIL_ACTION_SET_CALL_ID,
+      ]],
+    },
+    methodName: "Email/set",
+    fetchImpl,
+    maxResponseBytes: 512 * 1024,
+  });
+  verifyEmailActionUpdate(responseJson, emailIds);
 }
 
 function validateEmailId(emailId: string): void {

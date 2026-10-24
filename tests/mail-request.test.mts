@@ -9,6 +9,7 @@ import {
 test("defaults to the authenticated inbox and first page", () => {
   assert.deepEqual(parseMailListingRequest(new URLSearchParams()), {
     position: 0,
+    searchScope: "all",
   });
 });
 
@@ -17,7 +18,7 @@ test("parses a bounded page and optional mailbox ID", () => {
     parseMailListingRequest(
       new URLSearchParams("mailboxId=inbox-id&position=50"),
     ),
-    { mailboxId: "inbox-id", position: 50 },
+    { mailboxId: "inbox-id", position: 50, searchScope: "all" },
   );
 });
 

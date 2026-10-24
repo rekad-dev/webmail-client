@@ -139,7 +139,9 @@ test("retrieves bounded message detail and returns sanitized HTML only", async (
 
   assert.deepEqual(detail, {
     id: "email-1",
+    threadId: "email-1",
     from: [{ name: "Sender", email: "sender@example.test" }],
+    replyTo: [],
     to: [{ name: "Recipient", email: "to@example.test" }],
     cc: [{ name: null, email: "cc@example.test" }],
     bcc: [{ name: null, email: "bcc@example.test" }],
@@ -147,6 +149,11 @@ test("retrieves bounded message detail and returns sanitized HTML only", async (
     sentAt: "2026-05-03T08:15:00.000Z",
     receivedAt: "2026-05-03T08:16:00.000Z",
     isUnread: true,
+    isStarred: false,
+    isDraft: false,
+    messageId: [],
+    inReplyTo: [],
+    references: [],
     textBody: "Plain body\nSecond line",
     htmlBody: "<div>Hello <span>Open</span></div>",
     externalLinks: ["https://example.test/"],
