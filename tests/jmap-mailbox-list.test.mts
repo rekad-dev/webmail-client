@@ -81,6 +81,50 @@ function createFetch(
         });
       }
 
+      if (request.methodCalls[0][0] === "Thread/get") {
+        const threadIds = request.methodCalls[0][1].ids as string[];
+        return responseJson({
+          methodResponses: [
+            [
+              "Thread/get",
+              {
+                list: threadIds.map((id) => ({
+                  id,
+                  emailIds: ["email-1", "email-2"],
+                })),
+                notFound: [],
+              },
+              "phase5-thread-list-get",
+            ],
+          ],
+        });
+      }
+
+      if (
+        request.methodCalls[0][0] === "Email/get" &&
+        request.methodCalls[0][2] === "phase5-thread-state-get"
+      ) {
+        const emailIds = request.methodCalls[0][1].ids as string[];
+        return responseJson({
+          methodResponses: [
+            [
+              "Email/get",
+              {
+                list: emailIds.map((id) => ({
+                  id,
+                  threadId: "thread-1",
+                  keywords: id === "email-1"
+                    ? { "$seen": true, "$flagged": true }
+                    : {},
+                })),
+                notFound: [],
+              },
+              "phase5-thread-state-get",
+            ],
+          ],
+        });
+      }
+
       return responseJson({
         methodResponses: [
           [
@@ -98,6 +142,7 @@ function createFetch(
               list: [
                 {
                   id: "email-2",
+                  threadId: "thread-1",
                   from: [{ name: "Sender Two", email: "two@example.test" }],
                   subject: null,
                   receivedAt: "2026-02-02T12:00:00Z",
@@ -107,10 +152,11 @@ function createFetch(
                 },
                 {
                   id: "email-1",
+                  threadId: "thread-1",
                   from: [{ name: "Sender One", email: "one@example.test" }],
                   subject: "First subject",
                   receivedAt: "2026-02-01T12:00:00Z",
-                  keywords: { "$seen": true },
+                  keywords: { "$seen": true, "$flagged": true },
                   preview: "First preview",
                 },
               ],
@@ -162,29 +208,29 @@ test("lists the authenticated mailbox and only ordered message summaries", async
   assert.deepEqual(result.messages, [
     {
       id: "email-1",
-      threadId: "email-1",
+      threadId: "thread-1",
       from: [{ name: "Sender One", email: "one@example.test" }],
       subject: "First subject",
       receivedAt: "2026-02-01T12:00:00.000Z",
       preview: "First preview",
-      isUnread: false,
-      isStarred: false,
+      isUnread: true,
+      isStarred: true,
       isDraft: false,
     },
     {
       id: "email-2",
-      threadId: "email-2",
+      threadId: "thread-1",
       from: [{ name: "Sender Two", email: "two@example.test" }],
       subject: null,
       receivedAt: "2026-02-02T12:00:00.000Z",
       preview: "<em>still plain text</em>",
       isUnread: true,
-      isStarred: false,
+      isStarred: true,
       isDraft: false,
     },
   ]);
 
-  assert.equal(calls.length, 4);
+  assert.equal(calls.length, 6);
   for (const call of calls) {
     assert.equal(
       new Headers(call.init.headers).get("authorization"),
@@ -228,6 +274,18 @@ test("lists the authenticated mailbox and only ordered message summaries", async
     JSON.stringify(emailRequest).includes("bodyValues"),
     false,
   );
+  const threadRequest = JSON.parse(String(calls[4].init.body));
+  assert.deepEqual(threadRequest.methodCalls[0][1], {
+    accountId: "account-1",
+    ids: ["thread-1"],
+    properties: ["id", "emailIds"],
+  });
+  const threadStateRequest = JSON.parse(String(calls[5].init.body));
+  assert.deepEqual(threadStateRequest.methodCalls[0][1], {
+    accountId: "account-1",
+    ids: ["email-1", "email-2"],
+    properties: ["id", "threadId", "keywords"],
+  });
 });
 
 test("rejects an account mismatch before reading mailbox or email data", async () => {

@@ -180,7 +180,7 @@ test("creates a server-authorized plain-text draft with identity defaults", asyn
   ]);
   assert.deepEqual(draft.replyTo, [{ name: null, email: "reply@example.test" }]);
   assert.deepEqual(draft.mailboxIds, { "drafts-1": true });
-  assert.deepEqual(draft.keywords, { $draft: true });
+  assert.deepEqual(draft.keywords, { $draft: true, $seen: true });
   assert.deepEqual(draft.bodyStructure, { type: "text/plain", partId: "rekad-text-body" });
   assert.deepEqual(draft.bodyValues, { "rekad-text-body": { value: input.body } });
   assert.equal("htmlBody" in draft, false);
