@@ -127,6 +127,14 @@ state without separate explicit authorization. A specific target, exact
 routes, state restoration plan, and content scope must be agreed before those
 checks.
 
+The user approved a read/star test on the regular email whose exact subject is
+`Re: Fwd: Test Send`. `/api/auth/status` passed, but the exact-subject
+`/api/mail/thread-subjects` request returned 404 and no unique member ID; no
+action request was sent and no state changed. The previously approved broad
+candidate route returns subjects/counts but not IDs. `/api/mail` can expose the
+ID but also returns a preview; ask before using it to resolve the target. Full
+record: `phase-5-regular-action-check`.
+
 Phase 4 compose and send implementation and live verification are complete;
 see the Traycer artifacts `phase-4-compose-send-plan` and
 `phase-4-live-send-verification`, plus commits `fd9df24`, `931496a`,

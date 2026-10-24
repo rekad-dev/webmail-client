@@ -113,6 +113,15 @@ scope: progress
   production mailbox mutations or opening messages that may load content or
   alter read state. Keep Phase 5 `in_progress`; do not start Phase 6.
 
+- A separately approved read/star check on the regular message with exact
+  subject `Re: Fwd: Test Send` did not reach any action: the exact-subject
+  metadata route returned 404 and no unique member ID. Authentication passed;
+  no mailbox state changed. The broader candidate route had already returned
+  this subject, but it does not expose IDs. A fallback `/api/mail` listing
+  includes preview fields, so do not use it for target resolution without
+  approval to fetch but ignore those previews. Record:
+  `phase-5-regular-action-check`.
+
 ## Phase 4 compose and send complete
 
 - The technical plan is recorded in the Traycer artifact
