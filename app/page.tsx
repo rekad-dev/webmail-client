@@ -1,5 +1,6 @@
 import { getAuthSession, signIn } from "@/auth";
 import { SignOutButton } from "./sign-out-button";
+import { InboxClient } from "./inbox-client";
 
 export default async function HomePage() {
   const session = await getAuthSession();
@@ -12,27 +13,21 @@ export default async function HomePage() {
   }
 
   return (
-    <main className="shell">
-      <section className="status-card" aria-labelledby="page-title">
-        <p className="eyebrow">rekad Mail</p>
-        <h1 id="page-title">
-          {isSignedIn ? "You’re signed in" : "Sign in to rekad Mail"}
-        </h1>
-        <p>
-          {isSignedIn
-            ? "Your Stalwart session is active. Mailbox browsing is not available yet."
-            : "Use your rekad email account to continue."}
-        </p>
-        {isSignedIn ? (
-          <SignOutButton />
-        ) : (
+    isSignedIn ? (
+      <InboxClient />
+    ) : (
+      <main className="sign-in-shell">
+        <section className="status-card" aria-labelledby="page-title">
+          <p className="eyebrow">rekad Mail</p>
+          <h1 id="page-title">Sign in to rekad Mail</h1>
+          <p>Use your rekad email account to continue.</p>
           <form action={signInWithStalwart}>
             <button className="sign-in-button" type="submit">
               Sign in with Stalwart
             </button>
           </form>
-        )}
-      </section>
-    </main>
+        </section>
+      </main>
+    )
   );
 }
