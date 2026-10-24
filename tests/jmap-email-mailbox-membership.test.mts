@@ -5,7 +5,9 @@ import {
   JmapAccountMismatchError,
   JmapEmailNotFoundError,
   JmapPocError,
+  JmapThreadSubjectSearchIncompleteError,
   runJmapOAuthEmailMailboxMembership,
+  runJmapOAuthThreadSubjectCandidates,
 } from "../lib/jmap/client.mts";
 
 const CORE = "urn:ietf:params:jmap:core";
@@ -214,22 +216,46 @@ test("rejects omitted and contradictory Email/get notFound coverage", async () =
 });
 
 test("bounds session discovery and JMAP reads with one operation deadline", async () => {
-  const { fetchImpl: baseFetch } = createFetch();
-  const fetchImpl: typeof fetch = async (input, init = {}) => {
-    const url = new URL(input instanceof Request ? input.url : input.toString());
-    if (url.pathname !== "/jmap/") return baseFetch(input, init);
-    return await new Promise<Response>((_resolve, reject) => {
-      const signal = init.signal;
-      if (signal?.aborted) {
-        reject(signal.reason);
-        return;
-      }
-      signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
-    });
-  };
+  function createHangingFetch(): typeof fetch {
+    const { fetchImpl: baseFetch } = createFetch();
+    return async (input, init = {}) => {
+      const url = new URL(input instanceof Request ? input.url : input.toString());
+      if (url.pathname !== "/jmap/") return baseFetch(input, init);
+      return await new Promise<Response>((_resolve, reject) => {
+        const signal = init.signal;
+        if (signal?.aborted) {
+          reject(signal.reason);
+          return;
+        }
+        signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+      });
+    };
+  }
 
-  await assert.rejects(
-    runJmapOAuthEmailMailboxMembership({ ...commonOptions, fetchImpl }),
-    JmapPocError,
-  );
+  const results = await Promise.allSettled([
+    runJmapOAuthEmailMailboxMembership({
+      ...commonOptions,
+      fetchImpl: createHangingFetch(),
+    }),
+    runJmapOAuthThreadSubjectCandidates({
+      accessToken: commonOptions.accessToken,
+      expectedAccountId: commonOptions.expectedAccountId,
+      query: "Test Send",
+      sessionUrl: commonOptions.sessionUrl,
+      fetchImpl: createHangingFetch(),
+    }),
+  ]);
+
+  assert.equal(results[0].status, "rejected");
+  if (results[0].status === "rejected") {
+    assert.ok(results[0].reason instanceof JmapPocError);
+    assert.equal(
+      results[0].reason instanceof JmapThreadSubjectSearchIncompleteError,
+      false,
+    );
+  }
+  assert.equal(results[1].status, "rejected");
+  if (results[1].status === "rejected") {
+    assert.ok(results[1].reason instanceof JmapThreadSubjectSearchIncompleteError);
+  }
 });
