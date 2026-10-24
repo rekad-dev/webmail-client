@@ -1249,14 +1249,14 @@ export function InboxClient() {
                   className={`message-row${message.isUnread ? " is-unread" : ""}`}
                   data-email-id={message.id}
                   data-thread-id={message.threadId}
-                  aria-label={`Open ${message.isUnread ? "unread" : "read"} conversation from ${senderLabel(message)}: ${message.subject?.trim() || "(no subject)"}`}
+                  aria-label={`${message.isDraft ? "Edit saved draft" : `Open ${message.isUnread ? "unread" : "read"} conversation`}${message.isStarred ? ", starred" : ""} from ${senderLabel(message)}: ${message.subject?.trim() || "(no subject)"}`}
                   onClick={(event) => message.isDraft
                     ? openSavedDraft(message.id, event.currentTarget)
                     : openThread(message.threadId)}
                 >
                   <span className="message-state-dot" aria-hidden="true" />
                   <span className="message-copy">
-                    <span className="message-sender">{senderLabel(message)}{message.isStarred ? <span className="conversation-star" aria-label="Starred"> ★</span> : null}</span>
+                    <span className="message-sender">{senderLabel(message)}{message.isStarred ? <span className="conversation-star" aria-hidden="true"> ★</span> : null}</span>
                     <span className="message-subject">
                       {message.isDraft ? "Draft: " : ""}{message.subject?.trim() || "(no subject)"}
                     </span>
@@ -1372,7 +1372,7 @@ export function InboxClient() {
                       <button
                         className={`thread-message-open${message.isUnread ? " is-unread" : ""}`}
                         data-email-id={message.id}
-                        aria-label={`${message.isDraft ? "Edit saved draft" : "Open message"} from ${senderLabel(message)}: ${message.subject?.trim() || "(no subject)"}`}
+                        aria-label={`${message.isDraft ? "Edit saved draft" : `Open ${message.isUnread ? "unread" : "read"} message`}${message.isStarred ? ", starred" : ""} from ${senderLabel(message)}: ${message.subject?.trim() || "(no subject)"}`}
                         onClick={(event) => message.isDraft
                           ? openSavedDraft(message.id, event.currentTarget)
                           : openMessage(message.id)}
