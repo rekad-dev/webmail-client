@@ -393,9 +393,31 @@ async function runNewAttempt({
         expectedAccountId: session.accountId,
         identityId: input.identityId,
         emailId: result.emailId,
+        attemptKey: input.attemptKey,
         ...jmapSettings,
       });
     } catch (error) {
+      if (error instanceof JmapDraftMismatchError) {
+        await markAttemptSafely(
+          dependencies,
+          key,
+          "submitting",
+          "rejected",
+        );
+        if (!input.draftId) {
+          try {
+            await dependencies.destroyDraft({
+              accessToken: session.accessToken,
+              expectedAccountId: session.accountId,
+              emailId: result.emailId,
+              ...jmapSettings,
+            });
+          } catch {
+            // A temporary draft may remain, but it is never resubmitted here.
+          }
+        }
+        return rejectedResponse("draft_changed");
+      }
       if (error instanceof JmapSendRejectedError) {
         await markAttemptSafely(dependencies, key, "submitting", "rejected");
         if (!input.draftId) {

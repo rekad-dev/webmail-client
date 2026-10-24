@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import test from "node:test";
 
 import {
@@ -16,6 +16,11 @@ const MAIL = "urn:ietf:params:jmap:mail";
 const SUBMISSION = "urn:ietf:params:jmap:submission";
 const TEST_ORIGIN = "https://mail.example.test";
 const token = randomBytes(32).toString("base64url");
+const sendAttemptKey = Buffer.alloc(32).toString("base64url");
+const sendMarker = `rekad-send-pending-${createHash("sha256")
+  .update("rekad-mail-draft-send-lock\0")
+  .update(sendAttemptKey)
+  .digest("hex")}`;
 
 const input: JmapMailSendInput = {
   identityId: "identity-1",
@@ -112,10 +117,15 @@ function makeFetch(options: {
       if (method === "Email/get") {
         return [
           "Email/get",
-          { list: [{
-            id: "email-1",
-            mailboxIds: options.inSentMailbox ? { "sent-1": true } : { "drafts-1": true },
-          }], notFound: [] },
+          {
+            state: "email-state-1",
+            list: [{
+              id: "email-1",
+              mailboxIds: options.inSentMailbox ? { "sent-1": true } : { "drafts-1": true },
+              keywords: { $draft: true },
+            }],
+            notFound: [],
+          },
           callId,
         ];
       }
@@ -204,6 +214,7 @@ test("submits with the existing identity and atomically updates Drafts to Sent",
     ...options(fetchImpl),
     identityId: "identity-1",
     emailId: "email-1",
+    attemptKey: sendAttemptKey,
   });
   assert.deepEqual(result, { submissionId: "submission-1", sentUpdateApplied: true });
 
@@ -220,6 +231,8 @@ test("submits with the existing identity and atomically updates Drafts to Sent",
       "mailboxIds/drafts-1": null,
       "mailboxIds/sent-1": true,
       "keywords/$draft": null,
+      // The per-attempt send marker is cleared atomically with the mailbox move.
+      [`keywords/${sendMarker}`]: null,
     },
   });
 });
@@ -231,6 +244,7 @@ test("maps an explicit JMAP submission rejection to a stable reason", async () =
       ...options(fetchImpl),
       identityId: "identity-1",
       emailId: "email-1",
+      attemptKey: sendAttemptKey,
     }),
     (error: unknown) => error instanceof JmapSendRejectedError && error.reason === "send_forbidden",
   );
@@ -243,6 +257,7 @@ test("rejects a sender identity that disappears before JMAP submission", async (
       ...options(fetchImpl),
       identityId: "identity-1",
       emailId: "email-1",
+      attemptKey: sendAttemptKey,
     }),
     (error: unknown) => error instanceof JmapSendRejectedError && error.reason === "identity_invalid",
   );

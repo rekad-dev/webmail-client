@@ -1,4 +1,5 @@
 import { isIP } from "node:net";
+import { createHash } from "node:crypto";
 import { sanitizeEmailHtml } from "../mail/sanitize-email-html.mts";
 
 const CORE_CAPABILITY = "urn:ietf:params:jmap:core";
@@ -23,6 +24,8 @@ const EMAIL_ACTION_SET_CALL_ID = "phase5-action-email-set";
 const EMAIL_DRAFT_GET_CALL_ID = "phase5-draft-get";
 const EMAIL_DRAFT_CREATE_CALL_ID = "phase5-draft-create";
 const EMAIL_DRAFT_DESTROY_CALL_ID = "phase5-draft-destroy";
+const EMAIL_SEND_MARKER_GET_CALL_ID = "phase5-send-marker-get";
+const EMAIL_SEND_MARKER_SET_CALL_ID = "phase5-send-marker-set";
 const MAX_SESSION_REDIRECTS = 5;
 const REQUEST_TIMEOUT_MS = 15_000;
 const JMAP_RESPONSE_MAX_BYTES = 2 * 1024 * 1024;
@@ -30,6 +33,9 @@ const EMAIL_DETAIL_RESPONSE_MAX_BYTES = 1024 * 1024;
 const EMAIL_BODY_VALUE_MAX_BYTES = 256 * 1024;
 const EMAIL_BODY_VALUE_MAX_CHARS = 256 * 1024;
 const MAX_THREAD_EMAILS = 100;
+const MAX_THREAD_STATE_EMAILS_PER_THREAD = 1_000;
+const THREAD_STATE_EMAIL_GET_BATCH_SIZE = 100;
+const DRAFT_SEND_PENDING_PREFIX = "rekad-send-pending-";
 export const MAIL_PAGE_SIZE = 25;
 export const MAX_MAIL_POSITION = 1_000_000;
 
@@ -287,6 +293,13 @@ export class JmapDraftMismatchError extends JmapPocError {
   constructor() {
     super("The saved draft no longer matches the message being submitted.");
     this.name = "JmapDraftMismatchError";
+  }
+}
+
+class JmapStateMismatchError extends JmapPocError {
+  constructor() {
+    super("The JMAP object changed before the update could be applied.");
+    this.name = "JmapStateMismatchError";
   }
 }
 
@@ -653,6 +666,7 @@ function getMethodResponse(
       /^[A-Za-z][A-Za-z0-9]{0,63}$/.test(rawErrorType)
         ? rawErrorType
         : "unknown";
+    if (errorType === "stateMismatch") throw new JmapStateMismatchError();
     throw new JmapPocError(`JMAP ${methodName} failed (${errorType}).`);
   }
 
@@ -1879,7 +1893,7 @@ async function getDraftFromContext(
   context: JmapApiContext,
   draftsMailboxId: string,
   emailId: string,
-): Promise<JmapMailDraft> {
+): Promise<{ draft: JmapMailDraft; state: string; sendPending: boolean }> {
   validateEmailId(emailId);
   const responseJson = await postJmapApi({
     apiUrl: context.apiUrl,
@@ -1889,21 +1903,42 @@ async function getDraftFromContext(
     fetchImpl: context.fetchImpl,
     maxResponseBytes: EMAIL_DETAIL_RESPONSE_MAX_BYTES,
   });
+  const { payload } = getMethodResponse(
+    responseJson,
+    EMAIL_DETAIL_GET_CALL_ID,
+    "Email/get",
+  );
+  if (typeof payload.state !== "string" || payload.state.length === 0 || payload.state.length > 256) {
+    throw new JmapPocError("The JMAP API returned an invalid email state.");
+  }
   const detail = parseEmailDetail(responseJson, emailId);
   if (!detail.isDraft || !detail.mailboxIds.includes(draftsMailboxId)) {
     throw new JmapEmailNotFoundError();
   }
   return {
-    id: detail.id,
-    from: detail.from,
-    to: detail.to,
-    cc: detail.cc,
-    bcc: detail.bcc,
-    subject: detail.subject ?? "",
-    body: detail.textBody ?? "",
-    inReplyTo: detail.inReplyTo,
-    references: detail.references,
+    state: payload.state,
+    sendPending: hasDraftSendMarker(payload.list, emailId),
+    draft: {
+      id: detail.id,
+      from: detail.from,
+      to: detail.to,
+      cc: detail.cc,
+      bcc: detail.bcc,
+      subject: detail.subject ?? "",
+      body: detail.textBody ?? "",
+      inReplyTo: detail.inReplyTo,
+      references: detail.references,
+    },
   };
+}
+
+function hasDraftSendMarker(list: unknown, emailId: string): boolean {
+  if (!Array.isArray(list)) return false;
+  const email = list.map(objectValue).find((item) => item?.id === emailId);
+  const keywords = objectValue(email?.keywords) ?? {};
+  return Object.entries(keywords).some(([keyword, value]) =>
+    keyword.startsWith(DRAFT_SEND_PENDING_PREFIX) && value === true,
+  );
 }
 
 function sameAddresses(
@@ -1917,6 +1952,172 @@ function sameAddresses(
 
 function sameStringList(left: string[], right: string[] = []): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function draftSendMarkerForAttempt(attemptKey: string): string {
+  if (
+    !/^[A-Za-z0-9_-]{43}$/.test(attemptKey) ||
+    Buffer.from(attemptKey, "base64url").length !== 32
+  ) {
+    throw new JmapPocError("The mail send attempt key is invalid.");
+  }
+  const digest = createHash("sha256")
+    .update("rekad-mail-draft-send-lock\0")
+    .update(attemptKey)
+    .digest("hex");
+  return `${DRAFT_SEND_PENDING_PREFIX}${digest}`;
+}
+
+async function getEmailSendState(
+  context: JmapApiContext,
+  emailId: string,
+): Promise<{
+  state: string;
+  keywords: Record<string, unknown>;
+  mailboxIds: Record<string, unknown>;
+}> {
+  const responseJson = await postJmapApi({
+    apiUrl: context.apiUrl,
+    authorization: context.authorization,
+    requestBody: {
+      using: [CORE_CAPABILITY, MAIL_CAPABILITY],
+      methodCalls: [[
+        "Email/get",
+        {
+          accountId: context.accountId,
+          ids: [emailId],
+          properties: ["id", "keywords", "mailboxIds"],
+        },
+        EMAIL_SEND_MARKER_GET_CALL_ID,
+      ]],
+    },
+    methodName: "Email/get send state",
+    fetchImpl: context.fetchImpl,
+    maxResponseBytes: 256 * 1024,
+  });
+  const { payload } = getMethodResponse(
+    responseJson,
+    EMAIL_SEND_MARKER_GET_CALL_ID,
+    "Email/get",
+  );
+  if (
+    typeof payload.state !== "string" ||
+    payload.state.length === 0 ||
+    !Array.isArray(payload.list)
+  ) {
+    throw new JmapPocError("The JMAP API returned invalid email state.");
+  }
+  const email = payload.list.map(objectValue).find((item) => item?.id === emailId);
+  if (!email) throw new JmapEmailNotFoundError();
+  return {
+    state: payload.state,
+    keywords: objectValue(email.keywords) ?? {},
+    mailboxIds: objectValue(email.mailboxIds) ?? {},
+  };
+}
+
+async function updateEmailKeywordWithState({
+  context,
+  emailId,
+  state,
+  keyword,
+  value,
+  callId,
+}: {
+  context: JmapApiContext;
+  emailId: string;
+  state: string;
+  keyword: string;
+  value: boolean | null;
+  callId: string;
+}): Promise<void> {
+  const responseJson = await postJmapApi({
+    apiUrl: context.apiUrl,
+    authorization: context.authorization,
+    requestBody: {
+      using: [CORE_CAPABILITY, MAIL_CAPABILITY],
+      methodCalls: [[
+        "Email/set",
+        {
+          accountId: context.accountId,
+          ifInState: state,
+          update: {
+            [emailId]: { [`keywords/${keyword}`]: value },
+          },
+        },
+        callId,
+      ]],
+    },
+    methodName: "Email/set",
+    fetchImpl: context.fetchImpl,
+    maxResponseBytes: 256 * 1024,
+  });
+
+  let payload: Record<string, unknown>;
+  try {
+    payload = getMethodResponse(responseJson, callId, "Email/set").payload;
+  } catch (error) {
+    if (error instanceof JmapStateMismatchError) {
+      throw new JmapDraftMismatchError();
+    }
+    throw error;
+  }
+  const notUpdated = objectValue(payload.notUpdated);
+  const error = objectValue(notUpdated?.[emailId]);
+  if (error) {
+    if (error.type === "notFound") throw new JmapEmailNotFoundError();
+    if (error.type === "stateMismatch") throw new JmapDraftMismatchError();
+    throw new JmapPocError("The JMAP API rejected the email update.");
+  }
+  const updated = objectValue(payload.updated);
+  if (!updated || !Object.hasOwn(updated, emailId)) {
+    throw new JmapPocError("The JMAP API did not confirm the email update.");
+  }
+}
+
+async function markDraftSendPending(
+  context: JmapApiContext,
+  draftsMailboxId: string,
+  emailId: string,
+  marker: string,
+): Promise<void> {
+  const current = await getEmailSendState(context, emailId);
+  if (
+    current.keywords["$draft"] !== true ||
+    current.mailboxIds[draftsMailboxId] !== true
+  ) {
+    throw new JmapEmailNotFoundError();
+  }
+  if (Object.entries(current.keywords).some(([keyword, value]) =>
+    keyword.startsWith(DRAFT_SEND_PENDING_PREFIX) && value === true,
+  )) {
+    throw new JmapDraftMismatchError();
+  }
+  await updateEmailKeywordWithState({
+    context,
+    emailId,
+    state: current.state,
+    keyword: marker,
+    value: true,
+    callId: EMAIL_SEND_MARKER_SET_CALL_ID,
+  });
+}
+
+async function clearDraftSendPending(
+  context: JmapApiContext,
+  emailId: string,
+  marker: string,
+): Promise<void> {
+  const current = await getEmailSendState(context, emailId);
+  if (current.keywords[marker] !== true) return;
+  await updateEmailKeywordWithState({
+    context,
+    emailId,
+    state: current.state,
+    keyword: marker,
+    value: null,
+    callId: EMAIL_SEND_MARKER_SET_CALL_ID,
+  });
 }
 
 function draftMatchesSend(
@@ -1942,6 +2143,7 @@ async function destroyEmailInContext(
   context: JmapApiContext,
   emailId: string,
   callId: string,
+  ifInState: string,
 ): Promise<void> {
   const responseJson = await postJmapApi({
     apiUrl: context.apiUrl,
@@ -1950,7 +2152,7 @@ async function destroyEmailInContext(
       using: [CORE_CAPABILITY, MAIL_CAPABILITY],
       methodCalls: [[
         "Email/set",
-        { accountId: context.accountId, destroy: [emailId] },
+        { accountId: context.accountId, ifInState, destroy: [emailId] },
         callId,
       ]],
     },
@@ -1993,7 +2195,7 @@ export async function runJmapOAuthGetDraft({
   const draftsMailboxId = (await fetchMailboxList(context))
     .find((mailbox) => mailbox.role === "drafts")?.id;
   if (!draftsMailboxId) throw new JmapEmailNotFoundError();
-  return getDraftFromContext(context, draftsMailboxId, draftId);
+  return (await getDraftFromContext(context, draftsMailboxId, draftId)).draft;
 }
 
 export async function runJmapOAuthSaveDraft({
@@ -2056,7 +2258,23 @@ export async function runJmapOAuthSaveDraft({
   let previousRemoved = true;
   if (draftId) {
     try {
-      await destroyEmailInContext(context, draftId, EMAIL_DRAFT_DESTROY_CALL_ID);
+      // Re-read after creating the replacement. Another client may have
+      // submitted the previous revision since the initial validation.
+      const previous = await getDraftFromContext(
+        context,
+        preflight.draftsMailboxId,
+        draftId,
+      );
+      if (previous.sendPending) {
+        previousRemoved = false;
+      } else {
+        await destroyEmailInContext(
+          context,
+          draftId,
+          EMAIL_DRAFT_DESTROY_CALL_ID,
+          previous.state,
+        );
+      }
     } catch {
       previousRemoved = false;
     }
@@ -2105,12 +2323,15 @@ export async function runJmapOAuthCreateDraft({
   const fromEmail = getIdentityFromAddress(identity, input.fromEmail);
 
   if (existingDraftId) {
-    const draft = await getDraftFromContext(
+    const draftSnapshot = await getDraftFromContext(
       context,
       preflight.draftsMailboxId,
       existingDraftId,
     );
-    if (!draftMatchesSend(draft, identity, fromEmail, input)) {
+    if (
+      draftSnapshot.sendPending ||
+      !draftMatchesSend(draftSnapshot.draft, identity, fromEmail, input)
+    ) {
       throw new JmapDraftMismatchError();
     }
     return { emailId: existingDraftId };
@@ -2163,6 +2384,7 @@ export async function runJmapOAuthSubmitEmail({
   expectedAccountId,
   identityId,
   emailId,
+  attemptKey,
   sessionUrl = "https://mail.rekad.id/.well-known/jmap",
   trustedOrigins = ["https://mail.rekad.id"],
   allowInsecureHttp = false,
@@ -2172,6 +2394,7 @@ export async function runJmapOAuthSubmitEmail({
   expectedAccountId: string;
   identityId: string;
   emailId: string;
+  attemptKey: string;
   sessionUrl?: string;
   trustedOrigins?: string[];
   allowInsecureHttp?: boolean;
@@ -2197,6 +2420,16 @@ export async function runJmapOAuthSubmitEmail({
   if (!preflight.identities.some((identity) => identity.id === identityId)) {
     throw new JmapSendRejectedError("identity_invalid");
   }
+  const marker = draftSendMarkerForAttempt(attemptKey);
+  // Reserve this revision before submission: our autosave path either wins
+  // first and makes this fail before sending, or sees this marker and leaves
+  // the revision intact.
+  await markDraftSendPending(
+    context,
+    preflight.draftsMailboxId,
+    emailId,
+    marker,
+  );
 
   const responseJson = await postJmapApi({
     apiUrl: context.apiUrl,
@@ -2215,6 +2448,7 @@ export async function runJmapOAuthSubmitEmail({
               [`mailboxIds/${preflight.draftsMailboxId}`]: null,
               [`mailboxIds/${preflight.sentMailboxId}`]: true,
               "keywords/$draft": null,
+              [`keywords/${marker}`]: null,
             },
           },
         },
@@ -2225,18 +2459,74 @@ export async function runJmapOAuthSubmitEmail({
     fetchImpl,
   });
 
-  const submissionResponse = responseEntries(
+  const submissionResponses = responseEntries(
     responseJson,
     EMAIL_SUBMISSION_SET_CALL_ID,
-  ).find((entry) => entry[0] === "EmailSubmission/set");
+  );
+  const primaryResponses = submissionResponses.filter((entry) =>
+    entry[0] === "EmailSubmission/set" || entry[0] === "error",
+  );
+  const emailUpdateResponses = submissionResponses.filter(
+    (entry) => entry[0] === "Email/set",
+  );
+  const unexpectedResponses = submissionResponses.filter((entry) =>
+    entry[0] !== "EmailSubmission/set" &&
+    entry[0] !== "error" &&
+    entry[0] !== "Email/set",
+  );
+  if (
+    primaryResponses.length !== 1 ||
+    emailUpdateResponses.length > 1 ||
+    unexpectedResponses.length > 0
+  ) {
+    throw new JmapPocError("The JMAP API returned invalid email submission responses.");
+  }
+  const submissionResponse = primaryResponses[0];
   if (!submissionResponse) {
-    throw new JmapPocError("The JMAP API omitted the email submission response.");
+    throw new JmapPocError("The JMAP API returned an invalid email submission response.");
+  }
+  if (submissionResponse[0] === "error") {
+    if (emailUpdateResponses.length > 0) {
+      throw new JmapPocError("The JMAP API returned an ambiguous submission response.");
+    }
+    const errorPayload = objectValue(submissionResponse[1]);
+    const errorType = errorPayload?.type;
+    if (
+      typeof errorType !== "string" ||
+      !/^[A-Za-z][A-Za-z0-9]{0,63}$/.test(errorType)
+    ) {
+      throw new JmapPocError("The JMAP API returned an invalid submission error.");
+    }
+    if (errorType === "serverPartialFail") {
+      throw new JmapPocError("The JMAP API reported a partial submission failure.");
+    }
+    try {
+      await clearDraftSendPending(context, emailId, marker);
+    } catch {
+      // Preserve the marker if cleanup cannot be confirmed.
+    }
+    throw new JmapSendRejectedError("server_rejected");
+  }
+  if (submissionResponse[0] !== "EmailSubmission/set") {
+    throw new JmapPocError("The JMAP API returned an invalid email submission response.");
   }
   const payload = objectValue(submissionResponse[1]);
   if (!payload) {
     throw new JmapPocError("The JMAP API returned an invalid email submission response.");
   }
-  const submissionId = getCreatedId(payload, "submission", "email submission");
+  let submissionId: string;
+  try {
+    submissionId = getCreatedId(payload, "submission", "email submission");
+  } catch (error) {
+    if (error instanceof JmapSendRejectedError) {
+      try {
+        await clearDraftSendPending(context, emailId, marker);
+      } catch {
+        // Keep the pending marker if the rejection cleanup cannot be confirmed.
+      }
+    }
+    throw error;
+  }
 
   return {
     submissionId,
@@ -2278,6 +2568,18 @@ export async function runJmapOAuthUpdateSent({
   const sentMailboxId = mailboxes.find((item) => item.role === "sent")?.id;
   if (!draftsMailboxId || !sentMailboxId) return false;
 
+  const emailState = await getEmailSendState(context, emailId);
+  const update: Record<string, boolean | null> = {
+    [`mailboxIds/${draftsMailboxId}`]: null,
+    [`mailboxIds/${sentMailboxId}`]: true,
+    "keywords/$draft": null,
+  };
+  for (const [keyword, present] of Object.entries(emailState.keywords)) {
+    if (keyword.startsWith(DRAFT_SEND_PENDING_PREFIX) && present === true) {
+      update[`keywords/${keyword}`] = null;
+    }
+  }
+
   const responseJson = await postJmapApi({
     apiUrl: context.apiUrl,
     authorization: context.authorization,
@@ -2287,12 +2589,9 @@ export async function runJmapOAuthUpdateSent({
         "Email/set",
         {
           accountId: context.accountId,
+          ifInState: emailState.state,
           update: {
-            [emailId]: {
-              [`mailboxIds/${draftsMailboxId}`]: null,
-              [`mailboxIds/${sentMailboxId}`]: true,
-              "keywords/$draft": null,
-            },
+            [emailId]: update,
           },
         },
         EMAIL_UPDATE_SENT_CALL_ID,
