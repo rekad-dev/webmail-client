@@ -126,8 +126,17 @@ mailbox action was submitted. It remains in Trash. See
 `phase-5-archive-action-check`. Archive behavior remains unverified because
 this account exposes no Archive role.
 
-Remaining live acceptance checks are move/trash on a regular message, if still
-desired, and reply/forward prefill. Under
+The user approved trash/restore only if the exact regular message was uniquely
+in Inbox. `Re: Fwd: Test Send` was uniquely in Sent, so the trash action was
+skipped. The user also approved reply/forward prefill on that exact message.
+Both modes prefilled their expected metadata and quoted text; each was
+autosaved as a JMAP draft and moved from Drafts to Trash. The original message
+was already read and remained read. No send occurred and body text was not
+included in the report. Full result: `phase-5-reply-forward-prefill-check`.
+
+Remaining live acceptance is a regular-message trash/move check with a target
+whose original mailbox can be restored. The account has no Archive role, so
+archive behavior is unavailable for verification there. Under
 `_harness/rules.md` and `PROMPT.md`'s email safety requirements, do not perform
 further mailbox writes or open messages that may fetch content/change read
 state without separate explicit authorization. A specific target, exact

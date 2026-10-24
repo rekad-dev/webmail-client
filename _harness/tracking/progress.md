@@ -107,10 +107,17 @@ scope: progress
   same draft from Trash to Drafts and back; both transitions returned
   JMAP-confirmed success and listings confirmed its location after each step.
   The test is recorded in `phase-5-move-action-check`; the test draft remains
-  in Trash. Remaining live acceptance checks are move/archive/trash on a
-  regular message and reply/forward prefill. The project safety rules require
-  explicit approval before further production mailbox mutations or opening
-  messages that may load content or alter read state. Keep Phase 5
+  in Trash. The regular-message trash test was authorized only for an exact
+  message uniquely in Inbox; `Re: Fwd: Test Send` was uniquely in Sent, so the
+  action was skipped. Reply and Forward prefill were verified for that exact
+  message; each generated draft was moved to Trash, the original unread state
+  remained false, and no send occurred. See
+  `phase-5-reply-forward-prefill-check`. The first account has no Archive role,
+  so archive behavior remains unavailable for verification. Only a regular
+  message trash/move check remains, requiring a target whose original
+  mailbox can be restored and explicit approval. The project safety rules
+  require explicit approval before further production mailbox mutations or
+  opening messages that may load content or alter read state. Keep Phase 5
   `in_progress`; do not start Phase 6.
 
 - A separately approved read/star check on the regular message with exact
