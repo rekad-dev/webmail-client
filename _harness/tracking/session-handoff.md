@@ -91,17 +91,18 @@ actionable issues; see `phase-5-subject-candidates-endpoint-final-review`.
 Production deployment `dpl_9nBW19CiNWPoZghFave54kNsy7QD` is Ready and aliased
 to `https://webmail.rekad.id`; Vercel's remote build passed.
 
-The approved production metadata call is still pending. Ego Lite's update was
-approved and completed. The previously used TaskSpace 7 was finished after
-the upgrade, `listTaskSpaces()` now returns no entries, and `claimTaskSpace(7)`
-reports that the taskspace was not found. The Ego browser skill requires one
-TaskSpace for the whole goal and says to stop and ask if that space cannot be
-resumed. Ask the user to authorize a replacement TaskSpace before running the
-same previously approved `/api/auth/status` and `POST
-/api/mail/thread-subject-candidates` request (`{"query":"Test Send"}`) in the
-first dedicated account. Read only candidate/member subjects, message counts,
-and truncation/incomplete metadata. Do not open the Inbox, request message
-bodies/previews, or change mailbox state.
+The production metadata check completed after the user approved a replacement
+TaskSpace. In TaskSpace 2, the first-account `/api/auth/status` result reported
+`authenticated: true` and `mailboxAccess: true`. The approved POST to
+`/api/mail/thread-subject-candidates` with `{"query":"Test Send"}` returned
+HTTP 200. It returned one thread with two messages; candidate subjects were
+`Re: Fwd: Test Send` and `Fwd: Test Send`, and member subjects were `Fwd: Test
+Send` and `Re: Fwd: Test Send`. The exact subject provided by the user was
+present. Disappearance counts were zero, member subject lookup and overall
+results were complete, and subjects/results were not truncated. The Ego
+TaskSpace was finished with no pages retained. No Inbox listing was opened,
+message body or preview was fetched, and no mailbox state changed. Full record
+is in `phase-5-production-search-check`.
 
 Phase 4 compose and send implementation and live verification are complete;
 see the Traycer artifacts `phase-4-compose-send-plan` and

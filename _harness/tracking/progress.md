@@ -84,13 +84,17 @@ scope: progress
   actionable issues. Local verification passed: 118/118 tests,
   `pnpm typecheck`, `pnpm build`, and `git diff --check`. Production deployment
   `dpl_9nBW19CiNWPoZghFave54kNsy7QD` is Ready and aliased to
-  `https://webmail.rekad.id`; Vercel's remote build passed. The approved
-  metadata-only browser call is pending: Ego Lite no longer lists the prior
-  taskspace, and `claimTaskSpace(7)` returned `task space not found`. The
-  browser skill requires reusing the same taskspace for one goal, so request
-  approval before creating a replacement for the same exact read-only check.
-  No production mailbox query was issued by this deployment step; no body,
-  preview, or mailbox state was accessed or changed.
+  `https://webmail.rekad.id`; Vercel's remote build passed. After approval to
+  create a replacement Ego TaskSpace, the first-account `/api/auth/status`
+  check returned `authenticated: true` and `mailboxAccess: true`. The
+  subject-only candidate POST returned `200`, two candidates grouped into one
+  thread, and two member messages. Candidate subjects were `Re: Fwd: Test Send`
+  and `Fwd: Test Send`; member subjects were `Fwd: Test Send` and
+  `Re: Fwd: Test Send`. The exact subject supplied by the user was present.
+  Candidate/thread disappearance counts were zero; member lookup and overall
+  results were complete, with no truncation. No message body or preview was
+  fetched, no Inbox listing was opened, and no mailbox state changed. Full
+  record: `phase-5-production-search-check`.
 
 ## Phase 4 compose and send complete
 
