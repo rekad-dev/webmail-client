@@ -14,14 +14,16 @@ record; ambiguous outcomes fail closed and never auto-resend. Local checks pass:
 87/87 tests, typecheck, and production build. The review artifact
 `phase-4-compose-ui-review` contains three resolved findings.
 
-The authenticated read-only `/api/mail/identities` route performs JMAP
-submission-capability, Identity, Drafts, and Sent checks using the user's OAuth
-session. That check has not yet run against the production session because this
-implementation has not been deployed. The send-attempt migration is also not
-applied. No browser session was accessed, no live email was sent, and no
-Stalwart settings changed. Before a real submission, get the user's exact
-approved test recipient; the user has authorized only waiting for that target,
-not sending to an unspecified address.
+The user approved deployment, the additive application database migration, and
+one read-only production check. `pnpm db:migrate` succeeded, and production
+deployment `dpl_5xekSb6sLYAwedgKp22aczkXeeBx` is Ready at
+`https://webmail.rekad.id`. The `/api/mail/identities` GET returned
+`401 sign_in_required` because the available browser session was not signed in.
+The browser is parked for the user to sign in with the first dedicated test
+account; after that, continue with only the approved read-only preflight. No
+mailbox was mutated and no email was sent. The exact approved recipient is
+still required before a live send. No Stalwart settings changed, and the admin
+API key was not used.
 
 Phase 3 safe email reading is complete. Local code now includes an
 authenticated detail route, bounded JMAP body retrieval, server-side HTML
@@ -157,13 +159,12 @@ access. The provider-settings audit can remain deferred.
 
 ## Next safe step
 
-Phase 4 code is committed and verified locally. The next production step is to
-deploy the implementation, apply the additive send-attempt table migration,
-and perform only the read-only OAuth identity/capability check. The repository's
-browser policy requires explicit approval naming the route, signed-in session,
-and checklist before using the interactive browser; deployment is also not yet
-authorized. Do not send a live test email until the exact recipient is
-explicitly authorized. Keep `requireClientRegistration` and
+Phase 4 code is committed, the migration is applied, and the production build
+is deployed. The user approved one read-only GET to `/api/mail/identities` for
+the signed-in first dedicated test account. The available browser returned
+`401 sign_in_required` and is parked for that account to sign in; finish the
+preflight after sign-in. Do not send a live test email until the exact
+recipient is explicitly authorized. Keep `requireClientRegistration` and
 `anonymousClientRegistration` unchanged, and do not use the admin API key.
 
 ## Skill installation note
