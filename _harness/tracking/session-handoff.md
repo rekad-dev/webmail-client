@@ -28,6 +28,18 @@ status returned `401`. The built-in Auth.js confirmation form POST had
 request left the session unchanged. The standard same-origin client flow
 passed without relaxing the origin guard. The browser was left signed out.
 
+On 2026-10-24, production account isolation passed in the shared browser. The
+second dedicated test account had an active `/api/auth/session` and
+`/api/auth/status` returned `200` with `authenticated: true` and
+`mailboxAccess: true`. Signing it out returned the session endpoint to `null`
+and status to `401`. The first configured dedicated test account then signed
+in successfully; its session identity differed from the second account, and
+its status also returned `200` with mailbox access. The browser is currently
+signed in as the first test account. No message data was read and no mailbox
+state was changed. During the first account's login, an agent-side parsing bug
+caused one rejected credential attempt; the corrected configured credentials
+succeeded, and the rejected attempt created no app session.
+
 The Phase 1 home page now starts the existing `stalwart` OAuth flow with a
 server-side sign-in action and shows an active-session confirmation after
 callback. The sign-in-page update was first deployed as
@@ -80,11 +92,10 @@ access. The provider-settings audit can remain deferred.
 
 The core production login, session persistence, OAuth-backed read-only mailbox
 access, bounded expiry, and guarded logout button now pass. Phase 1 remains open
-for invalid-credential handling, multi-account isolation, and forced refresh
-behavior. Wait for the second dedicated test account before account-isolation
-testing. Do not start Phase 2 automatically. Keep `requireClientRegistration`
-and `anonymousClientRegistration` unchanged; do not use the admin API key for
-app authentication or mailbox access.
+for invalid-credential handling and forced refresh behavior; multi-account
+isolation passed on 2026-10-24. Do not start Phase 2 automatically. Keep
+`requireClientRegistration` and `anonymousClientRegistration` unchanged; do not
+use the admin API key for app authentication or mailbox access.
 
 ## Skill installation note
 

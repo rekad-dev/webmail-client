@@ -47,6 +47,17 @@ scope: progress
   mailbox access before the click; afterward the app returned to the sign-in
   page, `/api/auth/session` was `null`, `/api/auth/status` was `401`, and no
   error message appeared. The browser was left signed out.
+- Production account isolation passed on 2026-10-24 in the shared browser. The
+  second dedicated test account had a populated `/api/auth/session`, and
+  `/api/auth/status` returned `200` with `authenticated: true` and
+  `mailboxAccess: true`. Signing out the second account returned the session
+  endpoint to `null` and status to `401`. The configured first dedicated test
+  account then signed in successfully; the two session email identities
+  differed, and the first account's status returned `200` with mailbox access.
+  The browser is signed in as the first test account. No message data was read
+  or mailbox state changed. A parsing mistake caused one rejected credential
+  attempt before the corrected login; no app session was created by that
+  attempt.
 - Deleted the accidental Vercel project `rekad/mail-client`. The requested
   `mail-client-nine.vercel.app` alias and its generated project alias are now
   absent; `rekad/webmail-client` and `webmail.rekad.id` remain.
@@ -76,8 +87,8 @@ scope: progress
 - No mailbox content was returned, no message or mailbox was mutated, and no
   Stalwart client or global registration setting was changed. The admin key
   was not used for application authentication or mailbox access.
-- Phase 1 remains active for invalid-credential handling, multi-account
-  isolation, and forced refresh behavior. The normal production login,
+- Phase 1 remains active for invalid-credential handling and forced refresh
+  behavior; multi-account isolation passed. The normal production login,
   mailbox-access, bounded-expiry, and logout paths have passed; do not begin
   Phase 2 automatically.
 - No Stalwart client or server-wide setting has been changed. Keep
@@ -87,8 +98,7 @@ scope: progress
 
 ## Next
 
-Complete remaining Phase 1 acceptance checks for invalid credentials and
-forced refresh. Verify multi-account isolation once the second dedicated test
-account is available.
+Complete the remaining Phase 1 acceptance checks for invalid credentials and
+forced refresh. Multi-account isolation is verified.
 Keep Phase 2 pending until Phase 1 is closed; do not change global Stalwart
 registration settings.
