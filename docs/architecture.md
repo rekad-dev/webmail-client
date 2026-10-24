@@ -99,13 +99,31 @@ invalid-credential rejection, multi-account isolation, natural-expiry refresh,
 and guarded logout passed. Phase 2 is in progress for read-only mailbox
 listing. No Stalwart client or global registration setting was changed.
 
+## Phase 2 mailbox listing
+
+The authenticated `GET /api/mail` route reads the opaque app-session reference
+from the Auth.js cookie and loads the OAuth access token and account ID from the
+server-side session store. The JMAP session's primary mail account must match
+that stored account ID before `Mailbox/get`, `Email/query`, or `Email/get` is
+sent. A requested mailbox ID is accepted only when it appears in that same
+account's mailbox list. Account mismatch revokes the app session.
+
+The route requests mailbox ID, name, role, total count, and unread count. It
+queries a fixed 25-message page newest-first and fetches only sender, subject,
+received date, keywords, and plaintext preview. It does not request body values,
+HTML, or attachment data. Responses are application-shaped, uncached, and vary
+by cookie. The browser receives no Stalwart token, JMAP account ID, or raw JMAP
+response. The dedicated account's live read-only check currently finds an
+empty inbox, so the UI renders the real empty state.
+
 ## Phase 0 proof of concept
 
 The local `pnpm jmap:discover` and `pnpm jmap:smoke` commands run outside the
 browser. They validate JMAP discovery URLs and, when explicitly configured with
-a dedicated test account, perform a read-only `Mailbox/get`. The smoke command
-does not log authentication headers, credentials, message content, mailbox
-names, or raw server responses.
+a dedicated test account, perform read-only `Mailbox/get`, `Email/query`, and
+summary-only `Email/get`. The smoke command reports counts only; it does not
+log authentication headers, credentials, message content, mailbox names, or
+raw server responses.
 
 The sample public endpoint uses HTTPS. Private HTTP is rejected unless
 `STALWART_JMAP_ALLOW_INSECURE_HTTP=true`, and then only for private/local host

@@ -5,7 +5,7 @@ scope: progress
 
 # Progress
 
-## Phase 2 inbox and mailbox listing in progress
+## Phase 2 inbox and mailbox listing implemented locally
 
 - Phase 1 authentication is complete, including production account isolation
   and natural-expiry refresh verification.
@@ -14,7 +14,14 @@ scope: progress
 - Scope is read-only mailbox navigation and paginated message summaries with
   plaintext preview, loading/empty/error states, and manual refresh. Message
   detail, mutations, search, and attachments remain out of scope.
-- No mailbox or Stalwart settings will be changed.
+- The local implementation passes 45 tests, `pnpm typecheck`, `pnpm build`, and
+  an unauthenticated `/api/mail` check (`401 sign_in_required`, `no-store`, and
+  `Vary: Cookie`).
+- The dedicated-account `pnpm jmap:smoke` passed with five mailboxes and an
+  empty inbox (0 IDs and 0 summaries). Output contained counts only. No mailbox
+  data was mutated and no Stalwart setting changed.
+- The UI has not been deployed or verified in the shared browser. Phase 2 stays
+  in progress until the user approves deployment and a browser checklist.
 
 ## Completed Phase 1 authentication
 

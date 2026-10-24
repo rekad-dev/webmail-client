@@ -1,6 +1,6 @@
 # Progress
 
-## Current milestone: Phase 2 inbox and mailbox listing in progress
+## Current milestone: Phase 2 inbox listing implemented locally
 
 - Phase 1 authentication completed on 2026-10-24. Production Authorization
   Code + PKCE sign-in uses the existing `webmail` client and exact callback
@@ -9,17 +9,22 @@
   rejection, isolation between two dedicated accounts, and natural-expiry
   refresh. The active session remained valid after its token expiry window;
   `/api/auth/status` returned `200` with authenticated mailbox access.
-- Local verification passed: 24 tests, `pnpm typecheck`, and `pnpm build`.
-  A production database outage was not simulated.
 - The Phase 2 plan is recorded in the Traycer artifact
   `phase-2-inbox-listing-plan`. Scope is authenticated, read-only mailbox
   navigation and paginated summaries with preview text, manual refresh, and
   loading/empty/error states. Message detail, mutations, search, attachments,
-  and deployment are excluded.
-- No email content has been read or changed in Phase 2 so far. No Stalwart
-  client or global registration setting changed; `requireClientRegistration`
-  and `anonymousClientRegistration` remain unchanged. The admin API key is not
-  used for application authentication or mailbox access.
+  and deployment are excluded from the implementation changes.
+- Local verification passed: 45 tests, `pnpm typecheck`, `pnpm build`, and a
+  local unauthenticated `/api/mail` request returned `401 sign_in_required`
+  with `Cache-Control: no-store` and `Vary: Cookie`.
+- `pnpm jmap:smoke` succeeded against the dedicated test account: five
+  mailboxes, zero inbox messages, and zero summaries fetched. It logged counts
+  only. No mailbox or Stalwart settings were changed. No message bodies were
+  requested or mailbox state mutated. The admin API key was not used.
+- The authenticated UI is implemented locally but has not been deployed or
+  checked in the shared browser. Keep Phase 2 in progress until the user
+  approves the exact deployment and browser checklist; the Vercel project,
+  domain, and Stalwart settings were not changed.
 
 ## Phase 0 record
 
@@ -38,6 +43,9 @@
 
 ## Phase 2 work
 
-Implement the authenticated read-only JMAP mailbox list and paginated message
-summaries. Do not load full message bodies or mutate mailbox state. Keep Phase 3
-pending and leave all global Stalwart registration settings unchanged.
+After explicit approval, deploy the local Phase 2 implementation to the
+existing `rekad/webmail-client` project and verify it using the signed-in
+dedicated account. Its inbox is currently empty, so confirm the real mailbox
+navigation, empty state, and refresh; pagination requires a populated test
+mailbox. Keep Phase 3 pending and leave all global Stalwart registration
+settings unchanged.
