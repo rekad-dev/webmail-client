@@ -3,11 +3,13 @@ import { sanitizeEmailHtml } from "../mail/sanitize-email-html.mts";
 
 const CORE_CAPABILITY = "urn:ietf:params:jmap:core";
 const MAIL_CAPABILITY = "urn:ietf:params:jmap:mail";
+const SUBMISSION_CAPABILITY = "urn:ietf:params:jmap:submission";
 const METHOD_CALL_ID = "phase0-mailboxes";
 const EMAIL_QUERY_CALL_ID = "phase2-email-query";
 const EMAIL_GET_CALL_ID = "phase2-email-get";
 const EMAIL_DETAIL_GET_CALL_ID = "phase3-email-detail-get";
 const EMAIL_MARK_READ_CALL_ID = "phase3-email-mark-read";
+const IDENTITY_GET_CALL_ID = "phase4-identity-get";
 const MAX_SESSION_REDIRECTS = 5;
 const REQUEST_TIMEOUT_MS = 15_000;
 const JMAP_RESPONSE_MAX_BYTES = 2 * 1024 * 1024;
@@ -106,6 +108,23 @@ export interface JmapMailboxListing {
 export interface JmapEmailAddress {
   name: string | null;
   email: string;
+}
+
+export interface JmapComposeIdentity {
+  id: string;
+  name: string;
+  email: string;
+  isWildcard: boolean;
+  replyTo: JmapEmailAddress[];
+  bcc: JmapEmailAddress[];
+  textSignature: string;
+}
+
+export interface JmapComposePreflight {
+  submissionAvailable: boolean;
+  draftsMailboxId: string | null;
+  sentMailboxId: string | null;
+  identities: JmapComposeIdentity[];
 }
 
 export interface JmapEmailAttachmentSummary {
@@ -1130,6 +1149,8 @@ function verifyEmailMarkRead(responseJson: unknown, emailId: string): void {
 interface JmapApiContext {
   apiUrl: URL;
   accountId: string;
+  capabilities: Record<string, unknown>;
+  accountCapabilities: Record<string, unknown>;
   authorization: string;
   fetchImpl: typeof fetch;
 }
@@ -1173,12 +1194,112 @@ async function createJmapApiContext({
     allowInsecureHttp,
   );
 
+  const accountId = getPrimaryMailAccountId(session);
+  const account = session.accounts?.[accountId];
+  if (!account) {
+    throw new JmapPocError(
+      "The authenticated JMAP session did not include account capabilities.",
+    );
+  }
+
   return {
     apiUrl: endpoints.apiUrl,
-    accountId: getPrimaryMailAccountId(session),
+    accountId,
+    capabilities: session.capabilities ?? {},
+    accountCapabilities: account.accountCapabilities ?? {},
     authorization,
     fetchImpl,
   };
+}
+
+function identityGetRequest(accountId: string) {
+  return {
+    using: [CORE_CAPABILITY, MAIL_CAPABILITY, SUBMISSION_CAPABILITY],
+    methodCalls: [
+      ["Identity/get", { accountId, ids: null }, IDENTITY_GET_CALL_ID],
+    ],
+  };
+}
+
+function identityAddresses(value: unknown): JmapEmailAddress[] {
+  if (value === null || value === undefined) return [];
+  if (!Array.isArray(value)) {
+    throw new JmapPocError("The JMAP API returned an invalid Identity address list.");
+  }
+
+  return value.slice(0, 50).flatMap((rawAddress) => {
+    if (!rawAddress || typeof rawAddress !== "object" || Array.isArray(rawAddress)) {
+      return [];
+    }
+    const address = rawAddress as Record<string, unknown>;
+    if (
+      typeof address.email !== "string" ||
+      address.email.length === 0 ||
+      address.email.length > 320 ||
+      /[\u0000-\u0020\u007f]/.test(address.email)
+    ) {
+      return [];
+    }
+    return [{ name: boundedString(address.name, 128), email: address.email }];
+  });
+}
+
+function parseIdentityList(responseJson: unknown): JmapComposeIdentity[] {
+  const { payload } = getMethodResponse(
+    responseJson,
+    IDENTITY_GET_CALL_ID,
+    "Identity/get",
+  );
+  if (!Array.isArray(payload.list)) {
+    throw new JmapPocError("The JMAP API returned an invalid Identity/get response.");
+  }
+
+  if (payload.list.length > 100) {
+    throw new JmapPocError("The JMAP API returned too many sending identities.");
+  }
+
+  return payload.list.flatMap((rawIdentity) => {
+    if (!rawIdentity || typeof rawIdentity !== "object" || Array.isArray(rawIdentity)) {
+      return [];
+    }
+    const identity = rawIdentity as Record<string, unknown>;
+    if (
+      typeof identity.id !== "string" ||
+      identity.id.length === 0 ||
+      identity.id.length > 256 ||
+      typeof identity.email !== "string" ||
+      identity.email.length === 0 ||
+      identity.email.length > 320 ||
+      /[\u0000-\u0020\u007f]/.test(identity.email)
+    ) {
+      return [];
+    }
+
+    const isWildcard = /^\*@[A-Za-z0-9.-]+$/.test(identity.email);
+    const hasConcreteMailbox = /^[^*@\s]+@[A-Za-z0-9.-]+$/.test(identity.email);
+    if (!isWildcard && !hasConcreteMailbox) return [];
+
+    return [{
+      id: identity.id,
+      name: boundedString(identity.name, 256) ?? "",
+      email: identity.email,
+      isWildcard,
+      replyTo: identityAddresses(identity.replyTo),
+      bcc: identityAddresses(identity.bcc),
+      textSignature: boundedString(identity.textSignature, 16 * 1024) ?? "",
+    }];
+  });
+}
+
+async function fetchIdentityList(context: JmapApiContext): Promise<JmapComposeIdentity[]> {
+  const responseJson = await postJmapApi({
+    apiUrl: context.apiUrl,
+    authorization: context.authorization,
+    requestBody: identityGetRequest(context.accountId),
+    methodName: "Identity/get",
+    fetchImpl: context.fetchImpl,
+  });
+  return parseIdentityList(responseJson);
 }
 
 function makeOAuthAuthorization(accessToken: string): string {
@@ -1305,6 +1426,59 @@ export async function runJmapOAuthAccessCheck({
   });
 
   return { accountId: context.accountId };
+}
+
+export async function runJmapOAuthComposePreflight({
+  accessToken,
+  expectedAccountId,
+  sessionUrl = "https://mail.rekad.id/.well-known/jmap",
+  trustedOrigins = ["https://mail.rekad.id"],
+  allowInsecureHttp = false,
+  fetchImpl = fetch,
+}: {
+  accessToken: string;
+  expectedAccountId: string;
+  sessionUrl?: string;
+  trustedOrigins?: string[];
+  allowInsecureHttp?: boolean;
+  fetchImpl?: typeof fetch;
+}): Promise<JmapComposePreflight> {
+  const context = await createJmapApiContext({
+    sessionUrl,
+    trustedOrigins,
+    allowInsecureHttp,
+    authorization: makeOAuthAuthorization(accessToken),
+    fetchImpl,
+  });
+  if (context.accountId !== expectedAccountId) {
+    throw new JmapAccountMismatchError();
+  }
+
+  const accountSubmissionCapability =
+    context.accountCapabilities[SUBMISSION_CAPABILITY];
+  const submissionAvailable =
+    Object.hasOwn(context.capabilities, SUBMISSION_CAPABILITY) &&
+    Boolean(context.capabilities[SUBMISSION_CAPABILITY]) &&
+    typeof accountSubmissionCapability === "object" &&
+    accountSubmissionCapability !== null &&
+    !Array.isArray(accountSubmissionCapability);
+
+  const mailboxes = await fetchMailboxList(context);
+  const draftsMailboxId =
+    mailboxes.find((mailbox) => mailbox.role === "drafts")?.id ?? null;
+  const sentMailboxId =
+    mailboxes.find((mailbox) => mailbox.role === "sent")?.id ?? null;
+
+  const identities = submissionAvailable
+    ? await fetchIdentityList(context)
+    : [];
+
+  return {
+    submissionAvailable,
+    draftsMailboxId,
+    sentMailboxId,
+    identities,
+  };
 }
 
 export async function runJmapOAuthMailboxListing({
