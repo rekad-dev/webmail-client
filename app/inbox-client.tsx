@@ -223,8 +223,8 @@ function MessageDetailView({
   actionError: string | null;
   onAction(action: MailAction): void;
   onMove(destinationMailboxId: string): void;
-  onReply(detail: EmailDetail): void;
-  onForward(detail: EmailDetail): void;
+  onReply(detail: EmailDetail, trigger: HTMLButtonElement): void;
+  onForward(detail: EmailDetail, trigger: HTMLButtonElement): void;
 }) {
   const backButton = (
     <button
@@ -306,8 +306,8 @@ function MessageDetailView({
                 ))}
               </select>
             </label>
-            <button disabled={actionPending} onClick={() => onReply(detail)} type="button">Reply</button>
-            <button disabled={actionPending} onClick={() => onForward(detail)} type="button">Forward</button>
+            <button disabled={actionPending} onClick={(event) => onReply(detail, event.currentTarget)} type="button">Reply</button>
+            <button disabled={actionPending} onClick={(event) => onForward(detail, event.currentTarget)} type="button">Forward</button>
           </div>
           {actionError ? <p className="mail-alert" role="alert">{actionError}</p> : null}
           <dl className="message-metadata">
@@ -570,6 +570,7 @@ export function InboxClient() {
   const [actionError, setActionError] = useState<string | null>(null);
   const skipMailboxFetch = useRef<string | null>(null);
   const composeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const composeTriggerRef = useRef<HTMLButtonElement | null>(null);
   const mailTitleRef = useRef<HTMLHeadingElement | null>(null);
   const detailBackButtonRef = useRef<HTMLButtonElement | null>(null);
   const detailHeadingRef = useRef<HTMLHeadingElement | null>(null);
@@ -927,7 +928,13 @@ export function InboxClient() {
     }
   }
 
-  function openCompose(mode: "new" | "reply" | "forward", seed?: Partial<ComposeFields>, headers?: { inReplyTo: string[]; references: string[] }) {
+  function openCompose(
+    mode: "new" | "reply" | "forward",
+    seed?: Partial<ComposeFields>,
+    headers?: { inReplyTo: string[]; references: string[] },
+    trigger?: HTMLButtonElement | null,
+  ) {
+    composeTriggerRef.current = trigger ?? composeButtonRef.current;
     setComposeMode(mode);
     setComposeDraftId(undefined);
     setComposeSeed(seed);
@@ -935,7 +942,7 @@ export function InboxClient() {
     setIsComposeOpen(true);
   }
 
-  function replyToMessage(detail: EmailDetail) {
+  function replyToMessage(detail: EmailDetail, trigger?: HTMLButtonElement) {
     const targets = detail.replyTo.length > 0 ? detail.replyTo : detail.from;
     const subject = detail.subject?.trim() ?? "";
     const replySubject = /^re:/i.test(subject) ? subject : subject ? `Re: ${subject}` : "";
@@ -955,10 +962,10 @@ export function InboxClient() {
     }, {
       inReplyTo: originalId ? [originalId] : [],
       references,
-    });
+    }, trigger);
   }
 
-  function forwardMessage(detail: EmailDetail) {
+  function forwardMessage(detail: EmailDetail, trigger?: HTMLButtonElement) {
     const subject = detail.subject?.trim() ?? "";
     const forwardSubject = /^fwd:/i.test(subject) ? subject : subject ? `Fwd: ${subject}` : "";
     const headerLines = [
@@ -972,7 +979,7 @@ export function InboxClient() {
     openCompose("forward", {
       subject: forwardSubject,
       body: `\n\n${headerLines.join("\n")}\n\n${detail.textBody ?? ""}`,
-    }, { inReplyTo: [], references: [] });
+    }, { inReplyTo: [], references: [] }, trigger);
   }
 
   function changePage(nextPosition: number) {
@@ -1040,7 +1047,8 @@ export function InboxClient() {
     setRefreshVersion((value) => value + 1);
   }
 
-  function openSavedDraft(draftId: string) {
+  function openSavedDraft(draftId: string, trigger?: HTMLButtonElement | null) {
+    composeTriggerRef.current = trigger ?? composeButtonRef.current;
     setComposeMode("draft");
     setComposeDraftId(draftId);
     setComposeSeed(undefined);
@@ -1154,7 +1162,7 @@ export function InboxClient() {
               <button
                 className="compose-launch-button"
                 disabled={!listing || isLoading}
-                onClick={() => openCompose("new")}
+                onClick={(event) => openCompose("new", undefined, undefined, event.currentTarget)}
                 ref={composeButtonRef}
                 type="button"
               >
@@ -1242,7 +1250,9 @@ export function InboxClient() {
                   data-email-id={message.id}
                   data-thread-id={message.threadId}
                   aria-label={`Open ${message.isUnread ? "unread" : "read"} conversation from ${senderLabel(message)}: ${message.subject?.trim() || "(no subject)"}`}
-                  onClick={() => message.isDraft ? openSavedDraft(message.id) : openThread(message.threadId)}
+                  onClick={(event) => message.isDraft
+                    ? openSavedDraft(message.id, event.currentTarget)
+                    : openThread(message.threadId)}
                 >
                   <span className="message-state-dot" aria-hidden="true" />
                   <span className="message-copy">
@@ -1363,7 +1373,9 @@ export function InboxClient() {
                         className={`thread-message-open${message.isUnread ? " is-unread" : ""}`}
                         data-email-id={message.id}
                         aria-label={`${message.isDraft ? "Edit saved draft" : "Open message"} from ${senderLabel(message)}: ${message.subject?.trim() || "(no subject)"}`}
-                        onClick={() => message.isDraft ? openSavedDraft(message.id) : openMessage(message.id)}
+                        onClick={(event) => message.isDraft
+                          ? openSavedDraft(message.id, event.currentTarget)
+                          : openMessage(message.id)}
                         type="button"
                       >
                         <span className="message-state-dot" aria-hidden="true" />
@@ -1424,8 +1436,8 @@ export function InboxClient() {
             actionError={actionError}
             onAction={(action) => void performMailAction(action, { emailId: openEmailId })}
             onMove={(destinationId) => void performMailAction("move", { emailId: openEmailId }, destinationId)}
-            onReply={replyToMessage}
-            onForward={forwardMessage}
+            onReply={(detail, trigger) => replyToMessage(detail, trigger)}
+            onForward={(detail, trigger) => forwardMessage(detail, trigger)}
           />
         ) : null}
 
@@ -1446,7 +1458,7 @@ export function InboxClient() {
             selectSentMailbox();
           }}
           onSubmitted={selectSentMailbox}
-          triggerRef={composeButtonRef}
+          triggerRef={composeTriggerRef}
           mode={composeMode}
           initialDraftId={composeDraftId}
           initialFields={composeSeed}
