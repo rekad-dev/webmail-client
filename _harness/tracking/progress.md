@@ -5,7 +5,7 @@ scope: progress
 
 # Progress
 
-## Phase 3 safe email reading in progress
+## Phase 3 safe email reading complete
 
 - The plan is recorded in the Traycer artifact
   `phase-3-safe-reading-plan`. Local implementation includes an authenticated
@@ -16,14 +16,24 @@ scope: progress
 - The independent review's findings are fixed: localhost port trust is exact,
   focus moves into message detail and returns to the triggering row, and a
   pending read-state update reconciles the listing or refreshes it on failure.
-- The local read-only dedicated-account smoke check reports five mailboxes and
-  an empty Inbox. The signed-in production Inbox shows nine messages, including
-  subject “Test”, but production still serves the Phase 2 list with no
-  message-opening control; `/inbox` returns 404. No body was opened and no
-  message state changed. The user authorized opening “Test” and marking it read
-  once Phase 3 is live; production deployment needs separate approval.
-- Phase 3 remains in progress pending populated-message verification. No
-  Stalwart client or global settings changed.
+- The final production deployment is Ready as `dpl_CuiyH16U1BCwhx6rH9V9bLGEjpRJ`
+  and aliased to `https://webmail.rekad.id`. On the signed-in first dedicated
+  test account, the authorized unread “Test” message opened; sender/recipient
+  metadata and both body formats rendered, and the Inbox unread count changed
+  from 3 to 2 with no error. The HTML frame had an empty sandbox and restrictive
+  CSP, and the sanitized content contained no scripts, resource elements,
+  event-handler attributes, or network URL attributes. Reopening the now-read
+  message on the final deployment verified focus on the heading and restoration
+  to the Inbox row; the unread count remained 2. No email was sent or deleted.
+- The local password-based `pnpm jmap:smoke` context still reports five
+  mailboxes and zero Inbox messages, while the production OAuth session listed
+  nine. Keep those observations distinct; the production session provided the
+  live Phase 3 verification. No Stalwart client or global setting changed, and
+  the admin API key was not used.
+- The first browser pass exposed a focus-restoration bug because the trigger row
+  was unmounted. Commit `edc443c` fixes this by locating the remounted row by
+  message ID; deployment `dpl_CuiyH16U1BCwhx6rH9V9bLGEjpRJ` includes the fix.
+  Phase 3 is complete. Stop here before Phase 4.
 
 ## Phase 2 inbox and mailbox listing complete
 
@@ -47,7 +57,8 @@ scope: progress
   disabled previous/next controls. No message was opened, sent, or changed.
 - Live message-row display and page turns remain unexercised because the test
   Inbox has no messages. JMAP summary mapping, route pagination input, and the
-  max page-position boundary are covered by tests. Phase 3 is now in progress.
+  max page-position boundary are covered by tests. Phase 3 subsequently began
+  and is now complete.
 
 ## Completed Phase 1 authentication
 

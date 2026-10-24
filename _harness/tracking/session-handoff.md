@@ -7,7 +7,7 @@ scope: session-handoff
 
 ## Current status
 
-Phase 3 safe email reading is in progress. Local code now includes an
+Phase 3 safe email reading is complete. Local code now includes an
 authenticated detail route, bounded JMAP body retrieval, server-side HTML
 sanitization and sandboxed display, attachment metadata, and a same-origin
 `Email/set` read-state path that patches only `$seen` after detail loads.
@@ -15,15 +15,18 @@ sanitization and sandboxed display, attachment metadata, and a same-origin
 independent security review's three findings were fixed: local origin checks
 require the exact app origin, message detail moves focus and restores it on
 return, and an in-flight read update reconciles or refreshes the listing. The
-read-only `pnpm jmap:smoke` check found five mailboxes and zero Inbox messages.
-The signed-in production Inbox does show the target subject “Test”, but
-production serves the Phase 2 message list with no opening control; `/inbox`
-returns 404. No body was opened and the message remains unread. No Phase 3
-deployment or message-detail browser review has happened. The user authorized
-opening “Test” and its `$seen` mutation once Phase 3 is live. Ask for separate
-approval before deploying Phase 3 to production.
+final production deployment is `dpl_CuiyH16U1BCwhx6rH9V9bLGEjpRJ` at
+`https://webmail.rekad.id`. In the first dedicated account, the authorized
+“Test” message opened and rendered metadata plus plain and formatted bodies;
+the unread count changed from 3 to 2. The HTML frame had an empty sandbox and
+restrictive CSP. The initial browser check found a focus-return bug because the
+trigger row was unmounted; commit `edc443c` fixes it by locating the recreated
+row by email ID, and the final deployment passed the focus-to-heading and
+focus-return checks. The local `pnpm jmap:smoke` account still reports an empty
+Inbox, while the production OAuth session listed nine messages. No email was
+sent or deleted. No Stalwart client or global setting changed.
 
-Phase 0, Phase 1, and Phase 2 are complete. The authenticated `/api/mail` route
+Phases 0 through 3 are complete. The authenticated `/api/mail` route
 verifies the JMAP primary account
 against the app session, validates selected mailboxes against that account,
 and returns only mailbox counts plus paginated sender/subject/date/unread/plain
@@ -138,13 +141,10 @@ access. The provider-settings audit can remain deferred.
 
 ## Next safe step
 
-Local implementation, security review fixes, tests, type checking, and build
-are complete. The production Inbox contains “Test” but still runs the Phase 2
-UI, so the user must explicitly authorize deployment to the existing
-`rekad/webmail-client` project before the approved message-detail check can run.
-The user has already authorized opening “Test” and its `$seen` change once the
-new code is live. Do not use the admin API key. Keep
-`requireClientRegistration` and `anonymousClientRegistration` unchanged.
+Phase 3 is complete. Stop here and wait for the user's direction before Phase
+4. The configured test message was marked read by the approved check; no email
+was sent or deleted. Keep `requireClientRegistration` and
+`anonymousClientRegistration` unchanged, and do not use the admin API key.
 
 ## Skill installation note
 

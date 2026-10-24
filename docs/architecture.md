@@ -146,14 +146,16 @@ account mismatch. A failed read-state update leaves the body readable and
 reports that the message remains unread. Attachment name, type, and size are
 displayed; attachment downloads are outside Phase 3.
 
-Local tests (63/63), type checking, and production build pass. Review findings
-were resolved: development read-state requests require an exact same origin,
-opening and closing a message moves and restores keyboard focus, and a pending
-read-state update reconciles or refreshes the retained list. The locally
-configured dedicated account has an empty Inbox. The signed-in production
-Inbox shows the test subject “Test”, but its deployed Phase 2 list has no
-message-opening control. Real body display and the live read mutation remain
-unverified, and Phase 3 has not been deployed.
+Local tests (63/63), type checking, and production build pass. The final
+production deployment `dpl_CuiyH16U1BCwhx6rH9V9bLGEjpRJ` at
+`https://webmail.rekad.id` passed the authorized “Test” message walkthrough:
+both body formats and metadata rendered; the unread count changed from 3 to 2;
+the sanitized HTML remained in a sandboxed iframe with restrictive CSP; and
+focus moved to the detail heading and returned to the message row. The initial
+browser pass revealed that the original trigger DOM node was unmounted, so
+commit `edc443c` now locates the recreated row by message ID. The same message
+was reopened on the final deployment after it was already read, confirming the
+focus fix without a second mailbox mutation. No email was sent or deleted.
 
 ## Phase 0 proof of concept
 
