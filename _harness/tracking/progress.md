@@ -11,8 +11,8 @@ scope: progress
   `phase-5-mailbox-actions-search-threads-drafts-plan`.
 - The user selected all-mail search with an optional mailbox scope, grouped
   JMAP threads, JMAP Drafts autosave, and thread-wide conversation actions with
-  separate per-message controls. The UI will receive its antislop review after
-  construction.
+  separate per-message controls. The source-level UI review is recorded;
+  rendered review awaits browser approval.
 - Implementation will use only each authenticated user's OAuth-backed JMAP
   account. The admin API key and Stalwart server-wide settings are out of scope.
 - Do not run live production mailbox mutations without separate explicit
@@ -22,9 +22,19 @@ scope: progress
   per-message and thread mailbox actions, reply/forward prefills, and JMAP
   Drafts autosave/revision handling. Saved drafts use new immutable JMAP Email
   revisions; sending submits the saved ID through the existing attempt flow.
-- `pnpm typecheck` passes. Tests, browser checks, and live mailbox operations
-  have not been run for Phase 5. Independent code review and the planned UI
-  review are pending.
+- Review hardening coordinates draft sends and autosave with an attempt-specific
+  JMAP keyword and conditional state updates. Thread summaries aggregate unread
+  and starred state across members, bound membership per thread, respect
+  `maxObjectsInGet`, and skip aggregation in count-only smoke checks.
+- `pnpm typecheck` and `git diff --check` pass after the hardening changes.
+  Tests and Phase 5 JMAP/mailbox checks have not been run. An approved
+  read-only production browser check still showed the pre-Phase 5 UI; rendered
+  phone/contrast review remains pending a Phase 5 deployment. No Phase 5
+  mailbox mutations were performed. The independent final code review found
+  no actionable issues; its artifact is
+  `phase-5-hardening-parser-rereview-2026-10-24`. The implementation is in
+  commits `1e8dc87` and `27f09aa`. Phase 5 remains in progress until its
+  requested verification is completed.
 
 ## Phase 4 compose and send complete
 
@@ -216,7 +226,7 @@ scope: progress
 
 ## Next
 
-Phase 4 planning is complete. Wait for the user's direction before
-implementation. Do not send a live test email until the exact recipient is
-explicitly authorized. Keep Stalwart's global OAuth and registration settings
-unchanged.
+Phase 5 implementation and code review are complete. Continue with Phase 5
+verification only; do not start Phase 6. Do not deploy or mutate production
+mailboxes without explicit authorization. Keep Stalwart's global OAuth and
+registration settings unchanged.

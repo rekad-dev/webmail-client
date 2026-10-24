@@ -16,13 +16,27 @@ controls. Do not use the admin API key or change server-wide settings. Do not
 mutate production mailboxes without separate explicit approval. Stop after
 Phase 5; do not start Phase 6.
 
-The working tree currently implements server-side search, bounded conversation
-reads, safe JMAP message actions, reply/forward prefills, JMAP Drafts revisions,
-and submission of saved draft IDs through the Phase 4 idempotent send path.
-`pnpm typecheck` passes. Phase 5 tests, browser checks, and live mailbox
-operations have not been run. Independent review and the planned UI review are
-pending; keep the phase in progress until remaining review and authorization
-gates are resolved.
+Phase 5 implementation is committed in `1e8dc87` and `27f09aa`. It includes
+server-side search, bounded conversation reads, safe JMAP message actions,
+reply/forward prefills, JMAP Drafts revisions, and submission of saved draft
+IDs through the Phase 4 idempotent send path. Draft autosave cleanup and
+submission coordinate through an attempt-specific JMAP keyword and conditional
+Email state updates, so cleanup cannot remove a draft after reservation for
+send. Submission parsing accepts one primary result and at most one associated
+implicit `Email/set`; ambiguous outcomes retain the marker to fail closed.
+Thread summaries aggregate unread and starred state across members, respect
+per-thread and `maxObjectsInGet` bounds, and count-only smoke checks skip that
+work. Stale JMAP `notFound` results are validated and skipped where membership
+can change during a read.
+
+`pnpm typecheck` and `git diff --check` pass. Phase 5 tests and mailbox
+operations have not been run. The approved production browser check still
+showed the pre-Phase 5 UI, so rendered phone/contrast review remains pending a
+Phase 5 deployment. No Phase 5 mailbox mutation or deployment was performed.
+The source-level UI review is in `phase-5-ui-antislop-review`. The final
+independent code review found no actionable issues; see
+`phase-5-hardening-parser-rereview-2026-10-24`. Keep the phase in progress and
+do not start Phase 6.
 
 Phase 4 compose and send implementation and live verification are complete;
 see the Traycer artifacts `phase-4-compose-send-plan` and
@@ -180,8 +194,10 @@ access. The provider-settings audit can remain deferred.
 
 ## Current safe step
 
-Continue Phase 5 implementation only. Keep `requireClientRegistration` and
-`anonymousClientRegistration` unchanged, and do not use the admin API key.
+Continue with Phase 5 verification only. Do not start Phase 6, deploy, or mutate
+production mailboxes without the required authorization. Keep
+`requireClientRegistration` and `anonymousClientRegistration` unchanged, and do
+not use the admin API key.
 
 ## Skill installation note
 
