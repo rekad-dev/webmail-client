@@ -11,8 +11,8 @@ scope: progress
   `phase-5-mailbox-actions-search-threads-drafts-plan`.
 - The user selected all-mail search with an optional mailbox scope, grouped
   JMAP threads, JMAP Drafts autosave, and thread-wide conversation actions with
-  separate per-message controls. The source-level UI review is recorded;
-  rendered review awaits browser approval.
+  separate per-message controls. Source-level UI review and the approved
+  production rendering review are recorded.
 - Implementation will use only each authenticated user's OAuth-backed JMAP
   account. The admin API key and Stalwart server-wide settings are out of scope.
 - Do not run live production mailbox mutations without separate explicit
@@ -32,14 +32,16 @@ scope: progress
   `413ad2c` records those updates. The build's generated `next-env.d.ts`
   change was restored. With the user's approval, production deployment
   `dpl_4Qec3Yi6Wep7z1DNGvUsjyhTsgLn` is Ready at
-  `https://webmail.rekad.id`; Vercel's remote build passed. The signed-in
-  browser review is pending authorization for its single read-only `/api/mail`
-  listing request, as the user asked to authorize production mailbox checks
-  separately. No Phase 5 mailbox mutation was performed. The independent final
-  code review found no actionable issues; its artifact is
-  `phase-5-hardening-parser-rereview-2026-10-24`. The implementation is in
-  commits `1e8dc87` and `27f09aa`. Phase 5 remains in progress until remaining
-  production verification is explicitly authorized and completed.
+  `https://webmail.rekad.id`; Vercel's remote build passed. The approved
+  read-only browser review at desktop and 390px phone widths is recorded in
+  `phase-5-production-ui-review`; the first Inbox listing rendered without a
+  visible error and no horizontal overflow appeared on phone. No message was
+  opened and no mailbox action was taken. Search results, thread details,
+  action persistence, and draft persistence remain unverified pending separate
+  approval. The independent final code review found no actionable issues; its
+  artifact is `phase-5-hardening-parser-rereview-2026-10-24`. The implementation
+  is in commits `1e8dc87` and `27f09aa`. Phase 5 remains in progress until
+  remaining production verification is explicitly authorized and completed.
 
 ## Phase 4 compose and send complete
 

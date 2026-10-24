@@ -36,9 +36,12 @@ read keyword on created drafts. The build's generated `next-env.d.ts` change
 was restored. With the user's approval, production deployment
 `dpl_4Qec3Yi6Wep7z1DNGvUsjyhTsgLn` is Ready and aliased to
 `https://webmail.rekad.id`; Vercel's remote build passed. The signed-in browser
-review is pending authorization for the single read-only `/api/mail` listing
-that the inbox page needs to render. No production mailbox actions, message
-opens, or live JMAP checks were performed. The source-level UI review is in
+review completed at desktop and 390px phone widths after approval for one
+read-only first-page Inbox listing. It rendered one conversation with no visible
+error and no horizontal overflow on phone. No message was opened and no mailbox
+action was taken. The full record is in `phase-5-production-ui-review`.
+Search results, thread detail, action persistence, and draft persistence remain
+unverified and need separate authorization. The source-level UI review is in
 `phase-5-ui-antislop-review`. The final independent code review found no
 actionable issues; see `phase-5-hardening-parser-rereview-2026-10-24`. Keep the
 phase in progress and do not start Phase 6.
