@@ -66,8 +66,16 @@ scope: progress
   determined. The latest production deployment is
   `dpl_GN1afZYmaZYBGWz81VaB3rh7TykE` at `https://webmail.rekad.id`. The final
   Phase 5 suite passes 109/109, typecheck passes, and build passes. No body,
-  preview, or mailbox mutation was involved. To continue, use another exact
-  subject or authorize a broader subject-only candidate search.
+  preview, or mailbox mutation was involved. On 2026-10-25, the user
+  authorized a broader subject-only candidate search. The account check again
+  passed. Searching the partial subject `Test Send` produced two JMAP query
+  candidates but zero exact subject matches; `Fwd: Test Send` and
+  `Re: Test Send` each produced zero candidates. The diagnostic endpoint does
+  not expose candidate subjects when no exact match resolves a thread, so no
+  thread lookup occurred and message count/member subjects remain unavailable.
+  This points to subject matching/value differences rather than account scope;
+  thread identification was not reached. No body or preview was fetched and no
+  mailbox state changed. Full record: `phase-5-production-search-check`.
 
 ## Phase 4 compose and send complete
 

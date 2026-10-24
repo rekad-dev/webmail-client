@@ -69,8 +69,19 @@ account. The subject-only lookup returned `404 thread_not_found` with
 `subject_query_empty` and zero candidate IDs. No `Email/get` or `Thread/get`
 followed, so thread membership, message count, and member subjects remain
 unknown. No body or preview was fetched and no mailbox state changed. Record is
-in `phase-5-production-search-check`; further investigation needs another exact
-subject or approval for a broader subject-only candidate search.
+in `phase-5-production-search-check`.
+
+On 2026-10-25, the user authorized a broader subject-only candidate search in
+the same signed-in account. `/api/auth/status` again passed authentication and
+primary-account matching. Searching the partial subject `Test Send` returned
+two `Email/query` candidates but no exact subject matches; exact candidates for
+`Fwd: Test Send` and `Re: Test Send` were zero. The route does not return
+candidate subject values when no exact match resolves a thread, so no
+`Thread/get` followed and the thread's message count and member subjects remain
+unknown. The evidence points to subject matching/value differences; account
+scope passed, and thread identification was not reached. No body or preview
+was fetched and no mailbox state changed. The ego-browser task was finished;
+its current-version notice requires user approval before running its upgrade.
 
 Phase 4 compose and send implementation and live verification are complete;
 see the Traycer artifacts `phase-4-compose-send-plan` and
