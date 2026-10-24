@@ -5,7 +5,7 @@ scope: progress
 
 # Progress
 
-## Phase 4 compose and send implementation in progress
+## Phase 4 compose and send complete
 
 - The technical plan is recorded in the Traycer artifact
   `phase-4-compose-send-plan`. The user selected durable Postgres send-attempt
@@ -29,11 +29,14 @@ scope: progress
   test account. `/api/mail/identities` reported JMAP submission available,
   Drafts and Sent roles present, and one non-wildcard identity
   (`mail-client@rekad.id`). The payload has no explicit default flag; compose
-  auto-selects the sole identity. No mailbox was mutated and no live send was
-  attempted.
-- No live email was sent. The exact approved test recipient is still required
-  before the live submission check. No Stalwart setting or admin API credential
-  was used.
+  auto-selects the sole identity.
+- On 2026-10-24, the user approved `carleanoravel@gmail.com` for live
+  verification. One plain-text message was sent from `mail-client@rekad.id`
+  with Cc/Bcc empty. The app reported successful JMAP submission, its matching
+  message appeared in Sent Items, and the recipient's signed-in Gmail Inbox
+  showed the matching unread message. No other recipient was used.
+- No Stalwart settings changed and the admin API key was not used. Phase 4 is
+  complete; Phase 5 has not started.
 
 ## Phase 3 safe email reading complete
 

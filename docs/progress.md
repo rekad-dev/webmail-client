@@ -1,6 +1,27 @@
 # Progress
 
-## Current milestone: Phase 3 safe email reading complete
+## Current milestone: Phase 4 compose and send complete
+
+- The Phase 4 plan is recorded in the Traycer artifact
+  `phase-4-compose-send-plan`. Local implementation adds read-only identity
+  preflight, validated plain-text composition and JMAP submission, durable
+  send-attempt records, Sent placement, and an accessible compose dialog.
+  `pnpm test` passed 87/87 tests; `pnpm typecheck` and `pnpm build` passed.
+- With approval, the additive database migration was applied and production
+  deployment `dpl_5xekSb6sLYAwedgKp22aczkXeeBx` reached Ready at
+  `https://webmail.rekad.id`.
+- On 2026-10-24, the authenticated JMAP preflight confirmed submission
+  capability, Drafts and Sent roles, and one sender identity
+  (`mail-client@rekad.id`). One plain-text test email was sent to the exact
+  approved recipient `carleanoravel@gmail.com`; Cc/Bcc were empty. The app
+  reported acceptance by Stalwart, the matching message appeared in Sent Items,
+  and the recipient's signed-in Gmail Inbox showed that same unread message.
+  No other recipient was used.
+- No global Stalwart OAuth or registration setting changed; the admin API key
+  was not used. Phase 4 is complete. Stop before Phase 5 pending the user's
+  direction.
+
+## Completed milestone: Phase 3 safe email reading
 
 - The Phase 3 plan is recorded in the Traycer artifact
   `phase-3-safe-reading-plan`. Local implementation adds an authenticated
@@ -32,8 +53,8 @@
   changed, and the admin API key was not used.
 - A first browser pass exposed the focus-restoration bug where the trigger row
   was unmounted. Commit `edc443c` finds the remounted row by message ID; the
-  final production deployment includes and passes that fix. Phase 3 is
-  complete. Stop before Phase 4.
+  final production deployment includes and passes that fix. Phase 3 was
+  complete before Phase 4 began.
 - Independent review findings for development-origin trust, keyboard focus,
   and an in-flight read update are resolved. Phase 3 passed the live message
   walkthrough and is complete. No Stalwart client or global setting changed;
