@@ -59,8 +59,18 @@ subjects for exact-match lookup. Local verification passes with 101/101 tests,
 `https://webmail.rekad.id`. The authorized metadata-only POST for
 `Fwd: Test Send` returned `404 thread_not_found`; no member subjects were
 returned, no message body or preview was requested, and no mailbox state was
-changed. The exact stored subject versus conversation display title remains
-unconfirmed. Record is in `phase-5-production-search-check`.
+changed. The user later provided the exact stored subject; that retry and its
+diagnosis are recorded below in `phase-5-production-search-check`.
+
+The user supplied the exact subject `Re: Fwd: Test Send`; diagnostics were added
+in commit `92649e1`. On production, `/api/auth/status` returned authenticated
+mailbox access and verified the session account against the JMAP primary
+account. The subject-only lookup returned `404 thread_not_found` with
+`subject_query_empty` and zero candidate IDs. No `Email/get` or `Thread/get`
+followed, so thread membership, message count, and member subjects remain
+unknown. No body or preview was fetched and no mailbox state changed. Record is
+in `phase-5-production-search-check`; further investigation needs another exact
+subject or approval for a broader subject-only candidate search.
 
 Phase 4 compose and send implementation and live verification are complete;
 see the Traycer artifacts `phase-4-compose-send-plan` and
@@ -218,11 +228,12 @@ access. The provider-settings audit can remain deferred.
 
 ## Current safe step
 
-Continue Phase 5 verification only; do not start Phase 6. The approved
-subject-only check returned `thread_not_found`, so further lookup requires the
-exact stored message subject or separate approval for a broader subject-only
-search. Do not load message bodies or mutate production mailboxes without
-separate explicit authorization. Keep `requireClientRegistration` and
+Continue Phase 5 verification only; do not start Phase 6. The lookup for
+`Re: Fwd: Test Send` returned no subject-query candidates after the authenticated
+account check passed, so thread identification was not reached. Further lookup
+requires another exact subject or separate approval for a broader subject-only
+candidate search. Do not load message bodies or mutate production mailboxes
+without separate explicit authorization. Keep `requireClientRegistration` and
 `anonymousClientRegistration` unchanged, and do not use the admin API key.
 
 ## Skill installation note

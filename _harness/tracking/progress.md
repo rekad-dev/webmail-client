@@ -55,8 +55,19 @@ scope: progress
   `dpl_8Ztw8rj2rq3p1Nivr3ebDV4NrLrb` is Ready at
   `https://webmail.rekad.id`. The authorized metadata-only lookup for
   `Fwd: Test Send` returned `404 thread_not_found` and no subjects. No body or
-  preview was requested, and no mailbox state changed. Confirming the exact
-  stored subject or conducting a broader subject-only search needs user input.
+  preview was requested, and no mailbox state changed. The later retry using
+  the exact stored subject and its diagnosis are recorded below.
+
+- The user then supplied the exact subject `Re: Fwd: Test Send`. The lookup
+  diagnostics in commit `92649e1` show `/api/auth/status` passed account access
+  and primary-account matching, while the subject-filtered `Email/query`
+  returned zero candidates (`subject_query_empty`). No `Email/get` or
+  `Thread/get` was issued, so thread membership and message count could not be
+  determined. The latest production deployment is
+  `dpl_GN1afZYmaZYBGWz81VaB3rh7TykE` at `https://webmail.rekad.id`. The final
+  Phase 5 suite passes 109/109, typecheck passes, and build passes. No body,
+  preview, or mailbox mutation was involved. To continue, use another exact
+  subject or authorize a broader subject-only candidate search.
 
 ## Phase 4 compose and send complete
 
@@ -248,9 +259,10 @@ scope: progress
 
 ## Next
 
-Continue Phase 5 verification only; do not start Phase 6. The approved
-subject-only check returned `thread_not_found`, so further lookup requires the
-exact stored message subject or separate approval for a broader subject-only
-search. Do not load message bodies or mutate production mailboxes without
-separate explicit authorization. Keep Stalwart's global OAuth and registration
-settings unchanged.
+Continue Phase 5 verification only; do not start Phase 6. For
+`Re: Fwd: Test Send`, the authenticated JMAP account check passed but the
+subject query returned no candidates, so thread identification was not reached.
+Further lookup requires another exact subject or separate approval for a
+broader subject-only candidate search. Do not load message bodies or mutate
+production mailboxes without separate explicit authorization. Keep Stalwart's
+global OAuth and registration settings unchanged.
