@@ -47,6 +47,17 @@ scope: progress
   commits `1e8dc87` and `27f09aa`. Phase 5 remains in progress until remaining
   production verification is explicitly authorized and completed.
 
+- The subject-only thread metadata endpoint was independently reviewed. The
+  final P2 finding was fixed by bounding returned member subjects to 512
+  characters while retaining raw candidate subjects for exact comparison;
+  commit `58219a4` records the fix. `pnpm test` passes 101/101,
+  `pnpm typecheck` passes, and `pnpm build` passes. Approved production deploy
+  `dpl_8Ztw8rj2rq3p1Nivr3ebDV4NrLrb` is Ready at
+  `https://webmail.rekad.id`. The authorized metadata-only lookup for
+  `Fwd: Test Send` returned `404 thread_not_found` and no subjects. No body or
+  preview was requested, and no mailbox state changed. Confirming the exact
+  stored subject or conducting a broader subject-only search needs user input.
+
 ## Phase 4 compose and send complete
 
 - The technical plan is recorded in the Traycer artifact
@@ -237,7 +248,9 @@ scope: progress
 
 ## Next
 
-Phase 5 implementation and code review are complete. Continue with Phase 5
-verification only; do not start Phase 6. Do not deploy or mutate production
-mailboxes without explicit authorization. Keep Stalwart's global OAuth and
-registration settings unchanged.
+Continue Phase 5 verification only; do not start Phase 6. The approved
+subject-only check returned `thread_not_found`, so further lookup requires the
+exact stored message subject or separate approval for a broader subject-only
+search. Do not load message bodies or mutate production mailboxes without
+separate explicit authorization. Keep Stalwart's global OAuth and registration
+settings unchanged.

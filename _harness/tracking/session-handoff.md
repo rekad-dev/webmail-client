@@ -50,6 +50,18 @@ unverified and need separate authorization. The source-level UI review is in
 actionable issues; see `phase-5-hardening-parser-rereview-2026-10-24`. Keep the
 phase in progress and do not start Phase 6.
 
+The subject-only conversation metadata endpoint was implemented in commits
+`28e2f02`, `0e9f038`, and `58219a4`. Final review's member-subject size finding
+was fixed by bounding returned subjects to 512 characters while preserving raw
+subjects for exact-match lookup. Local verification passes with 101/101 tests,
+`pnpm typecheck`, and `pnpm build`. With the user's approval, deployment
+`dpl_8Ztw8rj2rq3p1Nivr3ebDV4NrLrb` is Ready and aliased to
+`https://webmail.rekad.id`. The authorized metadata-only POST for
+`Fwd: Test Send` returned `404 thread_not_found`; no member subjects were
+returned, no message body or preview was requested, and no mailbox state was
+changed. The exact stored subject versus conversation display title remains
+unconfirmed. Record is in `phase-5-production-search-check`.
+
 Phase 4 compose and send implementation and live verification are complete;
 see the Traycer artifacts `phase-4-compose-send-plan` and
 `phase-4-live-send-verification`, plus commits `fd9df24`, `931496a`,
@@ -206,10 +218,12 @@ access. The provider-settings audit can remain deferred.
 
 ## Current safe step
 
-Continue with Phase 5 verification only. Do not start Phase 6, deploy, or mutate
-production mailboxes without the required authorization. Keep
-`requireClientRegistration` and `anonymousClientRegistration` unchanged, and do
-not use the admin API key.
+Continue Phase 5 verification only; do not start Phase 6. The approved
+subject-only check returned `thread_not_found`, so further lookup requires the
+exact stored message subject or separate approval for a broader subject-only
+search. Do not load message bodies or mutate production mailboxes without
+separate explicit authorization. Keep `requireClientRegistration` and
+`anonymousClientRegistration` unchanged, and do not use the admin API key.
 
 ## Skill installation note
 
