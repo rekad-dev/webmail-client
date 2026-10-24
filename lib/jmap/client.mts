@@ -1837,10 +1837,12 @@ export async function runJmapOAuthSubmitEmail({
   if (
     !preflight.submissionAvailable ||
     !preflight.draftsMailboxId ||
-    !preflight.sentMailboxId ||
-    !preflight.identities.some((identity) => identity.id === identityId)
+    !preflight.sentMailboxId
   ) {
     throw new JmapSendRejectedError("submission_unavailable");
+  }
+  if (!preflight.identities.some((identity) => identity.id === identityId)) {
+    throw new JmapSendRejectedError("identity_invalid");
   }
 
   const responseJson = await postJmapApi({

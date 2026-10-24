@@ -46,6 +46,7 @@ function session(): Record<string, unknown> {
 
 function makeFetch(options: {
   identityEmail?: string;
+  omitIdentity?: boolean;
   submissionIds?: string[];
   inSentMailbox?: boolean;
   rejectSubmission?: boolean;
@@ -75,7 +76,7 @@ function makeFetch(options: {
       if (method === "Identity/get") {
         return [
           "Identity/get",
-          { list: [{
+          { list: options.omitIdentity ? [] : [{
             id: "identity-1",
             name: "Sender Name",
             email: options.identityEmail ?? "sender@example.test",
@@ -232,6 +233,24 @@ test("maps an explicit JMAP submission rejection to a stable reason", async () =
       emailId: "email-1",
     }),
     (error: unknown) => error instanceof JmapSendRejectedError && error.reason === "send_forbidden",
+  );
+});
+
+test("rejects a sender identity that disappears before JMAP submission", async () => {
+  const { fetchImpl, apiRequests } = makeFetch({ omitIdentity: true });
+  await assert.rejects(
+    runJmapOAuthSubmitEmail({
+      ...options(fetchImpl),
+      identityId: "identity-1",
+      emailId: "email-1",
+    }),
+    (error: unknown) => error instanceof JmapSendRejectedError && error.reason === "identity_invalid",
+  );
+  assert.equal(
+    apiRequests.some((request) =>
+      (request.methodCalls as unknown[][]).some((call) => call[0] === "EmailSubmission/set"),
+    ),
+    false,
   );
 });
 
