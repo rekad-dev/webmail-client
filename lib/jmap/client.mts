@@ -25,6 +25,8 @@ const EMAIL_THREAD_LIST_GET_CALL_ID = "phase5-thread-list-get";
 const EMAIL_THREAD_STATE_GET_CALL_ID = "phase5-thread-state-get";
 const EMAIL_ACTION_GET_CALL_ID = "phase5-action-email-get";
 const EMAIL_ACTION_SET_CALL_ID = "phase5-action-email-set";
+const EMAIL_MEMBERSHIP_EMAIL_GET_CALL_ID = "phase5-membership-email-get";
+const EMAIL_MEMBERSHIP_MAILBOX_GET_CALL_ID = "phase5-membership-mailbox-get";
 const EMAIL_DRAFT_GET_CALL_ID = "phase5-draft-get";
 const EMAIL_DRAFT_CREATE_CALL_ID = "phase5-draft-create";
 const EMAIL_DRAFT_DESTROY_CALL_ID = "phase5-draft-destroy";
@@ -114,6 +116,11 @@ export interface JmapMailboxSummary {
   role: string | null;
   totalEmails: number;
   unreadEmails: number;
+}
+
+export interface JmapEmailMailboxMembership {
+  emailId: string;
+  mailboxes: Array<{ id: string; role: string | null }>;
 }
 
 export interface JmapEmailSummary {
@@ -3962,12 +3969,16 @@ async function getEmailActionState(
       ) {
         throw new JmapPocError("The JMAP API returned invalid email action state.");
       }
-      const rawMailboxIds = objectValue(email.mailboxIds) ?? {};
-      state.set(email.id, {
-        mailboxIds: Object.entries(rawMailboxIds)
-          .filter(([id, present]) => id.length > 0 && id.length <= 256 && present === true)
-          .map(([id]) => id),
-      });
+      const rawMailboxIds = objectValue(email.mailboxIds);
+      if (
+        !rawMailboxIds ||
+        Object.entries(rawMailboxIds).some(
+          ([id, present]) => id.length === 0 || id.length > 256 || present !== true,
+        )
+      ) {
+        throw new JmapPocError("The JMAP API returned invalid email mailbox state.");
+      }
+      state.set(email.id, { mailboxIds: Object.keys(rawMailboxIds) });
     }
     if (requestedIds.some((id) => !state.has(id))) throw new JmapEmailNotFoundError();
   }
@@ -4127,6 +4138,103 @@ export async function runJmapOAuthMailAction({
     maxResponseBytes: 512 * 1024,
   });
   verifyEmailActionUpdate(responseJson, emailIds);
+}
+
+async function fetchMailboxMembershipRoles(
+  context: JmapApiContext,
+): Promise<Map<string, string | null>> {
+  const responseJson = await postJmapApi({
+    apiUrl: context.apiUrl,
+    authorization: context.authorization,
+    requestBody: {
+      using: [CORE_CAPABILITY, MAIL_CAPABILITY],
+      methodCalls: [[
+        "Mailbox/get",
+        {
+          accountId: context.accountId,
+          ids: null,
+          properties: ["id", "role"],
+        },
+        EMAIL_MEMBERSHIP_MAILBOX_GET_CALL_ID,
+      ]],
+    },
+    methodName: "Mailbox/get membership",
+    fetchImpl: context.fetchImpl,
+    maxResponseBytes: 256 * 1024,
+  });
+  const { payload } = getMethodResponse(
+    responseJson,
+    EMAIL_MEMBERSHIP_MAILBOX_GET_CALL_ID,
+    "Mailbox/get",
+  );
+  if (!Array.isArray(payload.list)) {
+    throw new JmapPocError("The JMAP API returned an invalid mailbox membership response.");
+  }
+
+  const roles = new Map<string, string | null>();
+  for (const rawMailbox of payload.list) {
+    const mailbox = objectValue(rawMailbox);
+    if (
+      !mailbox ||
+      typeof mailbox.id !== "string" ||
+      mailbox.id.length === 0 ||
+      mailbox.id.length > 256 ||
+      (mailbox.role !== null && mailbox.role !== undefined && typeof mailbox.role !== "string") ||
+      roles.has(mailbox.id)
+    ) {
+      throw new JmapPocError("The JMAP API returned invalid mailbox membership metadata.");
+    }
+    roles.set(
+      mailbox.id,
+      typeof mailbox.role === "string" ? mailbox.role.slice(0, 64) : null,
+    );
+  }
+  return roles;
+}
+
+export async function runJmapOAuthEmailMailboxMembership({
+  accessToken,
+  expectedAccountId,
+  emailId,
+  sessionUrl = "https://mail.rekad.id/.well-known/jmap",
+  trustedOrigins = ["https://mail.rekad.id"],
+  allowInsecureHttp = false,
+  fetchImpl = fetch,
+}: {
+  accessToken: string;
+  expectedAccountId: string;
+  emailId: string;
+  sessionUrl?: string;
+  trustedOrigins?: string[];
+  allowInsecureHttp?: boolean;
+  fetchImpl?: typeof fetch;
+}): Promise<JmapEmailMailboxMembership> {
+  validateEmailId(emailId);
+  const context = await createJmapApiContext({
+    sessionUrl,
+    trustedOrigins,
+    allowInsecureHttp,
+    authorization: makeOAuthAuthorization(accessToken),
+    fetchImpl,
+  });
+  if (context.accountId !== expectedAccountId) {
+    throw new JmapAccountMismatchError();
+  }
+
+  const memberships = await getEmailActionState(context, [emailId]);
+  const mailboxRoles = await fetchMailboxMembershipRoles(context);
+  const mailboxIds = memberships.get(emailId)?.mailboxIds ?? [];
+  const mailboxes = mailboxIds
+    .map((id) => {
+      const role = mailboxRoles.get(id);
+      if (role === undefined && !mailboxRoles.has(id)) {
+        throw new JmapPocError("The JMAP API returned unknown email mailbox membership.");
+      }
+      return { id, role: role ?? null };
+    })
+    .sort((left, right) => left.id.localeCompare(right.id));
+
+  return { emailId, mailboxes };
 }
 
 function validateEmailId(emailId: string): void {
