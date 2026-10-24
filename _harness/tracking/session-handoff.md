@@ -334,13 +334,30 @@ discovery plus reads to an 8-second operation deadline. Local validation passed:
 `pnpm typecheck`, `pnpm test` (130 tests), and `pnpm build`. Commits are
 `f768144`, `22a1c57`, and `5c0f64f`.
 
-The user explicitly authorized claiming the signed-in Ego TaskSpace. Return
-control to the user while waiting for either a unique message identifier or
-approval to inspect bounded header metadata (sender/date) for only the two
-exact-subject candidates. Do not load message bodies or previews, act on any
-other message, permanently delete anything, or send email. Keep
-`requireClientRegistration` and `anonymousClientRegistration` unchanged, and do
-not use the admin API key.
+The user authorized a read-only metadata check of exactly two messages with
+stored subject `Re: Fwd: Test Send`, limited to sender addresses, sent/received
+timestamps, and mailbox IDs/roles. The authenticated
+`POST /api/mail/subject-metadata` implementation is committed in `27c93a5`,
+`780b558`, and `03ec4f3`; candidate IDs and subjects remain server-side. The
+shared query parser now requires `total` and validates a zero result position.
+Independent re-review found no remaining issue. Local verification passes:
+143/143 tests, `pnpm typecheck`, `pnpm build`, and `git diff --check`.
+
+Production deployment is blocked: `vercel deploy --prod --yes` returned
+`Not authorized` for the linked `rekad/webmail-client` project;
+`vercel whoami` reported `dev-31894631`. Do not try a different account,
+token, project, or deployment workaround. The user needs to reauthenticate
+Vercel CLI with an account that can deploy to the existing project or grant the
+current account access. No production metadata call has run. The signed-in Ego
+TaskSpace 1 was resumed only to check its URL and then handed back; no page
+content was inspected.
+
+After deployment access is restored, deploy the committed route and make only
+the approved metadata POST in the same signed-in first-account TaskSpace. Do
+not fetch message bodies or previews, send email, or change mailbox state.
+Keep `requireClientRegistration` and `anonymousClientRegistration` unchanged,
+and do not use the admin API key. See
+[`phase-5-subject-match-metadata-check`](/Users/ravel/.traycer/epics/042d46d8-2356-4d23-ba9c-53d1b6c7f869/artifacts/phase-5-subject-match-metadata-check/index.md).
 
 ## Skill installation note
 
