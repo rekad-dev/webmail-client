@@ -3,6 +3,7 @@ import {
   JmapEmailNotFoundError,
   JmapThreadSubjectAmbiguousError,
   JmapThreadSubjectSearchIncompleteError,
+  JmapThreadSubjectsNotFoundError,
   type JmapThreadSubjects,
 } from "./client.mts";
 import {
@@ -98,6 +99,14 @@ export function createMailThreadSubjectsPostHandler(
       }
       if (error instanceof JmapEmailNotFoundError) {
         return jsonResponse({ error: "thread_not_found" }, 404);
+      }
+      if (error instanceof JmapThreadSubjectsNotFoundError) {
+        return jsonResponse({
+          error: "thread_not_found",
+          reason: error.reason,
+          queryCandidateCount: error.queryCandidateCount,
+          exactSubjectMatchCount: error.exactSubjectMatchCount,
+        }, 404);
       }
       if (error instanceof JmapThreadSubjectAmbiguousError) {
         return jsonResponse({ error: "subject_ambiguous" }, 409);

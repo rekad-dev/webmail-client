@@ -208,8 +208,10 @@ export interface JmapThreadView {
 
 export interface JmapThreadSubjects {
   threadId: string;
+  messageCount: number;
   members: Array<{ id: string; subject: string | null }>;
   truncated: boolean;
+  subjectsTruncated: boolean;
 }
 
 export interface JmapMailDraft {
@@ -302,6 +304,32 @@ export class JmapThreadSubjectSearchIncompleteError extends JmapPocError {
   constructor() {
     super("The bounded subject search did not return a complete result set.");
     this.name = "JmapThreadSubjectSearchIncompleteError";
+  }
+}
+
+export type JmapThreadSubjectsNotFoundReason =
+  | "subject_query_empty"
+  | "candidate_messages_disappeared"
+  | "subject_mismatch"
+  | "thread_not_found"
+  | "matched_email_not_member"
+  | "matched_email_disappeared";
+
+export class JmapThreadSubjectsNotFoundError extends JmapPocError {
+  readonly reason: JmapThreadSubjectsNotFoundReason;
+  readonly queryCandidateCount: number;
+  readonly exactSubjectMatchCount: number;
+
+  constructor(
+    reason: JmapThreadSubjectsNotFoundReason,
+    queryCandidateCount: number,
+    exactSubjectMatchCount: number,
+  ) {
+    super("The requested subject did not resolve to an available thread.");
+    this.name = "JmapThreadSubjectsNotFoundError";
+    this.reason = reason;
+    this.queryCandidateCount = queryCandidateCount;
+    this.exactSubjectMatchCount = exactSubjectMatchCount;
   }
 }
 
@@ -3410,7 +3438,11 @@ function threadSubjectsGetRequest(accountId: string, emailIds: string[]) {
 function parseThreadSubjects(
   responseJson: unknown,
   emailIds: string[],
-): { members: Array<{ id: string; subject: string | null }>; notFound: string[] } {
+): {
+  members: Array<{ id: string; subject: string | null }>;
+  notFound: string[];
+  subjectsTruncated: boolean;
+} {
   const { payload } = getMethodResponse(
     responseJson,
     EMAIL_THREAD_SUBJECTS_EMAIL_GET_CALL_ID,
@@ -3433,6 +3465,7 @@ function parseThreadSubjects(
     notFoundIds.add(rawId);
   }
   const members = new Map<string, { id: string; subject: string | null }>();
+  let subjectsTruncated = false;
   for (const rawEmail of payload.list) {
     const email = objectValue(rawEmail);
     if (
@@ -3445,6 +3478,9 @@ function parseThreadSubjects(
       (email.subject !== null && typeof email.subject !== "string")
     ) {
       throw new JmapPocError("The JMAP API returned invalid thread subject metadata.");
+    }
+    if (typeof email.subject === "string" && email.subject.length > 512) {
+      subjectsTruncated = true;
     }
     members.set(email.id, {
       id: email.id,
@@ -3460,6 +3496,7 @@ function parseThreadSubjects(
       return member ? [member] : [];
     }),
     notFound: [...notFoundIds],
+    subjectsTruncated,
   };
 }
 
@@ -3508,9 +3545,12 @@ export async function runJmapOAuthThreadSubjects({
     maxResponseBytes: 256 * 1024,
   });
   const candidateIds = parseSubjectQueryIds(queryResponse, lookupLimit);
-  if (candidateIds.length === 0) throw new JmapEmailNotFoundError();
+  if (candidateIds.length === 0) {
+    throw new JmapThreadSubjectsNotFoundError("subject_query_empty", 0, 0);
+  }
 
   const candidateEmails: Array<{ id: string; threadId: string; subject: string | null }> = [];
+  let disappearedCandidateCount = 0;
   for (let start = 0; start < candidateIds.length; start += batchSize) {
     const emailIds = candidateIds.slice(start, start + batchSize);
     const responseJson = await postJmapApi({
@@ -3521,12 +3561,22 @@ export async function runJmapOAuthThreadSubjects({
       fetchImpl,
       maxResponseBytes: 256 * 1024,
     });
-    candidateEmails.push(...parseSubjectLookup(responseJson, emailIds).list);
+    const result = parseSubjectLookup(responseJson, emailIds);
+    candidateEmails.push(...result.list);
+    disappearedCandidateCount += result.notFound.length;
   }
 
   const exactMatches = candidateEmails.filter((email) => email.subject === subject);
   const exactThreadIds = [...new Set(exactMatches.map((email) => email.threadId))];
-  if (exactThreadIds.length === 0) throw new JmapEmailNotFoundError();
+  if (exactThreadIds.length === 0) {
+    throw new JmapThreadSubjectsNotFoundError(
+      candidateEmails.length === 0 && disappearedCandidateCount > 0
+        ? "candidate_messages_disappeared"
+        : "subject_mismatch",
+      candidateIds.length,
+      exactMatches.length,
+    );
+  }
   if (exactThreadIds.length > 1) throw new JmapThreadSubjectAmbiguousError();
 
   const threadId = exactThreadIds[0];
@@ -3534,9 +3584,25 @@ export async function runJmapOAuthThreadSubjects({
   if (!threadId || !matchingEmailId) {
     throw new JmapPocError("The JMAP API omitted the exact subject match.");
   }
-  const allIds = await fetchThreadEmailIds(context, threadId);
+  let allIds: string[];
+  try {
+    allIds = await fetchThreadEmailIds(context, threadId);
+  } catch (error) {
+    if (error instanceof JmapEmailNotFoundError) {
+      throw new JmapThreadSubjectsNotFoundError(
+        "thread_not_found",
+        candidateIds.length,
+        exactMatches.length,
+      );
+    }
+    throw error;
+  }
   if (!allIds.includes(matchingEmailId)) {
-    throw new JmapPocError("The matched email is no longer a member of its thread.");
+    throw new JmapThreadSubjectsNotFoundError(
+      "matched_email_not_member",
+      candidateIds.length,
+      exactMatches.length,
+    );
   }
 
   const maxMemberCount = Math.min(
@@ -3551,6 +3617,7 @@ export async function runJmapOAuthThreadSubjects({
   const visibleIds = allIds.filter((id) => selectedIds.has(id));
   const members: Array<{ id: string; subject: string | null }> = [];
   const staleMemberIds = new Set<string>();
+  let subjectsTruncated = false;
   for (let start = 0; start < visibleIds.length; start += batchSize) {
     const emailIds = visibleIds.slice(start, start + batchSize);
     const responseJson = await postJmapApi({
@@ -3563,14 +3630,23 @@ export async function runJmapOAuthThreadSubjects({
     });
     const result = parseThreadSubjects(responseJson, emailIds);
     members.push(...result.members);
+    subjectsTruncated ||= result.subjectsTruncated;
     for (const emailId of result.notFound) staleMemberIds.add(emailId);
   }
-  if (staleMemberIds.has(matchingEmailId)) throw new JmapEmailNotFoundError();
+  if (staleMemberIds.has(matchingEmailId)) {
+    throw new JmapThreadSubjectsNotFoundError(
+      "matched_email_disappeared",
+      candidateIds.length,
+      exactMatches.length,
+    );
+  }
 
   return {
     threadId,
+    messageCount: allIds.length,
     members,
     truncated: allIds.length > visibleIds.length || staleMemberIds.size > 0,
+    subjectsTruncated,
   };
 }
 

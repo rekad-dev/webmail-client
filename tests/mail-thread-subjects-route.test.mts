@@ -5,6 +5,7 @@ import {
   JmapAccountMismatchError,
   JmapThreadSubjectAmbiguousError,
   JmapThreadSubjectSearchIncompleteError,
+  JmapThreadSubjectsNotFoundError,
 } from "../lib/jmap/client.mts";
 import {
   createMailThreadSubjectsPostHandler,
@@ -40,11 +41,13 @@ function createDependencies(
       receivedSubject = subject;
       return {
         threadId: "thread-1",
+        messageCount: 2,
         members: [
           { id: "email-1", subject: "Test" },
           { id: "email-2", subject: "Fwd: Test Send" },
         ],
         truncated: false,
+        subjectsTruncated: false,
       };
     },
     getJmapSettings: () => ({
@@ -69,11 +72,31 @@ test("returns only authenticated thread subject metadata with no-store headers",
   assert.equal(state.receivedSubject, "Fwd: Test Send");
   assert.deepEqual(await response.json(), {
     threadId: "thread-1",
+    messageCount: 2,
     members: [
       { id: "email-1", subject: "Test" },
       { id: "email-2", subject: "Fwd: Test Send" },
     ],
     truncated: false,
+    subjectsTruncated: false,
+  });
+});
+
+test("returns safe lookup diagnostics when no exact subject match is found", async () => {
+  const { dependencies } = createDependencies({
+    getThreadSubjects: async () => {
+      throw new JmapThreadSubjectsNotFoundError("subject_mismatch", 3, 0);
+    },
+  });
+  const POST = createMailThreadSubjectsPostHandler(dependencies);
+  const response = await POST(request({ subject: "Re: Fwd: Test Send" }));
+
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), {
+    error: "thread_not_found",
+    reason: "subject_mismatch",
+    queryCandidateCount: 3,
+    exactSubjectMatchCount: 0,
   });
 });
 
