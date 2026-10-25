@@ -945,6 +945,8 @@ export function ComposeDialog({
   const currentMessageSubmitted = sendState === "submitted" || sendState === "submitted_sent_update_pending";
   const requiresIdentity = !isLoading && !loadError && preflight &&
     preflight.identities.length > 1 && !selectedIdentity;
+  const switchNeedsIdentity = Boolean(pendingRequestLabel) && !currentMessageSubmitted &&
+    !selectedIdentity && draftRevisionRef.current > savedDraftRevisionRef.current;
   const preflightUnavailable = !isLoading && !loadError && preflight &&
     (!preflight.submissionAvailable ||
       !preflight.draftsMailboxId ||
@@ -997,10 +999,18 @@ export function ComposeDialog({
               <strong title={pendingRequestLabel}>{pendingRequestLabel}</strong>
               {currentMessageSubmitted ? "The current message was submitted. Open the requested action, or keep this window." : "Save the current draft before switching, or keep editing it."}
             </p>
+            {switchNeedsIdentity ? (
+              <p id="compose-switch-identity-requirement">
+                {requiresIdentity
+                  ? "Choose a sender in the From field below before saving and switching."
+                  : "This draft needs an available sender identity before it can be saved and switched."}
+              </p>
+            ) : null}
             {sendState === "unknown" || sendState === "in_progress" ? <p>Check the current send status before switching.</p> : null}
             <div>
               <button className="compose-switch-confirm" type="button"
-                disabled={isLoading || Boolean(loadError) || isLeaving || isSending || attachmentUploadPending || sendState === "unknown" || sendState === "in_progress"}
+                aria-describedby={switchNeedsIdentity ? "compose-switch-identity-requirement" : undefined}
+                disabled={switchNeedsIdentity || isLoading || Boolean(loadError) || isLeaving || isSending || attachmentUploadPending || sendState === "unknown" || sendState === "in_progress"}
                 onClick={() => void leaveCompose(onConfirmSwitch, true)}>
                 {isLeaving ? "Saving current draft…" : currentMessageSubmitted ? "Open requested action" : "Save & switch"}
               </button>
