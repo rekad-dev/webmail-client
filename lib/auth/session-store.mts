@@ -312,7 +312,7 @@ export async function createOAuthSession({
 
 export async function getOAuthSessionSummary(
   sessionId: string,
-): Promise<{ expiresAt: Date } | null> {
+): Promise<{ subject: string; expiresAt: Date } | null> {
   const sessionHash = hashSessionId(sessionId);
   const sql = getSql();
   await sql`
@@ -327,7 +327,9 @@ export async function getOAuthSessionSummary(
     LIMIT 1
   `;
   const row = rows[0];
-  return row ? { expiresAt: dateFromDatabase(row.expires_at) } : null;
+  return row
+    ? { subject: row.subject, expiresAt: dateFromDatabase(row.expires_at) }
+    : null;
 }
 
 export async function getAuthenticatedOAuthSession(

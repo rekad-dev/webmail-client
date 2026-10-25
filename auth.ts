@@ -9,6 +9,7 @@ import {
   getOAuthSessionSummary,
   revokeOAuthSession,
 } from "./lib/auth/session-store.mts";
+import { createOAuthSessionCallback } from "./lib/auth/session-callback.mts";
 import { getStalwartClientId } from "./lib/auth/stalwart-client-id.mts";
 import { runJmapOAuthAccessCheck } from "./lib/jmap/client.mts";
 
@@ -166,21 +167,7 @@ const auth = NextAuth({
         throw new Error("The Stalwart sign-in could not be completed.");
       }
     },
-    async session({ session, token }) {
-      if (typeof token.sid !== "string") {
-        return { ...session, expires: new Date(0).toISOString() };
-      }
-
-      try {
-        const activeSession = await getOAuthSessionSummary(token.sid);
-        if (!activeSession) {
-          return { ...session, expires: new Date(0).toISOString() };
-        }
-        return { ...session, expires: activeSession.expiresAt.toISOString() };
-      } catch {
-        return { ...session, expires: new Date(0).toISOString() };
-      }
-    },
+    session: createOAuthSessionCallback(getOAuthSessionSummary),
   },
   events: {
     async signOut(message) {
