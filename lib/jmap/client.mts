@@ -15,6 +15,7 @@ import {
 const CORE_CAPABILITY = "urn:ietf:params:jmap:core";
 const MAIL_CAPABILITY = "urn:ietf:params:jmap:mail";
 const SUBMISSION_CAPABILITY = "urn:ietf:params:jmap:submission";
+const STALWART_CAPABILITY = "urn:stalwart:jmap";
 const METHOD_CALL_ID = "phase0-mailboxes";
 const EMAIL_QUERY_CALL_ID = "phase2-email-query";
 const EMAIL_GET_CALL_ID = "phase2-email-get";
@@ -363,6 +364,27 @@ export class JmapPocError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "JmapPocError";
+  }
+}
+
+export class JmapPasswordChangeUnavailableError extends JmapPocError {
+  constructor() {
+    super("This account cannot change its password through the available JMAP service.");
+    this.name = "JmapPasswordChangeUnavailableError";
+  }
+}
+
+export class JmapPasswordChangeRejectedError extends JmapPocError {
+  constructor() {
+    super("The password change was rejected by the mail server.");
+    this.name = "JmapPasswordChangeRejectedError";
+  }
+}
+
+export class JmapPasswordChangeOutcomeUnknownError extends JmapPocError {
+  constructor() {
+    super("The mail server did not confirm the password change result.");
+    this.name = "JmapPasswordChangeOutcomeUnknownError";
   }
 }
 
@@ -3020,6 +3042,152 @@ async function createOAuthJmapContext({
     throw new JmapAccountMismatchError();
   }
   return context;
+}
+
+const PASSWORD_CHANGE_CALL_ID = "account-password-change";
+const PASSWORD_CHANGE_OPERATION_TIMEOUT_MS = 20_000;
+
+function throwPasswordChangeMethodError(value: unknown): never {
+  const methodError = objectValue(value);
+  const type = methodError?.type;
+  if (typeof type !== "string" || !/^[A-Za-z][A-Za-z0-9]{0,63}$/.test(type)) {
+    throw new JmapPasswordChangeOutcomeUnknownError();
+  }
+  if (
+    [
+      "forbidden",
+      "unknownMethod",
+      "notSupported",
+      "capabilityNotSupported",
+      "accountNotFound",
+    ].includes(type)
+  ) {
+    throw new JmapPasswordChangeUnavailableError();
+  }
+  throw new JmapPasswordChangeRejectedError();
+}
+
+function parsePasswordChangeResponse(responseJson: unknown): void {
+  const root = objectValue(responseJson);
+  const responses = root?.methodResponses;
+  if (!Array.isArray(responses) || responses.length !== 1) {
+    throw new JmapPasswordChangeOutcomeUnknownError();
+  }
+  const response = responses[0];
+  if (
+    !Array.isArray(response) ||
+    response.length !== 3 ||
+    response[2] !== PASSWORD_CHANGE_CALL_ID
+  ) {
+    throw new JmapPasswordChangeOutcomeUnknownError();
+  }
+
+  const [responseName, rawPayload] = response;
+  const payload = objectValue(rawPayload);
+  if (!payload) throw new JmapPasswordChangeOutcomeUnknownError();
+  if (responseName === "error") throwPasswordChangeMethodError(payload);
+  if (responseName !== "x:AccountPassword/set") {
+    throw new JmapPasswordChangeOutcomeUnknownError();
+  }
+
+  const notUpdated = objectValue(payload.notUpdated);
+  if (notUpdated && Object.hasOwn(notUpdated, "singleton")) {
+    const failure = objectValue(notUpdated.singleton);
+    if (
+      [
+        "forbidden",
+        "unknownMethod",
+        "notSupported",
+        "capabilityNotSupported",
+      ].includes(typeof failure?.type === "string" ? failure.type : "")
+    ) {
+      throw new JmapPasswordChangeUnavailableError();
+    }
+    throw new JmapPasswordChangeRejectedError();
+  }
+
+  const updated = objectValue(payload.updated);
+  if (!updated || !Object.hasOwn(updated, "singleton")) {
+    throw new JmapPasswordChangeOutcomeUnknownError();
+  }
+}
+
+export async function runJmapOAuthPasswordChange({
+  accessToken,
+  expectedAccountId,
+  input,
+  sessionUrl = "https://mail.rekad.id/.well-known/jmap",
+  trustedOrigins = ["https://mail.rekad.id"],
+  allowInsecureHttp = false,
+  fetchImpl = fetch,
+}: {
+  accessToken: string;
+  expectedAccountId: string;
+  input: {
+    currentPassword: string;
+    newPassword: string;
+    otpCode?: string;
+  };
+  sessionUrl?: string;
+  trustedOrigins?: string[];
+  allowInsecureHttp?: boolean;
+  fetchImpl?: typeof fetch;
+}): Promise<void> {
+  let mutationStarted = false;
+  const operationFetchImpl = withJmapOperationDeadline(
+    fetchImpl,
+    PASSWORD_CHANGE_OPERATION_TIMEOUT_MS,
+    () => mutationStarted
+      ? new JmapPasswordChangeOutcomeUnknownError()
+      : new JmapPasswordChangeUnavailableError(),
+  );
+  const context = await createOAuthJmapContext({
+    accessToken,
+    expectedAccountId,
+    sessionUrl,
+    trustedOrigins,
+    allowInsecureHttp,
+    fetchImpl: operationFetchImpl,
+  });
+  if (!context.capabilities[STALWART_CAPABILITY]) {
+    throw new JmapPasswordChangeUnavailableError();
+  }
+  if (isJmapOperationDeadlineExceeded(operationFetchImpl)) {
+    throw new JmapPasswordChangeUnavailableError();
+  }
+
+  mutationStarted = true;
+  let responseJson: unknown;
+  try {
+    responseJson = await postJmapApi({
+      apiUrl: context.apiUrl,
+      authorization: context.authorization,
+      requestBody: {
+        using: [CORE_CAPABILITY, STALWART_CAPABILITY],
+        methodCalls: [[
+          "x:AccountPassword/set",
+          {
+            update: {
+              singleton: {
+                currentSecret: input.currentPassword,
+                secret: input.newPassword,
+                ...(input.otpCode
+                  ? { otpAuth: { otpCode: input.otpCode } }
+                  : {}),
+              },
+            },
+          },
+          PASSWORD_CHANGE_CALL_ID,
+        ]],
+      },
+      methodName: "AccountPassword/set",
+      fetchImpl: operationFetchImpl,
+      maxResponseBytes: 64 * 1024,
+    });
+  } catch {
+    throw new JmapPasswordChangeOutcomeUnknownError();
+  }
+  parsePasswordChangeResponse(responseJson);
 }
 
 function encodeUriTemplateValue(value: string): string {
