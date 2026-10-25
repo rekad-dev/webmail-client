@@ -1014,7 +1014,7 @@ export function ComposeDialog({
                 onClick={() => void leaveCompose(onConfirmSwitch, true)}>
                 {isLeaving ? "Saving current draft…" : currentMessageSubmitted ? "Open requested action" : "Save & switch"}
               </button>
-              <button className="compose-switch-cancel" disabled={isLeaving} onClick={onCancelSwitch} type="button">Keep current draft</button>
+              <button className="compose-switch-cancel" disabled={isLeaving} onClick={onCancelSwitch} type="button">{currentMessageSubmitted ? "Keep this window" : "Keep current draft"}</button>
             </div>
           </section>
         ) : null}
