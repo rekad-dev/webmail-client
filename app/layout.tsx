@@ -1,6 +1,14 @@
 import type { Metadata } from "next";
+import { Nunito } from "next/font/google";
 import "./globals.css";
 import "./reference-ui.css";
+
+const nunito = Nunito({
+  variable: "--font-nunito",
+  subsets: ["latin"],
+  weight: ["400", "700", "800"],
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "rekad Mail",
@@ -13,7 +21,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className={nunito.variable}>
       <body>{children}</body>
     </html>
   );
