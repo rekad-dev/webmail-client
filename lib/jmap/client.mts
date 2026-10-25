@@ -2,6 +2,15 @@ import { isIP } from "node:net";
 import { createHash } from "node:crypto";
 import { sanitizeEmailHtml } from "../mail/sanitize-email-html.mts";
 import {
+  composedHtmlToText,
+  managedBannerVersion,
+  prepareManagedMessageContent,
+  sanitizeComposedHtml,
+  sanitizeStoredManagedMessageHtml,
+  stripManagedBannerHtml,
+  type ManagedMailBanners,
+} from "../mail/composed-content.mts";
+import {
   MAX_MAIL_ATTACHMENT_BYTES,
   MAX_MAIL_ATTACHMENT_TOTAL_BYTES,
   MAX_MAIL_ATTACHMENTS,
@@ -208,6 +217,7 @@ export interface JmapMailSendInput {
   bcc: JmapEmailAddress[];
   subject: string;
   body: string;
+  htmlBody?: string | null;
   attachments?: JmapMailAttachmentInput[];
   inReplyTo?: string[];
   references?: string[];
@@ -298,6 +308,8 @@ export interface JmapMailDraft {
   bcc: JmapEmailAddress[];
   subject: string;
   body: string;
+  htmlBody?: string | null;
+  bannerVersion?: number | null;
   attachments: JmapMailAttachmentInput[];
   inReplyTo: string[];
   references: string[];
@@ -2968,12 +2980,32 @@ function emailCreateDraftRequest(
     throw new JmapSendRejectedError("message_too_large");
   }
   const attachments = validatedMailAttachments(input.attachments);
+  let htmlBody: string | null = null;
+  if (input.htmlBody !== undefined && input.htmlBody !== null) {
+    try {
+      htmlBody = sanitizeStoredManagedMessageHtml(input.htmlBody);
+    } catch {
+      throw new JmapSendRejectedError("message_too_large");
+    }
+  }
+  if (htmlBody && Buffer.byteLength(htmlBody, "utf8") > EMAIL_BODY_VALUE_MAX_BYTES) {
+    throw new JmapSendRejectedError("message_too_large");
+  }
   const textPart = { type: "text/plain", partId: "rekad-text-body" };
+  const contentPart = htmlBody === null
+    ? textPart
+    : {
+        type: "multipart/alternative",
+        subParts: [
+          textPart,
+          { type: "text/html", partId: "rekad-html-body" },
+        ],
+      };
   const bodyStructure = attachments.length > 0
     ? {
         type: "multipart/mixed",
         subParts: [
-          textPart,
+          contentPart,
           ...attachments.map((attachment) => ({
             blobId: attachment.blobId,
             type: attachment.type,
@@ -2983,7 +3015,7 @@ function emailCreateDraftRequest(
           })),
         ],
       }
-    : textPart;
+    : contentPart;
 
   const email: Record<string, unknown> = {
     mailboxIds: { [draftsMailboxId]: true },
@@ -2994,7 +3026,10 @@ function emailCreateDraftRequest(
     bcc,
     subject: input.subject,
     bodyStructure,
-    bodyValues: { "rekad-text-body": { value: input.body } },
+    bodyValues: {
+      "rekad-text-body": { value: input.body },
+      ...(htmlBody === null ? {} : { "rekad-html-body": { value: htmlBody } }),
+    },
   };
   if (identity.replyTo.length > 0) email.replyTo = identity.replyTo;
   if (input.inReplyTo && input.inReplyTo.length > 0) {
@@ -3564,7 +3599,13 @@ async function getDraftFromContext(
   context: JmapApiContext,
   draftsMailboxId: string,
   emailId: string,
-): Promise<{ draft: JmapMailDraft; state: string; sendPending: boolean }> {
+): Promise<{
+  draft: JmapMailDraft;
+  state: string;
+  sendPending: boolean;
+  rawHtmlBody: string | null;
+  rawTextBody: string | null;
+}> {
   validateEmailId(emailId);
   const responseJson = await postJmapApi({
     apiUrl: context.apiUrl,
@@ -3586,13 +3627,28 @@ async function getDraftFromContext(
   const rawDraft = (payload.list as unknown[]).find(
     (candidate) => objectValue(candidate)?.id === emailId,
   );
-  const attachments = parseDraftAttachmentParts(objectValue(rawDraft)?.attachments);
+  const rawDraftRecord = objectValue(rawDraft);
+  const attachments = parseDraftAttachmentParts(rawDraftRecord?.attachments);
   if (!detail.isDraft || !detail.mailboxIds.includes(draftsMailboxId)) {
     throw new JmapEmailNotFoundError();
   }
+  const bodyValues = objectValue(rawDraftRecord?.bodyValues) ?? {};
+  const rawHtmlBody = firstBodyValue(
+    parseBodyParts(rawDraftRecord?.htmlBody),
+    bodyValues,
+    "text/html",
+  ).value;
+  const htmlBody = rawHtmlBody === null
+    ? null
+    : sanitizeComposedHtml(stripManagedBannerHtml(rawHtmlBody));
+  const body = htmlBody === null
+    ? detail.textBody ?? ""
+    : composedHtmlToText(htmlBody);
   return {
     state: payload.state,
     sendPending: hasDraftSendMarker(payload.list, emailId),
+    rawHtmlBody,
+    rawTextBody: detail.textBody,
     draft: {
       id: detail.id,
       from: detail.from,
@@ -3600,7 +3656,9 @@ async function getDraftFromContext(
       cc: detail.cc,
       bcc: detail.bcc,
       subject: detail.subject ?? "",
-      body: detail.textBody ?? "",
+      body,
+      htmlBody,
+      bannerVersion: rawHtmlBody === null ? null : managedBannerVersion(rawHtmlBody),
       attachments,
       inReplyTo: detail.inReplyTo,
       references: detail.references,
@@ -3816,13 +3874,20 @@ function draftMatchesSend(
   input: JmapMailSendInput,
 ): boolean {
   const expectedBcc = uniqueEmailAddresses([...identity.bcc, ...input.bcc]);
+  const expectedHtml = input.htmlBody === undefined || input.htmlBody === null
+    ? null
+    : sanitizeComposedHtml(input.htmlBody);
+  const contentMatches = expectedHtml === null
+    ? draft.htmlBody === null && draft.body === input.body
+    : draft.htmlBody === expectedHtml &&
+      draft.body === composedHtmlToText(expectedHtml);
   return (
     draft.from[0]?.email.toLowerCase() === fromEmail.toLowerCase() &&
     sameAddresses(draft.to, input.to) &&
     sameAddresses(draft.cc, input.cc) &&
     sameAddresses(draft.bcc, expectedBcc) &&
     draft.subject === input.subject &&
-    draft.body === input.body &&
+    contentMatches &&
     sameMailAttachments(draft.attachments, input.attachments) &&
     sameStringList(draft.inReplyTo, input.inReplyTo) &&
     sameStringList(draft.references, input.references)
@@ -3888,8 +3953,10 @@ export async function runJmapOAuthGetDraft({
     .find((mailbox) => mailbox.role === "drafts")?.id;
   if (!draftsMailboxId) throw new JmapEmailNotFoundError();
   const draft = (await getDraftFromContext(context, draftsMailboxId, draftId)).draft;
+  const { htmlBody, bannerVersion: _bannerVersion, ...publicDraft } = draft;
   return {
-    ...draft,
+    ...publicDraft,
+    ...(htmlBody ? { htmlBody } : {}),
     attachments: draft.attachments.map((attachment) => ({
       ...attachment,
       blobId: createMailAttachmentReceipt(
@@ -3907,6 +3974,7 @@ export async function runJmapOAuthSaveDraft({
   input,
   draftId,
   attachmentReceiptSecret,
+  managedBanners,
   sessionUrl = "https://mail.rekad.id/.well-known/jmap",
   trustedOrigins = ["https://mail.rekad.id"],
   allowInsecureHttp = false,
@@ -3917,6 +3985,7 @@ export async function runJmapOAuthSaveDraft({
   input: JmapMailDraftInput;
   draftId?: string;
   attachmentReceiptSecret: string;
+  managedBanners?: ManagedMailBanners;
   sessionUrl?: string;
   trustedOrigins?: string[];
   allowInsecureHttp?: boolean;
@@ -3938,6 +4007,9 @@ export async function runJmapOAuthSaveDraft({
       attachmentReceiptSecret,
     ),
   };
+  const contentInput: JmapMailDraftInput = managedBanners
+    ? { ...verifiedInput, ...prepareManagedMessageContent(verifiedInput, managedBanners) }
+    : verifiedInput;
   const preflight = await fetchComposePreflightFromContext(context);
   if (!preflight.draftsMailboxId) {
     throw new JmapSendRejectedError("submission_unavailable");
@@ -3955,7 +4027,7 @@ export async function runJmapOAuthSaveDraft({
       preflight.draftsMailboxId,
       identity,
       fromEmail,
-      verifiedInput,
+      contentInput,
       true,
       EMAIL_DRAFT_CREATE_CALL_ID,
     ),
@@ -4001,6 +4073,7 @@ export async function runJmapOAuthCreateDraft({
   input,
   existingDraftId,
   attachmentReceiptSecret,
+  managedBanners,
   sessionUrl = "https://mail.rekad.id/.well-known/jmap",
   trustedOrigins = ["https://mail.rekad.id"],
   allowInsecureHttp = false,
@@ -4011,6 +4084,7 @@ export async function runJmapOAuthCreateDraft({
   input: JmapMailSendInput;
   existingDraftId?: string;
   attachmentReceiptSecret: string;
+  managedBanners?: ManagedMailBanners;
   sessionUrl?: string;
   trustedOrigins?: string[];
   allowInsecureHttp?: boolean;
@@ -4032,6 +4106,9 @@ export async function runJmapOAuthCreateDraft({
       attachmentReceiptSecret,
     ),
   };
+  const contentInput: JmapMailSendInput = managedBanners
+    ? { ...verifiedInput, ...prepareManagedMessageContent(verifiedInput, managedBanners) }
+    : verifiedInput;
   const preflight = await fetchComposePreflightFromContext(context);
   if (
     !preflight.submissionAvailable ||
@@ -4053,7 +4130,12 @@ export async function runJmapOAuthCreateDraft({
     );
     if (
       draftSnapshot.sendPending ||
-      !draftMatchesSend(draftSnapshot.draft, identity, fromEmail, verifiedInput)
+      !draftMatchesSend(draftSnapshot.draft, identity, fromEmail, verifiedInput) ||
+      managedBanners !== undefined && (
+        draftSnapshot.draft.bannerVersion !== managedBanners.version ||
+        draftSnapshot.rawHtmlBody !== contentInput.htmlBody ||
+        draftSnapshot.rawTextBody !== contentInput.body
+      )
     ) {
       throw new JmapDraftMismatchError();
     }
@@ -4068,7 +4150,7 @@ export async function runJmapOAuthCreateDraft({
       preflight.draftsMailboxId,
       identity,
       fromEmail,
-      verifiedInput,
+      contentInput,
     ),
     methodName: "Email/set",
     fetchImpl,

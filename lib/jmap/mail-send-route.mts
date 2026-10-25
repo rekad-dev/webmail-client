@@ -16,6 +16,7 @@ import type {
   MailSendAttemptState,
 } from "../mail/send-attempt-store.mts";
 import { InvalidMailAttachmentReceipt } from "./mail-attachment-receipt.mts";
+import type { ManagedMailBanners } from "../mail/composed-content.mts";
 
 const RESPONSE_HEADERS = {
   "Cache-Control": "no-store",
@@ -72,6 +73,7 @@ export interface MailSendRouteDependencies {
   getAttempt(options: GetAttemptOptions): Promise<MailSendAttempt | null>;
   transitionAttempt(options: TransitionAttemptOptions): Promise<MailSendAttempt | null>;
   createDraft(options: CreateDraftOptions): Promise<{ emailId: string }>;
+  getManagedBanners?(): Promise<ManagedMailBanners>;
   submitEmail(options: SubmitOptions): Promise<{
     submissionId: string;
     sentUpdateApplied: boolean;
@@ -361,6 +363,15 @@ async function runNewAttempt({
 }): Promise<Response> {
   const key = attemptKeys(sessionId, session.accountId, input.attemptKey);
   const jmapSettings = dependencies.getJmapSettings();
+  let managedBanners: ManagedMailBanners | undefined;
+  try {
+    managedBanners = await dependencies.getManagedBanners?.();
+  } catch {
+    // This is known to happen before any JMAP request, so it is safe to
+    // terminate the reservation instead of leaving an unreconcilable attempt.
+    await markAttemptSafely(dependencies, key, "reserved", "rejected");
+    return jsonResponse({ error: "banner_settings_unavailable" }, 503);
+  }
 
   try {
     const result = await dependencies.createDraft({
@@ -368,6 +379,7 @@ async function runNewAttempt({
       expectedAccountId: session.accountId,
       input: sendInput(input),
       ...(input.draftId ? { existingDraftId: input.draftId } : {}),
+      ...(managedBanners ? { managedBanners } : {}),
       ...jmapSettings,
     });
     const draft = await writeState(

@@ -13,6 +13,7 @@ import {
 } from "@/lib/jmap/client.mts";
 import { createMailSendPostHandler } from "@/lib/jmap/mail-send-route.mts";
 import { getJmapSettings } from "@/lib/jmap/settings.mts";
+import { getManagedMailBanners } from "@/lib/mail/managed-banner-store.mts";
 import {
   getMailSendAttempt,
   reserveMailSendAttempt,
@@ -34,6 +35,7 @@ export const POST = createMailSendPostHandler({
   revokeSession: revokeOAuthSession,
   isTrustedOrigin: isTrustedAppOrigin,
   getJmapSettings,
+  getManagedBanners: getManagedMailBanners,
   reserveAttempt: reserveMailSendAttempt,
   getAttempt: getMailSendAttempt,
   transitionAttempt: transitionMailSendAttempt,

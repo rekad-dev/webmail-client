@@ -10,6 +10,7 @@ import {
 } from "@/lib/jmap/client.mts";
 import { createMailDraftHandlers } from "@/lib/jmap/mail-draft-route.mts";
 import { getJmapSettings } from "@/lib/jmap/settings.mts";
+import { getManagedMailBanners } from "@/lib/mail/managed-banner-store.mts";
 
 function attachmentReceiptSecret(): string {
   const secret = process.env.AUTH_SECRET;
@@ -25,6 +26,7 @@ const handlers = createMailDraftHandlers({
   getAuthenticatedSession: getAuthenticatedOAuthSession,
   revokeSession: revokeOAuthSession,
   isTrustedOrigin: isTrustedAppOrigin,
+  getManagedBanners: getManagedMailBanners,
   getJmapSettings,
   getDraft: (options) => runJmapOAuthGetDraft({
     ...options,

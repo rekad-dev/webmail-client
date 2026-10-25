@@ -37,6 +37,7 @@ if (process.exitCode !== 1) {
       const migrationFiles = [
         "0001-oauth-sessions.sql",
         "0002-mail-send-attempts.sql",
+        "0003-managed-mail-banners.sql",
       ];
       const migrations = await Promise.all(
         migrationFiles.map((file) =>

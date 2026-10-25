@@ -10,6 +10,7 @@ import {
   parseMailDraftRequest,
 } from "./mail-draft-request.mts";
 import { InvalidMailAttachmentReceipt } from "./mail-attachment-receipt.mts";
+import type { ManagedMailBanners } from "../mail/composed-content.mts";
 
 const RESPONSE_HEADERS = {
   "Cache-Control": "no-store",
@@ -39,6 +40,7 @@ export interface MailDraftRouteDependencies {
     emailId: string;
     previousRemoved: boolean;
   }>;
+  getManagedBanners?(): Promise<ManagedMailBanners>;
   getJmapSettings(): Pick<
     GetDraftOptions,
     "sessionUrl" | "trustedOrigins" | "allowInsecureHttp"
@@ -163,11 +165,13 @@ export function createMailDraftHandlers(
     if (authenticated instanceof Response) return authenticated;
     const { sessionId, session } = authenticated;
     try {
+      const managedBanners = await dependencies.getManagedBanners?.();
       const saved = await dependencies.saveDraft({
         accessToken: session.accessToken,
         expectedAccountId: session.accountId,
         input: input.input,
         ...(input.draftId ? { draftId: input.draftId } : {}),
+        ...(managedBanners ? { managedBanners } : {}),
         ...dependencies.getJmapSettings(),
       });
       return jsonResponse({

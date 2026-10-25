@@ -1,10 +1,11 @@
 import type { JmapMailDraftInput } from "./client.mts";
+import { composedHtmlToText, sanitizeComposedHtml } from "../mail/composed-content.mts";
 import {
   OversizedMailAttachmentRequest,
   parseMailDraftAttachments,
 } from "./mail-attachment-request.mts";
 
-export const MAX_MAIL_DRAFT_REQUEST_BYTES = 384 * 1024;
+export const MAX_MAIL_DRAFT_REQUEST_BYTES = 640 * 1024;
 export const MAX_MAIL_DRAFT_BODY_BYTES = 256 * 1024;
 
 export interface MailDraftRequest {
@@ -148,6 +149,7 @@ export async function parseMailDraftRequest(
     "bcc",
     "subject",
     "body",
+    "formattedBody",
     "attachments",
     "inReplyTo",
     "references",
@@ -166,7 +168,8 @@ export async function parseMailDraftRequest(
     /[\u0000-\u0008\u000a-\u001f\u007f]/.test(body.subject) ||
     typeof body.body !== "string" ||
     Buffer.byteLength(body.body, "utf8") > MAX_MAIL_DRAFT_BODY_BYTES ||
-    body.body.includes("\u0000")
+    body.body.includes("\u0000") ||
+    body.formattedBody !== undefined && typeof body.formattedBody !== "string"
   ) {
     throw new InvalidMailDraftRequest();
   }
@@ -194,6 +197,19 @@ export async function parseMailDraftRequest(
   }
   const inReplyTo = parseMessageIds(body.inReplyTo);
   const references = parseMessageIds(body.references);
+  let htmlBody: string | undefined;
+  let textBody = body.body;
+  if (typeof body.formattedBody === "string") {
+    try {
+      htmlBody = sanitizeComposedHtml(body.formattedBody);
+      textBody = composedHtmlToText(htmlBody);
+    } catch {
+      throw new OversizedMailDraftRequest();
+    }
+    if (Buffer.byteLength(textBody, "utf8") > MAX_MAIL_DRAFT_BODY_BYTES) {
+      throw new OversizedMailDraftRequest();
+    }
+  }
   let attachments;
   try {
     attachments = parseMailDraftAttachments(body.attachments);
@@ -212,7 +228,8 @@ export async function parseMailDraftRequest(
       cc,
       bcc,
       subject: body.subject,
-      body: body.body,
+      body: textBody,
+      ...(htmlBody === undefined ? {} : { htmlBody }),
       attachments,
       ...(inReplyTo ? { inReplyTo } : {}),
       ...(references ? { references } : {}),
