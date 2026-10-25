@@ -7,14 +7,43 @@ scope: session-handoff
 
 ## Current status
 
+The user explicitly asked to proceed through Phases 6, 7, and 8. Their code
+and tests are committed in `8969c27`, `ea5f6ef`, and `c6264b7`. Phase 6 covers
+bounded attachment transfers, signed account-bound receipts, attachment-aware
+drafts/sending, and compose/detail UI. Phase 7 covers explicit, bounded
+IndexedDB mail copies, account-scoped JMAP synchronization, a static offline
+shell, and clearing storage before logout. Phase 8 covers active-tab JMAP
+change polling, Inbox membership checks, cross-tab deduplication, and generic
+opt-in notifications.
+
+Local verification passes: `pnpm test` (185/185), `pnpm typecheck` via the
+successful production build, `node --check public/offline.js`,
+`node --check public/sw.js`, and `git diff --check`. The Next.js build changed
+generated `next-env.d.ts`; that build-only diff was restored. Fresh review
+findings about `hasMoreChanges` and bidi attachment names were fixed and
+confirmed; see `phase-6-8-review-2026-10-25`.
+
+No Phase 6–8 production deployment, browser review, live Stalwart upload,
+send, or production mailbox check was performed. Real attachment upload and
+download, offline reconnect/account isolation/logout, browser notification
+delivery, and desktop/mobile visual behavior remain unverified. Follow the
+project's explicit deployment, browser, and mailbox-mutation approval gates.
+Do not use the admin API key or change Stalwart settings. Phase 5 remains
+`in_progress` due an unresolved Trash-membership observation and the absence
+of an Archive-role mailbox on the first test account; the user explicitly
+authorized proceeding with Phases 6–8 while that remains documented.
+
+## Phase 5 historical context
+
 Phase 5 essential mailbox actions, search, threads, and drafts is in progress.
 The plan is recorded in the Traycer artifact
 `phase-5-mailbox-actions-search-threads-drafts-plan`. The user selected
 all-mail search with an optional mailbox filter, grouped JMAP threads, JMAP
 Drafts autosave, and thread-wide conversation actions with individual message
 controls. Do not use the admin API key or change server-wide settings. Do not
-mutate production mailboxes without separate explicit approval. Stop after
-Phase 5; do not start Phase 6.
+mutate production mailboxes without separate explicit approval. At this earlier
+checkpoint Phase 5 was the active scope; the user's later instruction to
+continue through Phases 6–8 supersedes its stop-after-Phase-5 note.
 
 Phase 5 implementation is committed in `1e8dc87` and `27f09aa`. It includes
 server-side search, bounded conversation reads, safe JMAP message actions,
@@ -47,8 +76,9 @@ thread was opened, exact target-message membership is unconfirmed. Further
 search cases, thread detail, action persistence, and draft persistence remain
 unverified and need separate authorization. The source-level UI review is in
 `phase-5-ui-antislop-review`. The final independent code review found no
-actionable issues; see `phase-5-hardening-parser-rereview-2026-10-24`. Keep the
-phase in progress and do not start Phase 6.
+actionable issues; see `phase-5-hardening-parser-rereview-2026-10-24`. This was
+the Phase 5 checkpoint before the user later directed continuing through
+Phases 6–8.
 
 The subject-only conversation metadata endpoint was implemented in commits
 `28e2f02`, `0e9f038`, and `58219a4`. Final review's member-subject size finding
@@ -104,7 +134,8 @@ TaskSpace was finished with no pages retained. No Inbox listing was opened,
 message body or preview was fetched, and no mailbox state changed. Full record
 is in `phase-5-production-search-check`.
 
-Phase 5 remains `in_progress`; do not start Phase 6. The temporary no-recipient
+Phase 5 remains `in_progress` because of the verification limits above. The
+user later authorized proceeding through Phases 6–8. The temporary no-recipient
 JMAP draft survived page reload, reopened with the exact saved subject/body and
 empty recipient fields, then moved to Trash successfully. No message was sent
 or permanently deleted. The result is in `phase-5-draft-persistence-check`.
@@ -316,15 +347,13 @@ access. The provider-settings audit can remain deferred.
 
 ## Current safe step
 
-Continue Phase 5 verification only; do not start Phase 6. The exact-subject
-lookup for `Re: Fwd: Test Send` returned `thread_not_found` with
-`subject_query_empty` and zero candidates. The known sibling subject
-`Fwd: Test Send` returned the same result. The authorized broader text-based
-candidate search found four candidates in two threads, with two exact target
-subject matches. The session account matched JMAP's primary account, so the
-current evidence points to the subject-filter query path and leaves the target
-ambiguous. No Trash action, exact mailbox-location request, or other mailbox
-mutation was attempted.
+Request approval for concrete production/browser checks of Phase 6–8 before
+deployment or browser automation. Attachment upload/download verification may
+create a server-side blob and temporary draft, so agree on the dedicated test
+account, exact test file, and cleanup first. Sending mail needs separate
+recipient-specific approval. Offline-save and notification-permission tests
+should be limited to the signed-in test account and named routes. No Phase 6–8
+live or browser checks have run yet.
 
 The new authenticated, body-free `/api/mail/location?emailId=...` endpoint was
 deployed to `https://webmail.rekad.id` as

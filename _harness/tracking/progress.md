@@ -5,6 +5,36 @@ scope: progress
 
 # Progress
 
+## Current work: Phases 6–8 implementation in progress
+
+- The user explicitly directed continuing through Phases 6, 7, and 8. The
+  implementation is present in commits `8969c27`, `ea5f6ef`, and `c6264b7`.
+- Phase 6 adds authenticated attachment upload/download, 4 MiB per-file and
+  20 MiB aggregate caps, account-bound signed receipts, attachment-aware
+  drafts/send, safe filenames, and compose/message UI.
+- Phase 7 adds an opt-in IndexedDB cache for up to 20 messages / 5 MiB,
+  account-scoped state, bounded JMAP `Email/changes` reconciliation, an
+  offline-only shell, and cache clearing before sign-out.
+- Phase 8 adds visible-tab 60-second polling, JMAP Inbox-membership checks,
+  cursor-based cross-tab deduplication, and generic opt-in browser alerts.
+  No Web Push, EventSource, or Stalwart settings were added.
+- The fresh Phase 6–8 review found `hasMore`/`hasMoreChanges` protocol parsing
+  and bidi filename display issues; both were fixed and verified by re-review.
+  See `phase-6-8-review-2026-10-25`.
+- Local verification passes: `pnpm test` (185/185), `pnpm typecheck` through
+  `pnpm build`, production build, `node --check public/offline.js`,
+  `node --check public/sw.js`, and `git diff --check`. Next.js's generated
+  `next-env.d.ts` change was restored.
+- No production deployment, browser review, Stalwart attachment upload, mail
+  send, or production mailbox check was performed. Real attachment flow,
+  offline reconnect/account-isolation behavior, browser notifications, and
+  mobile/desktop visual behavior remain externally unverified and need the
+  project approval gates before live checking.
+- Phase 5 remains marked `in_progress` because its final mailbox action checks
+  retained an unresolved Trash-membership observation and the first test
+  account has no Archive-role mailbox. The user authorized proceeding with
+  Phases 6–8 while those Phase 5 verification limits remain documented.
+
 ## Phase 5 essential mailbox actions, search, threads, and drafts in progress
 
 - The plan is recorded in the Traycer artifact
@@ -16,7 +46,9 @@ scope: progress
 - Implementation will use only each authenticated user's OAuth-backed JMAP
   account. The admin API key and Stalwart server-wide settings are out of scope.
 - Do not run live production mailbox mutations without separate explicit
-  approval. Phase 6 remains pending.
+  approval. At this earlier Phase 5 checkpoint, Phase 6 remained pending; the
+  user later directed continuing through Phases 6–8 while live checks stayed
+  gated.
 - The working tree now includes server-side all-mail/current-mailbox search,
   collapsed thread listing and bounded conversation reads, account-scoped
   per-message and thread mailbox actions, reply/forward prefills, and JMAP
@@ -122,8 +154,9 @@ scope: progress
   200; the exact ID then appeared in Sent and was absent from Trash, with read
   state unchanged. The intermediate Trash location remains unverified; see
   `phase-5-regular-sent-trash-check`. Resolving this without reading a body may
-  require a new exact-message mailbox-membership metadata route. Keep Phase 5
-  `in_progress`; do not start Phase 6.
+  require a new exact-message mailbox-membership metadata route. This records
+  why Phase 5 remains `in_progress`; it predates the user's later direction to
+  continue through Phases 6–8.
 
 - A separately approved read/star check on the regular message with exact
   subject `Re: Fwd: Test Send` did not reach any action: the exact-subject
@@ -334,10 +367,9 @@ scope: progress
 
 ## Next
 
-Continue Phase 5 verification only; do not start Phase 6. For
-`Re: Fwd: Test Send`, the authenticated JMAP account check passed but the
-subject query returned no candidates, so thread identification was not reached.
-Further lookup requires another exact subject or separate approval for a
-broader subject-only candidate search. Do not load message bodies or mutate
-production mailboxes without separate explicit authorization. Keep Stalwart's
-global OAuth and registration settings unchanged.
+The next useful step is an explicitly approved production/browser review for
+the Phase 6–8 routes and UI. Any live attachment upload or temporary draft
+creation needs a specific target account, test file, and cleanup plan; do not
+send an email without separate recipient-specific approval. Keep the Vercel
+project, Stalwart global OAuth/registration settings, and admin API key out of
+this verification.
