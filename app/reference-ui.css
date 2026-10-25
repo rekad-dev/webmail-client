@@ -386,3 +386,24 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
   .compose-send-button { min-width: 85px; min-height: 44px; }
   .compose-feedback, .compose-state, .compose-identity-prompt { padding-right: 18px; padding-left: 18px; }
 }
+
+.local-preview-notice,
+.compose-preview-notice {
+  border: 1px solid color-mix(in srgb, var(--lemon-dark) 18%, var(--border));
+  border-radius: var(--radius-md);
+  background: var(--lemon-light);
+  color: var(--lemon-dark);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.local-preview-notice { margin: 12px 26px 0; padding: 8px 12px; }
+.compose-preview-notice { margin: 16px 20px 0; padding: 8px 11px; }
+.local-preview-sidebar-note { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.local-preview-account-label { color: var(--muted); font-size: 13px; font-weight: 700; white-space: nowrap; }
+
+@media (max-width: 760px) {
+  .local-preview-notice { margin: 10px 14px 0; font-size: 11px; }
+  .compose-preview-notice { margin: 12px 18px 0; }
+  .local-preview-sidebar-note { flex-basis: 100%; margin: 2px 3px 3px; font-size: 9px; }
+  .local-preview-account-label { max-width: 74px; overflow: hidden; font-size: 9px; text-overflow: ellipsis; }
+}

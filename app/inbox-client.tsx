@@ -53,7 +53,7 @@ interface ThreadView {
   truncated: boolean;
 }
 
-interface MailListing {
+export interface MailListing {
   mailboxes: Mailbox[];
   selectedMailboxId: string;
   position: number;
@@ -873,24 +873,30 @@ function mailActionErrorMessage(error: string): string {
   }
 }
 
-export function InboxClient({ accountName, accountEmail }: {
+export function InboxClient({ accountName, accountEmail, localPreview = false, initialListing }: {
   accountName?: string | null;
   accountEmail?: string | null;
+  localPreview?: boolean;
+  initialListing?: MailListing;
 }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [selectedThreadIds, setSelectedThreadIds] = useState<Set<string>>(() => new Set());
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const pageSelectionRef = useRef<HTMLInputElement | null>(null);
-  const [mailboxId, setMailboxId] = useState<string | null>(null);
+  const [mailboxId, setMailboxId] = useState<string | null>(
+    () => initialListing?.selectedMailboxId ?? null,
+  );
   const [searchInput, setSearchInput] = useState("");
   const [searchText, setSearchText] = useState("");
   const [searchScope, setSearchScope] = useState<"all" | "mailbox">("all");
   const [position, setPosition] = useState(0);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [manualRefreshTarget, setManualRefreshTarget] = useState<"list" | "thread" | "message" | null>(null);
-  const [listing, setListing] = useState<MailListing | null>(null);
+  const [listing, setListing] = useState<MailListing | null>(
+    () => initialListing ?? null,
+  );
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!localPreview);
   const [openEmailId, setOpenEmailId] = useState<string | null>(null);
   const [openThreadId, setOpenThreadId] = useState<string | null>(null);
   const [threadView, setThreadView] = useState<ThreadView | null>(null);
@@ -905,14 +911,14 @@ export function InboxClient({ accountName, accountEmail }: {
   const [offlineCount, setOfflineCount] = useState(0);
   const [offlineSavedIds, setOfflineSavedIds] = useState<Set<string>>(() => new Set());
   const [offlineReady, setOfflineReady] = useState(false);
-  const [offlineStatus, setOfflineStatus] = useState("Preparing offline copies…");
+  const [offlineStatus, setOfflineStatus] = useState(() => localPreview
+    ? "Offline tools are disabled in this local preview."
+    : "Preparing offline copies…");
   const [offlineSavePendingId, setOfflineSavePendingId] = useState<string | null>(null);
   const [offlineSaveError, setOfflineSaveError] = useState<string | null>(null);
   const [notificationsReady, setNotificationsReady] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
-  const [notificationsSupported] = useState(
-    () => typeof window !== "undefined" && "Notification" in window,
-  );
+  const [notificationsSupported, setNotificationsSupported] = useState(false);
   const [notificationStatus, setNotificationStatus] = useState<string | null>(null);
   const offlineSyncPending = useRef(false);
   const notificationPollRef = useRef<(() => void) | null>(null);
@@ -941,6 +947,8 @@ export function InboxClient({ accountName, accountEmail }: {
   const restoreThreadFocus = useRef(false);
 
   useEffect(() => {
+    if (localPreview) return;
+    setNotificationsSupported("Notification" in window);
     let active = true;
     if ("serviceWorker" in navigator) {
       void navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {
@@ -988,21 +996,40 @@ export function InboxClient({ accountName, accountEmail }: {
 
     void prepareOfflineStorage();
     return () => { active = false; };
-  }, []);
+  }, [localPreview]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       const normalized = searchInput.trim();
       if (normalized !== searchText) {
         setPosition(0);
-        setListing(null);
+        if (localPreview) {
+          const query = normalized.toLocaleLowerCase();
+          const messages = initialListing
+            ? query
+              ? initialListing.messages.filter((message) => [
+                  message.subject ?? "",
+                  message.preview,
+                  senderLabel(message),
+                ].some((value) => value.toLocaleLowerCase().includes(query)))
+              : initialListing.messages
+            : null;
+          setListing(initialListing && messages ? {
+            ...initialListing,
+            messages,
+            total: messages.length,
+          } : null);
+        } else {
+          setListing(null);
+        }
         setSearchText(normalized);
       }
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [searchInput, searchText]);
+  }, [searchInput, searchText, localPreview, initialListing]);
 
   useEffect(() => {
+    if (localPreview) return;
     if (!offlineReady || !offlineScope) return;
     let active = true;
     let running = false;
@@ -1047,9 +1074,10 @@ export function InboxClient({ accountName, accountEmail }: {
       window.removeEventListener("online", synchronizeSavedCopies);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [offlineReady, offlineScope, refreshVersion]);
+  }, [localPreview, offlineReady, offlineScope, refreshVersion]);
 
   useEffect(() => {
+    if (localPreview) return;
     if (!notificationsReady || !offlineScope) return;
     let active = true;
     let running = false;
@@ -1122,9 +1150,10 @@ export function InboxClient({ accountName, accountEmail }: {
       document.removeEventListener("visibilitychange", onVisible);
       if (notificationPollRef.current) notificationPollRef.current = null;
     };
-  }, [notificationsReady, notificationsSupported, offlineScope]);
+  }, [localPreview, notificationsReady, notificationsSupported, offlineScope]);
 
   useEffect(() => {
+    if (localPreview) return;
     if (mailboxId && skipMailboxFetch.current === mailboxId) {
       skipMailboxFetch.current = null;
       return;
@@ -1176,9 +1205,10 @@ export function InboxClient({ accountName, accountEmail }: {
 
     void loadMail();
     return () => controller.abort();
-  }, [mailboxId, position, refreshVersion, searchText, searchScope]);
+  }, [localPreview, mailboxId, position, refreshVersion, searchText, searchScope]);
 
   useEffect(() => {
+    if (localPreview) return;
     if (!openThreadId) return;
     const threadId = openThreadId;
     const controller = new AbortController();
@@ -1210,9 +1240,10 @@ export function InboxClient({ accountName, accountEmail }: {
     }
     void loadThread();
     return () => controller.abort();
-  }, [openThreadId, threadRefreshVersion]);
+  }, [localPreview, openThreadId, threadRefreshVersion]);
 
   useEffect(() => {
+    if (localPreview) return;
     if (!openEmailId) return;
     const emailId = openEmailId;
 
@@ -1321,7 +1352,7 @@ export function InboxClient({ accountName, accountEmail }: {
 
     void loadMessage();
     return () => controller.abort();
-  }, [openEmailId, detailRefreshVersion]);
+  }, [localPreview, openEmailId, detailRefreshVersion]);
 
   useEffect(() => {
     if (openEmailId) {
@@ -1400,6 +1431,7 @@ export function InboxClient({ accountName, accountEmail }: {
     : "";
 
   function refresh() {
+    if (localPreview) return;
     setManualRefreshTarget(openEmailId ? "message" : openThreadId ? "thread" : "list");
     notificationPollRef.current?.();
     if (openEmailId) {
@@ -1423,7 +1455,7 @@ export function InboxClient({ accountName, accountEmail }: {
   }
 
   function selectMailbox(nextMailboxId: string) {
-    if (nextMailboxId === mailboxId) return;
+    if (localPreview || nextMailboxId === mailboxId) return;
     setManualRefreshTarget(null);
     restoreMessageFocus.current = false;
     setListing(null);
@@ -1442,6 +1474,7 @@ export function InboxClient({ accountName, accountEmail }: {
     target: { emailId: string } | { threadId: string },
     destinationMailboxId?: string,
   ) {
+    if (localPreview) return;
     if (actionPending) return;
     setActionPending(true);
     setActionError(null);
@@ -1467,6 +1500,7 @@ export function InboxClient({ accountName, accountEmail }: {
   }
 
   async function performSelectedMailAction(action: MailAction, destinationMailboxId?: string) {
+    if (localPreview) return;
     const targets = listing?.messages.filter((message) =>
       !message.isDraft && selectedThreadIds.has(message.threadId)) ?? [];
     if (actionPending || targets.length === 0) return;
@@ -1567,6 +1601,7 @@ export function InboxClient({ accountName, accountEmail }: {
   }
 
   function changePage(nextPosition: number) {
+    if (localPreview) return;
     setManualRefreshTarget(null);
     setListing(null);
     setError(null);
@@ -1574,6 +1609,7 @@ export function InboxClient({ accountName, accountEmail }: {
   }
 
   function selectSentMailbox() {
+    if (localPreview) return;
     setManualRefreshTarget(null);
     const sentMailbox = listing?.mailboxes.find((mailbox) => mailbox.role === "sent");
     if (!sentMailbox) return;
@@ -1602,6 +1638,7 @@ export function InboxClient({ accountName, accountEmail }: {
   }
 
   function openMessage(emailId: string) {
+    if (localPreview) return;
     setManualRefreshTarget(null);
     restoreMessageFocus.current = true;
     setActionError(null);
@@ -1614,6 +1651,7 @@ export function InboxClient({ accountName, accountEmail }: {
   }
 
   function openThread(threadId: string) {
+    if (localPreview) return;
     setManualRefreshTarget(null);
     restoreMessageFocus.current = false;
     restoreThreadFocus.current = true;
@@ -1639,6 +1677,7 @@ export function InboxClient({ accountName, accountEmail }: {
   }
 
   function openSavedDraft(draftId: string, trigger?: HTMLButtonElement | null, subject?: string | null) {
+    if (localPreview) return;
     if (isComposeOpen && composeDraftId === draftId) {
       setIsComposeMinimized(false);
       return;
@@ -1656,6 +1695,7 @@ export function InboxClient({ accountName, accountEmail }: {
   }
 
   async function toggleOfflineCopy(detail: EmailDetail): Promise<void> {
+    if (localPreview) return;
     if (!offlineReady || !offlineScope || offlineSavePendingId) return;
     setOfflineSavePendingId(detail.id);
     setOfflineSaveError(null);
@@ -1722,6 +1762,7 @@ export function InboxClient({ accountName, accountEmail }: {
   }
 
   async function toggleNewMailNotifications(): Promise<void> {
+    if (localPreview) return;
     if (!offlineScope || !notificationsReady) return;
     setNotificationStatus(null);
     try {
@@ -1784,7 +1825,8 @@ export function InboxClient({ accountName, accountEmail }: {
     const isSelected = mailbox.id === listing?.selectedMailboxId;
     return (
       <button aria-pressed={isSelected} className={`mailbox-link${isSelected ? " is-selected" : ""}`}
-        key={mailbox.id} onClick={() => selectMailbox(mailbox.id)} type="button" title={mailbox.name}>
+        disabled={localPreview} key={mailbox.id} onClick={() => selectMailbox(mailbox.id)} type="button"
+        title={localPreview ? "Mailbox navigation is disabled in the local preview" : mailbox.name}>
         <MailIcon name={mailboxIcon(mailbox.role)} />
         <span className="mailbox-name">{mailbox.name}</span>
         {mailbox.unreadEmails > 0 ? <span className="mailbox-unread"><span className="visually-hidden">unread: </span>{mailbox.unreadEmails.toLocaleString()}</span> : null}
@@ -1827,7 +1869,7 @@ export function InboxClient({ accountName, accountEmail }: {
           <label className="search-scope-label" htmlFor="mail-search-scope">Search in
             <select id="mail-search-scope" onChange={(event) => {
               setSearchScope(event.target.value as "all" | "mailbox");
-              setPosition(0); setListing(null);
+              if (!localPreview) { setPosition(0); setListing(null); }
             }} value={searchScope}>
               <option value="all">All mail</option><option value="mailbox">Current mailbox</option>
             </select>
@@ -1843,18 +1885,24 @@ export function InboxClient({ accountName, accountEmail }: {
         </nav>
 
         <div className="sidebar-tools">
-          <a className="sidebar-tool-link" href="/offline.html" title="Offline copies">
-            <MailIcon name="offline" /><span>Offline copies</span><span className="tool-count">{offlineCount}</span>
-          </a>
-          <p className="offline-copy-status" role="status">{offlineStatus}</p>
-          {notificationsSupported ? (
-            <button aria-pressed={notificationsEnabled} className="sidebar-tool-link notification-toggle"
-              disabled={!notificationsReady} onClick={() => void toggleNewMailNotifications()} type="button"
-              title={notificationsEnabled ? "Turn off new mail alerts" : "Enable new mail alerts"}>
-              <MailIcon name="bell" /><span>{!notificationsReady ? "Preparing alerts…" : notificationsEnabled ? "Mail alerts on" : "Enable mail alerts"}</span>
-            </button>
-          ) : <p className="notification-status">Browser notifications are not available.</p>}
-          {notificationStatus ? <p className="notification-status" role="status">{notificationStatus}</p> : null}
+          {localPreview ? (
+            <p className="local-preview-sidebar-note">Mailbox tools are disabled in this local preview.</p>
+          ) : (
+            <>
+              <a className="sidebar-tool-link" href="/offline.html" title="Offline copies">
+                <MailIcon name="offline" /><span>Offline copies</span><span className="tool-count">{offlineCount}</span>
+              </a>
+              <p className="offline-copy-status" role="status">{offlineStatus}</p>
+              {notificationsSupported ? (
+                <button aria-pressed={notificationsEnabled} className="sidebar-tool-link notification-toggle"
+                  disabled={!notificationsReady} onClick={() => void toggleNewMailNotifications()} type="button"
+                  title={notificationsEnabled ? "Turn off new mail alerts" : "Enable new mail alerts"}>
+                  <MailIcon name="bell" /><span>{!notificationsReady ? "Preparing alerts…" : notificationsEnabled ? "Mail alerts on" : "Enable mail alerts"}</span>
+                </button>
+              ) : <p className="notification-status">Browser notifications are not available.</p>}
+              {notificationStatus ? <p className="notification-status" role="status">{notificationStatus}</p> : null}
+            </>
+          )}
         </div>
         <div className="sidebar-footer">
           <span className="account-avatar" aria-hidden="true">{accountInitial}</span>
@@ -1881,47 +1929,57 @@ export function InboxClient({ accountName, accountEmail }: {
             {!openEmailId && !openThreadId ? listStatus : ""}
           </span>
           <div className="mail-header-account">
-            <button className="icon-button refresh-button" disabled={currentViewLoading} aria-busy={currentViewLoading}
+            <button className="icon-button refresh-button" disabled={localPreview || currentViewLoading} aria-busy={currentViewLoading}
               onClick={refresh} type="button" aria-label={refreshLabel}
               title={refreshLabel}><MailIcon name="refresh" size={18} /></button>
-            <button className="icon-button header-notification" disabled={!notificationsSupported || !notificationsReady}
+            <button className="icon-button header-notification" disabled={localPreview || !notificationsSupported || !notificationsReady}
               aria-label={notificationsEnabled ? "Turn off new mail alerts" : "Enable new mail alerts"}
               aria-pressed={notificationsEnabled} onClick={() => void toggleNewMailNotifications()} type="button"
               title={!notificationsSupported ? "Browser notifications are unavailable" : notificationsEnabled ? "New mail alerts are enabled" : "Enable new mail alerts"}>
               <MailIcon name="bell" size={18} />
             </button>
             <span className="header-divider" />
-            <details className="account-menu">
-              <summary className="account-trigger"><span>{displayAccount}</span><MailIcon name="chevron-down" size={14} /></summary>
-              <div className="account-menu-popover">
-                <p>{accountEmail || "Signed in to rekad Mail"}</p>
-                <PasswordChangeForm />
-                <SignOutButton />
-              </div>
-            </details>
+            {localPreview ? (
+              <span className="local-preview-account-label">Local preview</span>
+            ) : (
+              <details className="account-menu">
+                <summary className="account-trigger"><span>{displayAccount}</span><MailIcon name="chevron-down" size={14} /></summary>
+                <div className="account-menu-popover">
+                  <p>{accountEmail || "Signed in to rekad Mail"}</p>
+                  <PasswordChangeForm />
+                  <SignOutButton />
+                </div>
+              </details>
+            )}
           </div>
         </header>
+
+        {localPreview ? (
+          <p className="local-preview-notice" role="note">
+            Local preview · sample conversations only · no mailbox access or actions
+          </p>
+        ) : null}
 
         {!openEmailId && !openThreadId ? (
           <div className="message-toolbar" aria-label="Message list controls">
             <div className="bulk-toolbar">
               <label className="page-select" title="Select conversations on this page">
                 <input aria-label="Select all conversations on this page" checked={allPageSelected}
-                  disabled={isLoading || actionPending || selectableMessages.length === 0} ref={pageSelectionRef} type="checkbox"
+                  disabled={localPreview || isLoading || actionPending || selectableMessages.length === 0} ref={pageSelectionRef} type="checkbox"
                   onChange={(event) => setSelectedThreadIds(event.target.checked ? new Set(selectableMessages.map((message) => message.threadId)) : new Set())} />
                 <span className="visually-hidden">{selectedCount} selected</span>
               </label>
               <div className="bulk-action-group" role="group" aria-label="Selected conversation actions">
-                <button className="toolbar-action" disabled={selectedCount === 0 || actionPending || !archiveAvailable}
+                <button className="toolbar-action" disabled={localPreview || selectedCount === 0 || actionPending || !archiveAvailable}
                   onClick={() => void performSelectedMailAction("archive")} title={archiveAvailable ? "Archive selected conversations" : "This account has no Archive mailbox"} type="button"><MailIcon name="archive" size={19} /><span>Archive</span></button>
                 <label className={`toolbar-action toolbar-folder${selectedCount === 0 || actionPending ? " is-disabled" : ""}`}>
                   <MailIcon name="folder" size={19} /><span>Folder</span>
-                  <select aria-label="Move selected conversations to mailbox" value="" disabled={selectedCount === 0 || actionPending}
+                  <select aria-label="Move selected conversations to mailbox" value="" disabled={localPreview || selectedCount === 0 || actionPending}
                     onChange={(event) => { if (event.target.value) void performSelectedMailAction("move", event.target.value); }}>
                     <option value="">Move to folder</option>{listing?.mailboxes.map((mailbox) => <option key={mailbox.id} value={mailbox.id}>{mailbox.name}</option>)}
                   </select>
                 </label>
-                <button className="toolbar-action" disabled={selectedCount === 0 || actionPending || !trashAvailable}
+                <button className="toolbar-action" disabled={localPreview || selectedCount === 0 || actionPending || !trashAvailable}
                   onClick={() => void performSelectedMailAction("trash")} title="Move selected conversations to Trash" type="button"><MailIcon name="trash" size={19} /><span>Delete</span></button>
                 <details className="selection-menu">
                   <summary className="icon-button" aria-label="More selected conversation actions"><MailIcon name="more" size={19} /></summary>
@@ -1993,7 +2051,7 @@ export function InboxClient({ accountName, accountEmail }: {
               <li className={`conversation-list-item${selectedThreadIds.has(message.threadId) ? " is-selected" : ""}`} key={message.threadId}>
                 <label className="conversation-select">
                   <input aria-label={`Select conversation from ${senderLabel(message)}: ${message.subject?.trim() || "(no subject)"}`}
-                    checked={selectedThreadIds.has(message.threadId)} disabled={message.isDraft || actionPending || isLoading}
+                    checked={selectedThreadIds.has(message.threadId)} disabled={localPreview || message.isDraft || actionPending || isLoading}
                     title={message.isDraft ? "Open this draft to edit it" : undefined} type="checkbox"
                     onChange={(event) => setSelectedThreadIds((current) => {
                       const next = new Set(current);
@@ -2001,8 +2059,9 @@ export function InboxClient({ accountName, accountEmail }: {
                       return next;
                     })} />
                 </label>
-                <button type="button" className={`message-row${message.isUnread ? " is-unread" : ""}`} disabled={actionPending}
+                <button type="button" className={`message-row${message.isUnread ? " is-unread" : ""}`} disabled={localPreview || actionPending}
                   data-email-id={message.id} data-thread-id={message.threadId}
+                  title={localPreview ? "Opening sample messages is disabled in the local preview" : undefined}
                   aria-label={`${message.isDraft ? "Edit saved draft" : `Open ${message.isUnread ? "unread" : "read"} conversation`}${message.isStarred ? ", starred" : ""} from ${senderLabel(message)}: ${message.subject?.trim() || "(no subject)"}`}
                   onClick={(event) => message.isDraft ? openSavedDraft(message.id, event.currentTarget, message.subject) : openThread(message.threadId)}>
                   <span className={`message-avatar avatar-tone-${avatarTone(message)}`} aria-hidden="true">{senderInitials(message)}</span>
@@ -2010,7 +2069,7 @@ export function InboxClient({ accountName, accountEmail }: {
                   <span className="message-copy"><span className="message-subject">{message.isDraft ? <em>Draft: </em> : null}{message.subject?.trim() || "(no subject)"}</span><span className="message-preview"> — {message.preview}</span></span>
                   <time className="message-date" dateTime={message.receivedAt ?? undefined}>{formatDate(message.receivedAt)}</time>
                 </button>
-                {!message.isDraft ? (
+                {!localPreview && !message.isDraft ? (
                   <details className="conversation-row-menu">
                     <summary className="icon-button" aria-label={`Actions for conversation from ${senderLabel(message)}`}><MailIcon name="more" size={18} /></summary>
                     <div className="conversation-row-actions" role="group" aria-label="Conversation actions">
@@ -2210,6 +2269,7 @@ export function InboxClient({ accountName, accountEmail }: {
           initialDraftId={composeDraftId}
           initialFields={composeSeed}
           initialReplyHeaders={composeReplyHeaders}
+          localPreview={localPreview}
         />
       ) : null}
     </main>

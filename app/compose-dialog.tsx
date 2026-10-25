@@ -32,6 +32,23 @@ interface ComposePreflight {
   identities: ComposeIdentity[];
 }
 
+const LOCAL_PREVIEW_IDENTITY: ComposeIdentity = {
+  id: "local-preview-identity",
+  name: "Local preview",
+  email: "preview@example.invalid",
+  isWildcard: false,
+  replyTo: [],
+  bcc: [],
+  textSignature: "",
+};
+
+const LOCAL_PREVIEW_PREFLIGHT: ComposePreflight = {
+  submissionAvailable: false,
+  draftsMailboxId: null,
+  sentMailboxId: null,
+  identities: [LOCAL_PREVIEW_IDENTITY],
+};
+
 export interface ComposeFields {
   fromEmail: string;
   to: string;
@@ -342,6 +359,7 @@ export function ComposeDialog({
   initialDraftId,
   initialFields,
   initialReplyHeaders,
+  localPreview = false,
 }: {
   onClose(): void;
   onInspectSent(): void;
@@ -357,24 +375,29 @@ export function ComposeDialog({
   initialDraftId?: string;
   initialFields?: Partial<ComposeFields>;
   initialReplyHeaders?: ReplyHeaders;
+  localPreview?: boolean;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
   const [showCc, setShowCc] = useState(false);
   const [showBcc, setShowBcc] = useState(false);
-  const [preflight, setPreflight] = useState<ComposePreflight | null>(null);
+  const [preflight, setPreflight] = useState<ComposePreflight | null>(
+    () => localPreview ? LOCAL_PREVIEW_PREFLIGHT : null,
+  );
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!localPreview);
   const [reloadVersion, setReloadVersion] = useState(0);
-  const [identityId, setIdentityId] = useState("");
-  const [fields, setFields] = useState<ComposeFields>({
-    fromEmail: "",
-    to: "",
-    cc: "",
-    bcc: "",
-    subject: "",
-    body: "",
-  });
+  const [identityId, setIdentityId] = useState(
+    () => localPreview ? LOCAL_PREVIEW_IDENTITY.id : "",
+  );
+  const [fields, setFields] = useState<ComposeFields>(() => ({
+    fromEmail: localPreview ? LOCAL_PREVIEW_IDENTITY.email : "",
+    to: initialFields?.to ?? "",
+    cc: initialFields?.cc ?? "",
+    bcc: initialFields?.bcc ?? "",
+    subject: initialFields?.subject ?? "",
+    body: initialFields?.body ?? "",
+  }));
   const [attachments, setAttachments] = useState<ComposeAttachment[]>([]);
   const [attachmentUploadPending, setAttachmentUploadPending] = useState(false);
   const [attachmentUploadProgress, setAttachmentUploadProgress] = useState<{
@@ -423,6 +446,7 @@ export function ComposeDialog({
   }, [isMinimized]);
 
   useEffect(() => {
+    if (localPreview) return;
     const controller = new AbortController();
     setIsLoading(true);
     setLoadError(null);
@@ -517,7 +541,7 @@ export function ComposeDialog({
 
     void loadIdentities();
     return () => controller.abort();
-  }, [reloadVersion, initialDraftId]);
+  }, [reloadVersion, initialDraftId, localPreview]);
 
   useEffect(() => {
     if (isMinimized || pendingRequestLabel) return;
@@ -561,6 +585,7 @@ export function ComposeDialog({
     revision: number,
     force = false,
   ): Promise<void> {
+    if (localPreview) return Promise.resolve();
     const task = draftSaveQueueRef.current.then(async () => {
       if (revision <= savedDraftRevisionRef.current) return;
       if (!force && revision < draftRevisionRef.current) return;
@@ -611,6 +636,7 @@ export function ComposeDialog({
   }
 
   async function saveDraftNow(): Promise<void> {
+    if (localPreview) return;
     const revision = draftRevisionRef.current;
     if (revision <= savedDraftRevisionRef.current && draftIdRef.current) return;
     if (!selectedIdentity) throw new Error("draft_identity_missing");
@@ -619,6 +645,10 @@ export function ComposeDialog({
   }
 
   async function leaveCompose(onLeave: () => void, preserveUnsaved = false): Promise<void> {
+    if (localPreview) {
+      onLeave();
+      return;
+    }
     if (isLeaving || isSending || attachmentUploadPending) return;
     if (preserveUnsaved && (isLoading || loadError || sendState === "unknown" || sendState === "in_progress")) return;
     const hasUnsavedChanges = draftRevisionRef.current > savedDraftRevisionRef.current;
@@ -650,6 +680,7 @@ export function ComposeDialog({
 
   useEffect(() => {
     if (
+      localPreview ||
       !selectedIdentity ||
       !preflight?.draftsMailboxId ||
       isLoading ||
@@ -667,7 +698,7 @@ export function ComposeDialog({
       void queueDraftSave(snapshot, attachmentsSnapshot, identityIdSnapshot, revision).catch(() => undefined);
     }, 700);
     return () => window.clearTimeout(timer);
-  }, [attachments, fields, identityId, isLoading, isSending, isLeaving, preflight?.draftsMailboxId, sendState]);
+  }, [attachments, fields, identityId, isLoading, isSending, isLeaving, localPreview, preflight?.draftsMailboxId, sendState]);
 
   function updateFields(patch: Partial<ComposeFields>) {
     setFields((current) => ({ ...current, ...patch }));
@@ -718,7 +749,7 @@ export function ComposeDialog({
 
   async function uploadSelectedFiles(fileList: FileList | null): Promise<void> {
     const files = fileList ? Array.from(fileList) : [];
-    if (files.length === 0 || attachmentUploadPending) return;
+    if (localPreview || files.length === 0 || attachmentUploadPending) return;
     setAttachmentUploadError(null);
 
     const totalBytes = attachments.reduce((total, item) => total + item.size, 0) +
@@ -798,6 +829,10 @@ export function ComposeDialog({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (localPreview) {
+      setFormError("Sending is disabled in this local preview.");
+      return;
+    }
     if (!selectedIdentity || !preflight || isSending) return;
 
     const to = splitRecipients(fields.to);
@@ -948,10 +983,10 @@ export function ComposeDialog({
   const switchNeedsIdentity = Boolean(pendingRequestLabel) && !currentMessageSubmitted &&
     !selectedIdentity && draftRevisionRef.current > savedDraftRevisionRef.current;
   const preflightUnavailable = !isLoading && !loadError && preflight &&
-    (!preflight.submissionAvailable ||
+    (!localPreview && (!preflight.submissionAvailable ||
       !preflight.draftsMailboxId ||
       !preflight.sentMailboxId ||
-      preflight.identities.length === 0);
+      preflight.identities.length === 0));
   const composeHeading = mode === "reply"
     ? "Reply"
     : mode === "forward"
@@ -993,6 +1028,11 @@ export function ComposeDialog({
           </div>
         </header>
         <div className="compose-content" id="compose-content" hidden={isMinimized}>
+        {localPreview ? (
+          <p className="compose-preview-notice" role="note">
+            Local preview only. Sending, saving, and attachments are disabled.
+          </p>
+        ) : null}
         {pendingRequestLabel ? (
           <section className="compose-switch-request" aria-label="Pending compose action">
             <p ref={switchPromptRef} role="status" tabIndex={-1}>
@@ -1230,7 +1270,7 @@ export function ComposeDialog({
             </div>
 
             <div className="compose-attachment-help">
-              <input aria-describedby="compose-attachments-help" disabled={!canEdit || attachmentUploadPending}
+              <input aria-describedby="compose-attachments-help" disabled={localPreview || !canEdit || attachmentUploadPending}
                 id="compose-attachments" multiple hidden onChange={(event) => {
                   void uploadSelectedFiles(event.currentTarget.files); event.currentTarget.value = "";
                 }} ref={attachmentInputRef} type="file" />
@@ -1296,7 +1336,9 @@ export function ComposeDialog({
             ) : null}
 
             <p className={`draft-save-status${draftSaveError ? " is-error" : ""}`} role="status" aria-live="polite">
-              {draftSaveState === "saving"
+              {localPreview
+                ? "Drafts are disabled in this local preview."
+                : draftSaveState === "saving"
                 ? "Saving draft…"
                 : draftSaveState === "saved"
                   ? "Draft saved to Drafts."
@@ -1310,12 +1352,12 @@ export function ComposeDialog({
             </p>
 
             <footer className="compose-actions">
-              <button className="compose-send-button" disabled={isSending || isLeaving || (!canSend && !canCheckStatus)} type="submit">
+              <button className="compose-send-button" disabled={localPreview || isSending || isLeaving || (!canSend && !canCheckStatus)} title={localPreview ? "Sending is disabled in the local preview" : undefined} type="submit">
                 {isSending ? "Sending…" : sendState === "unknown" || sendState === "in_progress" ? "Check status" : "Send"}
                 <MailIcon name="send" size={17} />
               </button>
               <button className="icon-button compose-attach-button" aria-label="Attach files" aria-describedby="compose-attachments-help"
-                disabled={!canEdit || attachmentUploadPending} onClick={() => attachmentInputRef.current?.click()} type="button" title="Attach files">
+                disabled={localPreview || !canEdit || attachmentUploadPending} onClick={() => attachmentInputRef.current?.click()} type="button" title={localPreview ? "Attachments are disabled in the local preview" : "Attach files"}>
                 <MailIcon name="paperclip" size={21} />
               </button>
               <span className="compose-format-label">Plain text</span>
@@ -1324,7 +1366,11 @@ export function ComposeDialog({
                 <button className="compose-secondary-action" disabled={isLeaving || isSending} onClick={onInspectSent} type="button">Open Sent</button>
               ) : (
                 <button className="compose-secondary-action" disabled={isSending || isLeaving || attachmentUploadPending} onClick={() => void closeCompose()} type="button">
-                  {isLeaving ? "Saving…" : sendState === "submitted" || sendState === "submitted_sent_update_pending" ? "Close" : "Save & close"}
+                  {isLeaving
+                    ? localPreview ? "Closing…" : "Saving…"
+                    : localPreview || sendState === "submitted" || sendState === "submitted_sent_update_pending"
+                      ? "Close composer"
+                      : "Save & close"}
                 </button>
               )}
             </footer>

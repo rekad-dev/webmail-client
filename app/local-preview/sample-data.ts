@@ -1,0 +1,52 @@
+import type { MailListing } from "../inbox-client";
+
+export const localPreviewListing = {
+  mailboxes: [
+    { id: "sample-inbox", name: "Inbox", role: "inbox", totalEmails: 3, unreadEmails: 1 },
+    { id: "sample-drafts", name: "Drafts", role: "drafts", totalEmails: 1, unreadEmails: 0 },
+    { id: "sample-sent", name: "Sent", role: "sent", totalEmails: 8, unreadEmails: 0 },
+    { id: "sample-archive", name: "Archive", role: "archive", totalEmails: 12, unreadEmails: 0 },
+    { id: "sample-trash", name: "Trash", role: "trash", totalEmails: 2, unreadEmails: 0 },
+    { id: "sample-project-notes", name: "Project notes", role: null, totalEmails: 4, unreadEmails: 0 },
+  ],
+  selectedMailboxId: "sample-inbox",
+  position: 0,
+  pageSize: 25,
+  total: 3,
+  hasMore: false,
+  messages: [
+    {
+      id: "sample-email-1",
+      threadId: "sample-thread-1",
+      from: [{ name: "Ari Lestari", email: "ari@example.invalid" }],
+      subject: "A quick look at the new homepage",
+      receivedAt: "2026-10-25T09:14:00+07:00",
+      preview: "I left a few notes on the spacing and the main call to action.",
+      isUnread: true,
+      isStarred: true,
+      isDraft: false,
+    },
+    {
+      id: "sample-email-2",
+      threadId: "sample-thread-2",
+      from: [{ name: "Bima Pratama", email: "bima@example.invalid" }],
+      subject: "Team planning for Friday",
+      receivedAt: "2026-10-24T16:42:00+07:00",
+      preview: "Could we save the first ten minutes for priorities and open questions?",
+      isUnread: false,
+      isStarred: false,
+      isDraft: false,
+    },
+    {
+      id: "sample-email-3",
+      threadId: "sample-thread-3",
+      from: [{ name: "Nara Studio", email: "studio@example.invalid" }],
+      subject: "The updated color studies",
+      receivedAt: "2026-10-24T10:06:00+07:00",
+      preview: "The new palette is ready for review. I included a warmer yellow option.",
+      isUnread: false,
+      isStarred: true,
+      isDraft: false,
+    },
+  ],
+} satisfies MailListing;
