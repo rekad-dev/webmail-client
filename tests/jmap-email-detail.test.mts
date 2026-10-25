@@ -63,6 +63,7 @@ function createFetch(options: {
               [
                 "Email/get",
                 {
+                  state: "email-state-1",
                   list: [
                     {
                       id: "email-1",
@@ -86,7 +87,7 @@ function createFetch(options: {
                       },
                       attachments: [
                         {
-                          name: "report.txt",
+                          name: "report\u202e.txt",
                           type: "text/plain",
                           size: 120,
                         },
@@ -139,6 +140,7 @@ test("retrieves bounded message detail and returns sanitized HTML only", async (
 
   assert.deepEqual(detail, {
     id: "email-1",
+    emailState: "email-state-1",
     threadId: "email-1",
     from: [{ name: "Sender", email: "sender@example.test" }],
     replyTo: [],
@@ -159,7 +161,7 @@ test("retrieves bounded message detail and returns sanitized HTML only", async (
     externalLinks: ["https://example.test/"],
     bodyTruncated: false,
     attachments: [
-      { name: "report.txt", type: "text/plain", size: 120 },
+      { attachmentIndex: 0, name: "report.txt", type: "text/plain", size: 120 },
     ],
     mailboxIds: ["inbox-id", "archive-id"],
   });
@@ -181,7 +183,7 @@ test("retrieves bounded message detail and returns sanitized HTML only", async (
   assert.equal(args.fetchHTMLBodyValues, true);
   assert.equal(args.maxBodyValueBytes, 256 * 1024);
   assert.deepEqual(args.bodyProperties, ["partId", "type", "name", "size"]);
-  assert.equal(JSON.stringify(args).includes("blobId"), false);
+  assert.equal(JSON.stringify(detail).includes("blobId"), false);
 });
 
 test("rejects the primary JMAP account before reading a message", async () => {
@@ -202,7 +204,7 @@ test("maps a message missing from Email/get to a not-found error", async () => {
       methodResponses: [
         [
           "Email/get",
-          { list: [], notFound: ["email-1"] },
+          { state: "email-state-1", list: [], notFound: ["email-1"] },
           "phase3-email-detail-get",
         ],
       ],

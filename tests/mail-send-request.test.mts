@@ -40,6 +40,7 @@ test("parses a bounded plain-text message and address lists", async () => {
     bcc: [],
     subject: "A subject",
     body: "Plain text body",
+    attachments: [],
   });
 });
 
@@ -70,6 +71,19 @@ test("rejects malformed, duplicated, and excessive recipients", async () => {
       InvalidMailSendRequest,
     );
   }
+});
+
+test("maps attachment count and aggregate size limits to the oversized request error", async () => {
+  const files = Array.from({ length: 6 }, (_, index) => ({
+    blobId: `blob-${index}`,
+    name: `file-${index}.bin`,
+    type: "application/octet-stream",
+    size: 4 * 1024 * 1024,
+  }));
+  await assert.rejects(
+    parseMailSendRequest(request(validBody({ attachments: files }))),
+    OversizedMailSendRequest,
+  );
 });
 
 test("rejects oversized subjects, bodies, keys, controls, and malformed JSON", async () => {

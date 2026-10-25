@@ -65,6 +65,7 @@ function makeFetch(session: Record<string, unknown> = testSession()) {
           [
             "Mailbox/get",
             {
+              state: "mailbox-state-1",
               list: [
                 { id: "mailbox-1", role: "inbox", name: "Hidden from output" },
                 { id: "mailbox-2", role: "sent", name: "Also hidden" },

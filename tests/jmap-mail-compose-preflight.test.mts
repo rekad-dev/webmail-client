@@ -54,6 +54,7 @@ function makeFetch(includeSubmission = true) {
         return [
           "Mailbox/get",
           {
+            state: "mailbox-state-1",
             list: [
               { id: "drafts-1", name: "Drafts", role: "drafts" },
               { id: "sent-1", name: "Sent items", role: "sent" },

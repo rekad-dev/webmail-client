@@ -17,6 +17,7 @@ const accessToken = randomBytes(32).toString("base64url");
 const sessionId = randomBytes(32).toString("base64url");
 const detail: JmapEmailDetail = {
   id: "email-1",
+  emailState: "email-state-1",
   threadId: "thread-1",
   from: [{ name: "Sender", email: "sender@example.test" }],
   replyTo: [],

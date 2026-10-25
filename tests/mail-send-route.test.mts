@@ -11,6 +11,7 @@ import {
   type MailSendRouteDependencies,
 } from "../lib/jmap/mail-send-route.mts";
 import type { MailSendAttempt } from "../lib/mail/send-attempt-store.mts";
+import { InvalidMailAttachmentReceipt } from "../lib/jmap/mail-attachment-receipt.mts";
 
 const sessionId = randomBytes(32).toString("base64url");
 const accessToken = randomBytes(32).toString("base64url");
@@ -128,6 +129,27 @@ test("rejects cross-origin POST before session or send attempt work", async () =
   assert.equal(response.status, 403);
   assert.deepEqual(await response.json(), { error: "origin_not_allowed" });
   assert.equal(sessionCalls, 0);
+});
+
+test("rejects unsigned attachment blob references before any submission", async () => {
+  const { handler, calls, getAttempt } = makeDependencies({
+    createDraft: async () => {
+      calls.push("createDraft");
+      throw new InvalidMailAttachmentReceipt();
+    },
+  });
+  const response = await handler(request({
+    attachments: [{
+      blobId: "client-chosen-blob",
+      name: "notes.txt",
+      type: "text/plain",
+      size: 0,
+    }],
+  }));
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: "invalid_request" });
+  assert.equal(getAttempt()?.state, "rejected");
+  assert.equal(calls.includes("submitEmail"), false);
 });
 
 test("submits through JMAP once and returns only the accepted state", async () => {

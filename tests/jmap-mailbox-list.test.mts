@@ -58,6 +58,7 @@ function createFetch(
             [
               "Mailbox/get",
               {
+                state: "mailbox-state-1",
                 list: [
                   {
                     id: "inbox-id",

@@ -5,17 +5,24 @@ import test from "node:test";
 import {
   JmapSendRejectedError,
   runJmapOAuthCreateDraft,
+  runJmapOAuthGetDraft,
   runJmapOAuthReconcileSend,
   runJmapOAuthSubmitEmail,
   runJmapOAuthUpdateSent,
   type JmapMailSendInput,
 } from "../lib/jmap/client.mts";
+import { createMailAttachmentReceipt } from "../lib/jmap/mail-attachment-receipt.mts";
 
 const CORE = "urn:ietf:params:jmap:core";
 const MAIL = "urn:ietf:params:jmap:mail";
 const SUBMISSION = "urn:ietf:params:jmap:submission";
 const TEST_ORIGIN = "https://mail.example.test";
 const token = randomBytes(32).toString("base64url");
+const receiptSecret = randomBytes(32).toString("base64url");
+
+function attachmentReceipt(blobId: string, type: string, size: number): string {
+  return createMailAttachmentReceipt("account-1", { blobId, type, size }, receiptSecret);
+}
 const sendAttemptKey = Buffer.alloc(32).toString("base64url");
 const sendMarker = `rekad-send-pending-${createHash("sha256")
   .update("rekad-mail-draft-send-lock\0")
@@ -55,6 +62,7 @@ function makeFetch(options: {
   submissionIds?: string[];
   inSentMailbox?: boolean;
   rejectSubmission?: boolean;
+  draftAttachments?: Array<Record<string, unknown>>;
 } = {}) {
   const apiRequests: Record<string, unknown>[] = [];
   const fetchImpl: typeof fetch = async (inputValue, init) => {
@@ -71,7 +79,7 @@ function makeFetch(options: {
       if (method === "Mailbox/get") {
         return [
           "Mailbox/get",
-          { list: [
+          { state: "mailbox-state-1", list: [
             { id: "drafts-1", name: "Drafts", role: "drafts" },
             { id: "sent-1", name: "Sent", role: "sent" },
           ] },
@@ -121,6 +129,14 @@ function makeFetch(options: {
             state: "email-state-1",
             list: [{
               id: "email-1",
+              from: [{ name: "Sender Name", email: "sender@example.test" }],
+              to: [],
+              cc: [],
+              bcc: [],
+              subject: "Saved draft",
+              textBody: [{ partId: "draft-body", type: "text/plain" }],
+              bodyValues: { "draft-body": { value: "Saved body" } },
+              attachments: options.draftAttachments ?? [],
               mailboxIds: options.inSentMailbox ? { "sent-1": true } : { "drafts-1": true },
               keywords: { $draft: true },
             }],
@@ -149,6 +165,7 @@ const options = (fetchImpl: typeof fetch) => ({
   accessToken: token,
   expectedAccountId: "account-1",
   sessionUrl: `${TEST_ORIGIN}/.well-known/jmap`,
+  attachmentReceiptSecret: receiptSecret,
   fetchImpl,
 });
 
@@ -184,6 +201,93 @@ test("creates a server-authorized plain-text draft with identity defaults", asyn
   assert.deepEqual(draft.bodyStructure, { type: "text/plain", partId: "rekad-text-body" });
   assert.deepEqual(draft.bodyValues, { "rekad-text-body": { value: input.body } });
   assert.equal("htmlBody" in draft, false);
+});
+
+test("creates a multipart draft with uploaded blob references instead of inline attachments", async () => {
+  const { fetchImpl, apiRequests } = makeFetch();
+  await runJmapOAuthCreateDraft({
+    ...options(fetchImpl),
+    input: {
+      ...input,
+      attachments: [
+        {
+          blobId: attachmentReceipt("shared-blob", "text/plain", 4),
+          name: "first.txt",
+          type: "text/plain",
+          size: 4,
+        },
+        {
+          // JMAP may deduplicate identical uploads to the same blob ID.
+          blobId: attachmentReceipt("shared-blob", "text/plain", 4),
+          name: "copy.txt",
+          type: "text/plain",
+          size: 4,
+        },
+      ],
+    },
+  });
+
+  const request = apiRequests[2];
+  const calls = request?.methodCalls as unknown[][];
+  const create = calls[0]?.[1] as {
+    create: { draft: Record<string, unknown> };
+  };
+  const draft = create.create.draft;
+  assert.deepEqual(draft.bodyStructure, {
+    type: "multipart/mixed",
+    subParts: [
+      { type: "text/plain", partId: "rekad-text-body" },
+      {
+        blobId: "shared-blob",
+        type: "text/plain",
+        name: "first.txt",
+        disposition: "attachment",
+        size: 4,
+      },
+      {
+        blobId: "shared-blob",
+        type: "text/plain",
+        name: "copy.txt",
+        disposition: "attachment",
+        size: 4,
+      },
+    ],
+  });
+  assert.equal(Object.hasOwn(draft, "attachments"), false);
+});
+
+test("reopens saved draft attachment references for the compose form", async () => {
+  const { fetchImpl, apiRequests } = makeFetch({
+    draftAttachments: [{
+      blobId: "blob-1",
+      name: "notes.txt",
+      type: "text/plain",
+      size: 42,
+      disposition: "attachment",
+    }],
+  });
+  const draft = await runJmapOAuthGetDraft({
+    ...options(fetchImpl),
+    draftId: "email-1",
+  });
+
+  assert.equal(draft.body, "Saved body");
+  assert.deepEqual(draft.attachments, [{
+    blobId: attachmentReceipt("blob-1", "text/plain", 42),
+    name: "notes.txt",
+    type: "text/plain",
+    size: 42,
+  }]);
+  const draftRequest = apiRequests[1];
+  const draftArgs = (draftRequest?.methodCalls as unknown[][])[0]?.[1] as Record<string, unknown>;
+  assert.deepEqual(draftArgs.bodyProperties, [
+    "partId",
+    "blobId",
+    "type",
+    "name",
+    "size",
+    "disposition",
+  ]);
 });
 
 test("requires a concrete address covered by a wildcard server identity", async () => {

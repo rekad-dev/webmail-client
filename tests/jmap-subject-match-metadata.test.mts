@@ -90,6 +90,7 @@ function createFetch(options: {
         methodResponses: [[
           "Mailbox/get",
           {
+            state: "mailbox-state-1",
             list: [
               { id: "sent-mailbox", role: "sent" },
               { id: "trash-mailbox", role: "trash" },
