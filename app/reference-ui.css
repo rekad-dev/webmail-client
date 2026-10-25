@@ -191,6 +191,15 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
 .compose-window-controls .compose-close { font-size: inherit; }
 .compose-content { display: flex; min-height: 0; flex: 1; flex-direction: column; }
 .compose-content[hidden] { display: none; }
+.compose-switch-request { flex: none; margin: 0 24px 12px; border: 1px solid #ddd8fa; border-radius: 8px; background: #f8f6ff; padding: 12px; }
+.compose-switch-request p { margin: 0; color: #665b80; font-size: 12px; line-height: 1.5; }
+.compose-switch-request strong { display: -webkit-box; overflow: hidden; margin-bottom: 3px; color: #45355f; font-weight: 600; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
+.compose-switch-request > div { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 9px; }
+.compose-switch-request button { min-height: 35px; border: 1px solid #d1c7ed; border-radius: 5px; padding: 0 10px; font: inherit; font-size: 12px; cursor: pointer; }
+.compose-switch-confirm { background: #fff; color: #60489d; }
+.compose-switch-cancel { border-color: transparent !important; background: transparent; color: #736487; }
+.compose-switch-request button:disabled { opacity: .5; cursor: not-allowed; }
+
 .compose-form { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 0; overflow: auto; padding: 0 24px 18px; scrollbar-width: thin; }
 .compose-field { display: grid; min-width: 0; flex: none; grid-template-columns: 62px minmax(0, 1fr); align-items: center; gap: 12px; border: 0; padding: 7px 0; }
 .compose-field label, .compose-label { color: #44464f; font-size: 13px; font-weight: 450; }
@@ -328,6 +337,7 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
   .compose-header h2 { font-size: 19px; }
   .compose-expand { display: none; }
   .compose-form { padding: 0 18px max(15px, env(safe-area-inset-bottom)); }
+  .compose-switch-request { margin-right: 18px; margin-left: 18px; }
   .compose-field { grid-template-columns: 48px minmax(0, 1fr); gap: 8px; }
   .compose-field label, .compose-label { font-size: 12px; }
   .compose-field input, .compose-field select { min-height: 41px; padding-right: 9px; padding-left: 9px; font-size: 13px; }

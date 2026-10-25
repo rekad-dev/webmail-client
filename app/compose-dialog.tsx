@@ -333,6 +333,9 @@ export function ComposeDialog({
   onSubmitted,
   isMinimized,
   onMinimizedChange,
+  pendingRequestLabel,
+  onConfirmSwitch,
+  onCancelSwitch,
   fallbackFocusRef,
   triggerRef,
   mode = "new",
@@ -345,6 +348,9 @@ export function ComposeDialog({
   onSubmitted(): void;
   isMinimized: boolean;
   onMinimizedChange(minimized: boolean): void;
+  pendingRequestLabel: string | null;
+  onConfirmSwitch(): void;
+  onCancelSwitch(): void;
   fallbackFocusRef: RefObject<HTMLHeadingElement | null>;
   triggerRef: RefObject<HTMLButtonElement | null>;
   mode?: "new" | "reply" | "forward" | "draft";
@@ -353,6 +359,7 @@ export function ComposeDialog({
   initialReplyHeaders?: ReplyHeaders;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isLeaving, setIsLeaving] = useState(false);
   const [showCc, setShowCc] = useState(false);
   const [showBcc, setShowBcc] = useState(false);
   const [preflight, setPreflight] = useState<ComposePreflight | null>(null);
@@ -397,6 +404,7 @@ export function ComposeDialog({
   const identitySelectRef = useRef<HTMLSelectElement | null>(null);
   const toFieldRef = useRef<HTMLInputElement | null>(null);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const switchPromptRef = useRef<HTMLParagraphElement | null>(null);
 
   useEffect(() => {
     titleRef.current?.focus();
@@ -512,19 +520,23 @@ export function ComposeDialog({
   }, [reloadVersion, initialDraftId]);
 
   useEffect(() => {
-    if (isMinimized) return;
+    if (isMinimized || pendingRequestLabel) return;
     if (isLoading || loadError || !preflight) {
       titleRef.current?.focus();
       return;
     }
     if (toFieldRef.current) toFieldRef.current.focus();
     else identitySelectRef.current?.focus();
-  }, [isLoading, loadError, preflight, isMinimized]);
+  }, [isLoading, loadError, preflight, isMinimized, pendingRequestLabel]);
+
+  useEffect(() => {
+    if (pendingRequestLabel && !isMinimized) switchPromptRef.current?.focus();
+  }, [pendingRequestLabel, isMinimized]);
 
   const selectedIdentity = preflight?.identities.find(
     (identity) => identity.id === identityId,
   ) ?? null;
-  const canEdit = !isSending &&
+  const canEdit = !isSending && !isLeaving &&
     sendState !== "in_progress" &&
     sendState !== "unknown" &&
     sendState !== "submitted" &&
@@ -606,22 +618,34 @@ export function ComposeDialog({
     if (!draftIdRef.current) throw new Error("draft_save_failed");
   }
 
-  async function closeCompose(): Promise<void> {
-    if (attachmentUploadPending) return;
+  async function leaveCompose(onLeave: () => void, preserveUnsaved = false): Promise<void> {
+    if (isLeaving || isSending || attachmentUploadPending) return;
+    if (preserveUnsaved && (isLoading || loadError || sendState === "unknown" || sendState === "in_progress")) return;
+    const hasUnsavedChanges = draftRevisionRef.current > savedDraftRevisionRef.current;
+    if (preserveUnsaved && hasUnsavedChanges && !selectedIdentity) {
+      setFormError("Choose a sender identity so this draft can be saved before switching.");
+      return;
+    }
+    setIsLeaving(true);
     if (
       selectedIdentity &&
       sendState !== "submitted" &&
       sendState !== "submitted_sent_update_pending" &&
-      draftRevisionRef.current > savedDraftRevisionRef.current
+      hasUnsavedChanges
     ) {
       try {
         await saveDraftNow();
       } catch {
         setFormError("This draft could not be saved. Keep it open and try again.");
+        setIsLeaving(false);
         return;
       }
     }
-    onClose();
+    onLeave();
+  }
+
+  async function closeCompose(): Promise<void> {
+    await leaveCompose(onClose);
   }
 
   useEffect(() => {
@@ -632,6 +656,7 @@ export function ComposeDialog({
       sendState === "submitted" ||
       sendState === "submitted_sent_update_pending" ||
       isSending ||
+      isLeaving ||
       draftRevisionRef.current <= savedDraftRevisionRef.current
     ) return;
     const snapshot = fields;
@@ -642,7 +667,7 @@ export function ComposeDialog({
       void queueDraftSave(snapshot, attachmentsSnapshot, identityIdSnapshot, revision).catch(() => undefined);
     }, 700);
     return () => window.clearTimeout(timer);
-  }, [attachments, fields, identityId, isLoading, isSending, preflight?.draftsMailboxId, sendState]);
+  }, [attachments, fields, identityId, isLoading, isSending, isLeaving, preflight?.draftsMailboxId, sendState]);
 
   function updateFields(patch: Partial<ComposeFields>) {
     setFields((current) => ({ ...current, ...patch }));
@@ -895,7 +920,7 @@ export function ComposeDialog({
   function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
     if (event.key === "Escape") {
       event.preventDefault();
-      if (!isSending) void closeCompose();
+      if (!isSending && !isLeaving) void closeCompose();
       return;
     }
     if (event.key !== "Tab" || isMinimized || !dialogRef.current) return;
@@ -917,6 +942,7 @@ export function ComposeDialog({
     }
   }
 
+  const currentMessageSubmitted = sendState === "submitted" || sendState === "submitted_sent_update_pending";
   const requiresIdentity = !isLoading && !loadError && preflight &&
     preflight.identities.length > 1 && !selectedIdentity;
   const preflightUnavailable = !isLoading && !loadError && preflight &&
@@ -949,22 +975,39 @@ export function ComposeDialog({
             <h2 id="compose-title" ref={titleRef} tabIndex={-1}>{composeHeading}</h2>
           </div>
           <div className="compose-window-controls">
-            <button className="icon-button" aria-label={isMinimized ? "Restore compose" : "Minimize compose"}
+            <button className="icon-button" disabled={isLeaving} aria-label={isMinimized ? "Restore compose" : "Minimize compose"}
               aria-expanded={!isMinimized} aria-controls="compose-content"
               onClick={() => { onMinimizedChange(!isMinimized); setIsExpanded(false); }} type="button">
               <MailIcon name="minimize" size={19} />
             </button>
-            <button className="icon-button compose-expand" aria-label={isExpanded ? "Exit expanded compose" : "Expand compose"}
+            <button className="icon-button compose-expand" disabled={isLeaving} aria-label={isExpanded ? "Exit expanded compose" : "Expand compose"}
               aria-pressed={isExpanded} onClick={() => { onMinimizedChange(false); setIsExpanded((value) => !value); }} type="button">
               <MailIcon name="expand" size={19} />
             </button>
             <button aria-label="Close compose" className="icon-button compose-close"
-              disabled={isSending || attachmentUploadPending} onClick={() => void closeCompose()} type="button">
+              disabled={isSending || isLeaving || attachmentUploadPending} onClick={() => void closeCompose()} type="button">
               <MailIcon name="close" size={20} />
             </button>
           </div>
         </header>
         <div className="compose-content" id="compose-content" hidden={isMinimized}>
+        {pendingRequestLabel ? (
+          <section className="compose-switch-request" aria-label="Pending compose action">
+            <p ref={switchPromptRef} role="status" tabIndex={-1}>
+              <strong title={pendingRequestLabel}>{pendingRequestLabel}</strong>
+              {currentMessageSubmitted ? "The current message was submitted. Open the requested action, or keep this window." : "Save the current draft before switching, or keep editing it."}
+            </p>
+            {sendState === "unknown" || sendState === "in_progress" ? <p>Check the current send status before switching.</p> : null}
+            <div>
+              <button className="compose-switch-confirm" type="button"
+                disabled={isLoading || Boolean(loadError) || isLeaving || isSending || attachmentUploadPending || sendState === "unknown" || sendState === "in_progress"}
+                onClick={() => void leaveCompose(onConfirmSwitch, true)}>
+                {isLeaving ? "Saving current draft…" : currentMessageSubmitted ? "Open requested action" : "Save & switch"}
+              </button>
+              <button className="compose-switch-cancel" disabled={isLeaving} onClick={onCancelSwitch} type="button">Keep current draft</button>
+            </div>
+          </section>
+        ) : null}
 
         {isLoading ? (
           <div className="compose-state" role="status" aria-live="polite">
@@ -1257,7 +1300,7 @@ export function ComposeDialog({
             </p>
 
             <footer className="compose-actions">
-              <button className="compose-send-button" disabled={isSending || (!canSend && !canCheckStatus)} type="submit">
+              <button className="compose-send-button" disabled={isSending || isLeaving || (!canSend && !canCheckStatus)} type="submit">
                 {isSending ? "Sending…" : sendState === "unknown" || sendState === "in_progress" ? "Check status" : "Send"}
                 <MailIcon name="send" size={17} />
               </button>
@@ -1268,10 +1311,10 @@ export function ComposeDialog({
               <span className="compose-format-label">Plain text</span>
               <span className="compose-action-spacer" />
               {(sendState === "unknown" || sendState === "in_progress") ? (
-                <button className="compose-secondary-action" onClick={onInspectSent} type="button">Open Sent</button>
+                <button className="compose-secondary-action" disabled={isLeaving || isSending} onClick={onInspectSent} type="button">Open Sent</button>
               ) : (
-                <button className="compose-secondary-action" disabled={isSending || attachmentUploadPending} onClick={() => void closeCompose()} type="button">
-                  {sendState === "submitted" || sendState === "submitted_sent_update_pending" ? "Close" : "Save & close"}
+                <button className="compose-secondary-action" disabled={isSending || isLeaving || attachmentUploadPending} onClick={() => void closeCompose()} type="button">
+                  {isLeaving ? "Saving…" : sendState === "submitted" || sendState === "submitted_sent_update_pending" ? "Close" : "Save & close"}
                 </button>
               )}
             </footer>

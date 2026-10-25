@@ -129,6 +129,15 @@ interface InboxChangesBody {
 
 type MailAction = "mark_read" | "mark_unread" | "star" | "unstar" | "move" | "archive" | "trash";
 
+interface ComposeRequest {
+  mode: "new" | "reply" | "forward" | "draft";
+  draftId?: string;
+  fields?: Partial<ComposeFields>;
+  headers?: { inReplyTo: string[]; references: string[] };
+  trigger: HTMLButtonElement | null;
+  label: string;
+}
+
 type BodyFormat = "formatted" | "plain";
 
 function senderLabel(email: EmailSummary): string {
@@ -474,6 +483,7 @@ function detailErrorMessage(error: string): string {
 function MessageDetailView({
   detail,
   isLoading,
+  isRefreshing,
   error,
   readUpdateError,
   bodyFormat,
@@ -498,6 +508,7 @@ function MessageDetailView({
 }: {
   detail: EmailDetail | null;
   isLoading: boolean;
+  isRefreshing: boolean;
   error: string | null;
   readUpdateError: boolean;
   bodyFormat: BodyFormat;
@@ -538,7 +549,7 @@ function MessageDetailView({
         {backButton}
         <div className="mail-state" role="status" aria-live="polite">
           <span className="loading-indicator" aria-hidden="true" />
-          <p>Opening message…</p>
+          <p>{isRefreshing ? "Refreshing message…" : "Opening message…"}</p>
         </div>
       </section>
     );
@@ -874,6 +885,7 @@ export function InboxClient({ accountName, accountEmail }: {
   const [searchScope, setSearchScope] = useState<"all" | "mailbox">("all");
   const [position, setPosition] = useState(0);
   const [refreshVersion, setRefreshVersion] = useState(0);
+  const [manualRefreshTarget, setManualRefreshTarget] = useState<"list" | "thread" | "message" | null>(null);
   const [listing, setListing] = useState<MailListing | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -906,6 +918,8 @@ export function InboxClient({ accountName, accountEmail }: {
   const [readUpdateError, setReadUpdateError] = useState(false);
   const [isComposeOpen, setIsComposeOpen] = useState(false);
   const [isComposeMinimized, setIsComposeMinimized] = useState(false);
+  const [composeInstance, setComposeInstance] = useState(0);
+  const [pendingComposeRequest, setPendingComposeRequest] = useState<ComposeRequest | null>(null);
   const [composeMode, setComposeMode] = useState<"new" | "reply" | "forward" | "draft">("new");
   const [composeDraftId, setComposeDraftId] = useState<string | undefined>();
   const [composeSeed, setComposeSeed] = useState<Partial<ComposeFields> | undefined>();
@@ -1151,7 +1165,10 @@ export function InboxClient({ accountName, accountEmail }: {
           setPosition(0);
         }
       } finally {
-        if (!controller.signal.aborted) setIsLoading(false);
+        if (!controller.signal.aborted) {
+          setIsLoading(false);
+          setManualRefreshTarget((target) => target === "list" ? null : target);
+        }
       }
     }
 
@@ -1183,7 +1200,10 @@ export function InboxClient({ accountName, accountEmail }: {
         setThreadError(loadError instanceof Error ? loadError.message : "mail_unavailable");
         setThreadView(null);
       } finally {
-        if (!controller.signal.aborted) setThreadLoading(false);
+        if (!controller.signal.aborted) {
+          setThreadLoading(false);
+          setManualRefreshTarget((target) => target === "thread" ? null : target);
+        }
       }
     }
     void loadThread();
@@ -1290,7 +1310,10 @@ export function InboxClient({ accountName, accountEmail }: {
           );
         }
       } finally {
-        if (!controller.signal.aborted) setDetailLoading(false);
+        if (!controller.signal.aborted) {
+          setDetailLoading(false);
+          setManualRefreshTarget((target) => target === "message" ? null : target);
+        }
       }
     }
 
@@ -1375,6 +1398,7 @@ export function InboxClient({ accountName, accountEmail }: {
     : "";
 
   function refresh() {
+    setManualRefreshTarget(openEmailId ? "message" : openThreadId ? "thread" : "list");
     notificationPollRef.current?.();
     if (openEmailId) {
       setDetailRefreshVersion((value) => value + 1);
@@ -1398,6 +1422,7 @@ export function InboxClient({ accountName, accountEmail }: {
 
   function selectMailbox(nextMailboxId: string) {
     if (nextMailboxId === mailboxId) return;
+    setManualRefreshTarget(null);
     restoreMessageFocus.current = false;
     setListing(null);
     setError(null);
@@ -1463,23 +1488,40 @@ export function InboxClient({ accountName, accountEmail }: {
     }
   }
 
+  function startComposeRequest(request: ComposeRequest) {
+    composeTriggerRef.current = request.trigger;
+    setComposeMode(request.mode);
+    setComposeDraftId(request.draftId);
+    setComposeSeed(request.fields);
+    setComposeReplyHeaders(request.headers);
+    setPendingComposeRequest(null);
+    setIsComposeMinimized(false);
+    setComposeInstance((value) => value + 1);
+    setIsComposeOpen(true);
+  }
+
   function openCompose(
     mode: "new" | "reply" | "forward",
     seed?: Partial<ComposeFields>,
     headers?: { inReplyTo: string[]; references: string[] },
     trigger?: HTMLButtonElement | null,
   ) {
-    if (isComposeOpen) {
+    if (isComposeOpen && mode === "new") {
       setIsComposeMinimized(false);
       return;
     }
-    setIsComposeMinimized(false);
-    composeTriggerRef.current = trigger ?? composeButtonRef.current;
-    setComposeMode(mode);
-    setComposeDraftId(undefined);
-    setComposeSeed(seed);
-    setComposeReplyHeaders(headers);
-    setIsComposeOpen(true);
+    const subject = seed?.subject?.trim();
+    const request: ComposeRequest = {
+      mode, fields: seed, headers, trigger: trigger ?? composeButtonRef.current,
+      label: mode === "reply" ? `Reply${subject ? ` to “${subject}”` : " to the selected message"}`
+        : mode === "forward" ? `Forward${subject ? ` “${subject}”` : " the selected message"}` : "New message",
+    };
+    if (isComposeOpen) {
+      setPendingComposeRequest(request);
+      setIsComposeMinimized(false);
+      return;
+    }
+    startComposeRequest(request);
   }
 
   function replyToMessage(detail: EmailDetail, trigger?: HTMLButtonElement) {
@@ -1523,12 +1565,14 @@ export function InboxClient({ accountName, accountEmail }: {
   }
 
   function changePage(nextPosition: number) {
+    setManualRefreshTarget(null);
     setListing(null);
     setError(null);
     setPosition(nextPosition);
   }
 
   function selectSentMailbox() {
+    setManualRefreshTarget(null);
     const sentMailbox = listing?.mailboxes.find((mailbox) => mailbox.role === "sent");
     if (!sentMailbox) return;
     setListing(null);
@@ -1547,6 +1591,7 @@ export function InboxClient({ accountName, accountEmail }: {
   }
 
   function closeMessage() {
+    setManualRefreshTarget(null);
     restoreMessageFocus.current = true;
     setOpenEmailId(null);
     setEmailDetail(null);
@@ -1555,6 +1600,7 @@ export function InboxClient({ accountName, accountEmail }: {
   }
 
   function openMessage(emailId: string) {
+    setManualRefreshTarget(null);
     restoreMessageFocus.current = true;
     setActionError(null);
     setOfflineSaveError(null);
@@ -1566,6 +1612,7 @@ export function InboxClient({ accountName, accountEmail }: {
   }
 
   function openThread(threadId: string) {
+    setManualRefreshTarget(null);
     restoreMessageFocus.current = false;
     restoreThreadFocus.current = true;
     lastOpenedThreadIdRef.current = threadId;
@@ -1578,6 +1625,7 @@ export function InboxClient({ accountName, accountEmail }: {
   }
 
   function closeThread() {
+    setManualRefreshTarget(null);
     setOpenEmailId(null);
     setEmailDetail(null);
     setOpenThreadId(null);
@@ -1588,18 +1636,21 @@ export function InboxClient({ accountName, accountEmail }: {
     setRefreshVersion((value) => value + 1);
   }
 
-  function openSavedDraft(draftId: string, trigger?: HTMLButtonElement | null) {
-    if (isComposeOpen) {
+  function openSavedDraft(draftId: string, trigger?: HTMLButtonElement | null, subject?: string | null) {
+    if (isComposeOpen && composeDraftId === draftId) {
       setIsComposeMinimized(false);
       return;
     }
-    setIsComposeMinimized(false);
-    composeTriggerRef.current = trigger ?? composeButtonRef.current;
-    setComposeMode("draft");
-    setComposeDraftId(draftId);
-    setComposeSeed(undefined);
-    setComposeReplyHeaders(undefined);
-    setIsComposeOpen(true);
+    const request: ComposeRequest = {
+      mode: "draft", draftId, trigger: trigger ?? composeButtonRef.current,
+      label: subject?.trim() ? `Saved draft “${subject.trim()}”` : "The selected saved draft",
+    };
+    if (isComposeOpen) {
+      setPendingComposeRequest(request);
+      setIsComposeMinimized(false);
+      return;
+    }
+    startComposeRequest(request);
   }
 
   async function toggleOfflineCopy(detail: EmailDetail): Promise<void> {
@@ -1703,6 +1754,7 @@ export function InboxClient({ accountName, accountEmail }: {
   function closeComposeDialog() {
     setIsComposeOpen(false);
     setIsComposeMinimized(false);
+    setPendingComposeRequest(null);
     setComposeDraftId(undefined);
     setComposeSeed(undefined);
     setComposeReplyHeaders(undefined);
@@ -1718,7 +1770,9 @@ export function InboxClient({ accountName, accountEmail }: {
   const trashAvailable = Boolean(listing?.mailboxes.some((mailbox) => mailbox.role === "trash"));
   const currentViewLoading = openEmailId ? detailLoading : openThreadId ? threadLoading : isLoading;
   const refreshLabel = currentViewLoading
-    ? openEmailId ? "Refreshing message…" : openThreadId ? "Refreshing conversation…" : listing ? "Refreshing messages…" : "Loading messages…"
+    ? openEmailId ? manualRefreshTarget === "message" ? "Refreshing message…" : "Opening message…"
+      : openThreadId ? manualRefreshTarget === "thread" ? "Refreshing conversation…" : "Opening conversation…"
+        : manualRefreshTarget === "list" || listing ? "Refreshing messages…" : "Loading messages…"
     : openEmailId ? "Refresh message" : openThreadId ? "Refresh conversation" : "Refresh messages";
   const listStatus = isLoading
     ? listing ? "Refreshing messages…" : "Loading conversations…"
@@ -1814,7 +1868,7 @@ export function InboxClient({ accountName, accountEmail }: {
             </div>
           </div>
           <span className="visually-hidden" role="status" aria-live="polite" aria-atomic="true">
-            {openEmailId || openThreadId ? currentViewLoading ? refreshLabel : "" : listStatus}
+            {!openEmailId && !openThreadId ? listStatus : ""}
           </span>
           <div className="mail-header-account">
             <button className="icon-button refresh-button" disabled={currentViewLoading} aria-busy={currentViewLoading}
@@ -1936,7 +1990,7 @@ export function InboxClient({ accountName, accountEmail }: {
                 <button type="button" className={`message-row${message.isUnread ? " is-unread" : ""}`} disabled={actionPending}
                   data-email-id={message.id} data-thread-id={message.threadId}
                   aria-label={`${message.isDraft ? "Edit saved draft" : `Open ${message.isUnread ? "unread" : "read"} conversation`}${message.isStarred ? ", starred" : ""} from ${senderLabel(message)}: ${message.subject?.trim() || "(no subject)"}`}
-                  onClick={(event) => message.isDraft ? openSavedDraft(message.id, event.currentTarget) : openThread(message.threadId)}>
+                  onClick={(event) => message.isDraft ? openSavedDraft(message.id, event.currentTarget, message.subject) : openThread(message.threadId)}>
                   <span className={`message-avatar avatar-tone-${avatarTone(message)}`} aria-hidden="true">{senderInitials(message)}</span>
                   <span className="message-sender">{senderLabel(message)}{message.isStarred ? <span className="conversation-star" aria-hidden="true"> ★</span> : null}</span>
                   <span className="message-copy"><span className="message-subject">{message.isDraft ? <em>Draft: </em> : null}{message.subject?.trim() || "(no subject)"}</span><span className="message-preview"> — {message.preview}</span></span>
@@ -1972,7 +2026,7 @@ export function InboxClient({ accountName, accountEmail }: {
             {threadLoading ? (
               <div className="mail-state" role="status" aria-live="polite">
                 <span className="loading-indicator" aria-hidden="true" />
-                <p>Opening conversation…</p>
+                <p>{manualRefreshTarget === "thread" ? "Refreshing conversation…" : "Opening conversation…"}</p>
               </div>
             ) : null}
             {threadError ? (
@@ -2041,7 +2095,7 @@ export function InboxClient({ accountName, accountEmail }: {
                         data-email-id={message.id}
                         aria-label={`${message.isDraft ? "Edit saved draft" : `Open ${message.isUnread ? "unread" : "read"} message`}${message.isStarred ? ", starred" : ""} from ${senderLabel(message)}: ${message.subject?.trim() || "(no subject)"}`}
                         onClick={(event) => message.isDraft
-                          ? openSavedDraft(message.id, event.currentTarget)
+                          ? openSavedDraft(message.id, event.currentTarget, message.subject)
                           : openMessage(message.id)}
                         type="button"
                       >
@@ -2093,6 +2147,7 @@ export function InboxClient({ accountName, accountEmail }: {
             detail={emailDetail}
             error={detailError}
             isLoading={detailLoading}
+            isRefreshing={manualRefreshTarget === "message"}
             mailboxName="conversation"
             onBack={closeMessage}
             onBodyFormatChange={setBodyFormat}
@@ -2123,6 +2178,10 @@ export function InboxClient({ accountName, accountEmail }: {
       </section>
       {isComposeOpen ? (
         <ComposeDialog
+          key={composeInstance}
+          pendingRequestLabel={pendingComposeRequest?.label ?? null}
+          onCancelSwitch={() => setPendingComposeRequest(null)}
+          onConfirmSwitch={() => { if (pendingComposeRequest) startComposeRequest(pendingComposeRequest); }}
           isMinimized={isComposeMinimized}
           onMinimizedChange={setIsComposeMinimized}
           fallbackFocusRef={mailTitleRef}
