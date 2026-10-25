@@ -11,7 +11,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tests/*.test.mts",
+    "test": "node --conditions=react-server --test tests/*.test.mts",
+    "test:banner-authz": "node --conditions=react-server --test tests/banner-admin-authorization.test.mts",
     "db:migrate": "node scripts/db-migrate.mts",
     "jmap:discover": "node scripts/jmap-smoke.mts --discover-only",
     "jmap:smoke": "node scripts/jmap-smoke.mts"

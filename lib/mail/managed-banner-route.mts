@@ -89,7 +89,7 @@ function parseSettings(value: unknown): Pick<ManagedMailBanners, "headerHtml" | 
 
 async function authenticate(
   request: Request,
-  dependencies: ManagedBannerRouteDependencies,
+  dependencies: ManagedBannerSessionDependencies,
 ): Promise<{ sessionId: string; subject: string } | Response> {
   try {
     const sessionId = await dependencies.getSessionId(request);
