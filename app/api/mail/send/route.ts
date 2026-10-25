@@ -19,6 +19,12 @@ import {
   transitionMailSendAttempt,
 } from "@/lib/mail/send-attempt-store.mts";
 
+function attachmentReceiptSecret(): string {
+  const secret = process.env.AUTH_SECRET;
+  if (!secret) throw new Error("AUTH_SECRET is unavailable.");
+  return secret;
+}
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -31,7 +37,10 @@ export const POST = createMailSendPostHandler({
   reserveAttempt: reserveMailSendAttempt,
   getAttempt: getMailSendAttempt,
   transitionAttempt: transitionMailSendAttempt,
-  createDraft: runJmapOAuthCreateDraft,
+  createDraft: (options) => runJmapOAuthCreateDraft({
+    ...options,
+    attachmentReceiptSecret: attachmentReceiptSecret(),
+  }),
   submitEmail: runJmapOAuthSubmitEmail,
   updateSent: runJmapOAuthUpdateSent,
   reconcile: runJmapOAuthReconcileSend,

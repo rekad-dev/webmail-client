@@ -1,6 +1,16 @@
 import { isIP } from "node:net";
 import { createHash } from "node:crypto";
 import { sanitizeEmailHtml } from "../mail/sanitize-email-html.mts";
+import {
+  MAX_MAIL_ATTACHMENT_BYTES,
+  MAX_MAIL_ATTACHMENT_TOTAL_BYTES,
+  MAX_MAIL_ATTACHMENTS,
+  sanitizeAttachmentName,
+} from "./mail-attachment-request.mts";
+import {
+  createMailAttachmentReceipt,
+  resolveMailAttachmentReceipts,
+} from "./mail-attachment-receipt.mts";
 
 const CORE_CAPABILITY = "urn:ietf:params:jmap:core";
 const MAIL_CAPABILITY = "urn:ietf:params:jmap:mail";
@@ -33,13 +43,20 @@ const EMAIL_DRAFT_CREATE_CALL_ID = "phase5-draft-create";
 const EMAIL_DRAFT_DESTROY_CALL_ID = "phase5-draft-destroy";
 const EMAIL_SEND_MARKER_GET_CALL_ID = "phase5-send-marker-get";
 const EMAIL_SEND_MARKER_SET_CALL_ID = "phase5-send-marker-set";
+const EMAIL_ATTACHMENT_GET_CALL_ID = "phase6-email-attachment-get";
+const EMAIL_OFFLINE_CHANGES_CALL_ID = "phase7-offline-email-changes";
+const EMAIL_OFFLINE_STATE_GET_CALL_ID = "phase7-offline-email-state-get";
+const EMAIL_NOTIFICATION_CHANGES_CALL_ID = "phase8-notification-email-changes";
+const EMAIL_NOTIFICATION_STATE_GET_CALL_ID = "phase8-notification-email-state-get";
 const MAX_SESSION_REDIRECTS = 5;
 const REQUEST_TIMEOUT_MS = 15_000;
+const OFFLINE_SYNC_OPERATION_TIMEOUT_MS = 8_000;
 const THREAD_SUBJECT_CANDIDATE_OPERATION_TIMEOUT_MS = 8_000;
 const JMAP_RESPONSE_MAX_BYTES = 2 * 1024 * 1024;
 const EMAIL_DETAIL_RESPONSE_MAX_BYTES = 1024 * 1024;
 const EMAIL_BODY_VALUE_MAX_BYTES = 256 * 1024;
 const EMAIL_BODY_VALUE_MAX_CHARS = 256 * 1024;
+const MAX_EMAIL_ATTACHMENT_PARTS = 50;
 const MAX_THREAD_EMAILS = 100;
 const MAX_THREAD_SUBJECT_LOOKUP_GET_BATCHES = 2;
 const MAX_THREAD_SUBJECT_MEMBER_GET_BATCHES = 2;
@@ -169,6 +186,19 @@ export interface JmapComposePreflight {
   identities: JmapComposeIdentity[];
 }
 
+export interface JmapMailAttachmentInput {
+  blobId: string;
+  name: string;
+  type: string;
+  size: number;
+}
+
+export interface JmapUploadedAttachment {
+  blobId: string;
+  type: string;
+  size: number;
+}
+
 export interface JmapMailSendInput {
   identityId: string;
   fromEmail?: string;
@@ -177,6 +207,7 @@ export interface JmapMailSendInput {
   bcc: JmapEmailAddress[];
   subject: string;
   body: string;
+  attachments?: JmapMailAttachmentInput[];
   inReplyTo?: string[];
   references?: string[];
 }
@@ -266,11 +297,13 @@ export interface JmapMailDraft {
   bcc: JmapEmailAddress[];
   subject: string;
   body: string;
+  attachments: JmapMailAttachmentInput[];
   inReplyTo: string[];
   references: string[];
 }
 
 export interface JmapEmailAttachmentSummary {
+  attachmentIndex: number;
   name: string | null;
   type: string | null;
   size: number | null;
@@ -278,6 +311,7 @@ export interface JmapEmailAttachmentSummary {
 
 export interface JmapEmailDetail {
   id: string;
+  emailState: string;
   threadId: string;
   from: JmapEmailAddress[];
   replyTo: JmapEmailAddress[];
@@ -299,6 +333,22 @@ export interface JmapEmailDetail {
   bodyTruncated: boolean;
   attachments: JmapEmailAttachmentSummary[];
   mailboxIds: string[];
+}
+
+export interface JmapOfflineSyncResult {
+  emailState: string;
+  updated: JmapEmailDetail[];
+  destroyed: string[];
+  hasMore: boolean;
+  reset: boolean;
+}
+
+export interface JmapInboxChangesResult {
+  emailState: string;
+  newInboxEmailIds: string[];
+  hasMore: boolean;
+  hasInboxChanges: boolean;
+  reset: boolean;
 }
 
 export interface JmapInboxSmokeResult {
@@ -334,6 +384,34 @@ export class JmapEmailNotFoundError extends JmapPocError {
   constructor() {
     super("The selected email is unavailable.");
     this.name = "JmapEmailNotFoundError";
+  }
+}
+
+export class JmapAttachmentTooLargeError extends JmapPocError {
+  constructor() {
+    super("The attachment exceeds the application size limit.");
+    this.name = "JmapAttachmentTooLargeError";
+  }
+}
+
+export class JmapOfflineSyncIncompleteError extends JmapPocError {
+  constructor() {
+    super("The offline mail sync could not complete within its limits.");
+    this.name = "JmapOfflineSyncIncompleteError";
+  }
+}
+
+export class JmapInboxChangesIncompleteError extends JmapPocError {
+  constructor() {
+    super("Inbox changes could not be fully checked before the operation deadline.");
+    this.name = "JmapInboxChangesIncompleteError";
+  }
+}
+
+class JmapOfflineStateUnavailableError extends JmapPocError {
+  constructor() {
+    super("Stalwart could not calculate changes from the cached mail state.");
+    this.name = "JmapOfflineStateUnavailableError";
   }
 }
 
@@ -815,6 +893,9 @@ function getMethodResponse(
         ? rawErrorType
         : "unknown";
     if (errorType === "stateMismatch") throw new JmapStateMismatchError();
+    if (errorType === "cannotCalculateChanges") {
+      throw new JmapOfflineStateUnavailableError();
+    }
     throw new JmapPocError(`JMAP ${methodName} failed (${errorType}).`);
   }
 
@@ -833,7 +914,12 @@ function nonNegativeInteger(value: unknown): number {
 
 function parseMailboxList(responseJson: unknown): JmapMailboxSummary[] {
   const { payload } = getMethodResponse(responseJson, METHOD_CALL_ID, "Mailbox/get");
-  if (!Array.isArray(payload.list)) {
+  if (
+    typeof payload.state !== "string" ||
+    payload.state.length === 0 ||
+    payload.state.length > 256 ||
+    !Array.isArray(payload.list)
+  ) {
     throw new JmapPocError("The JMAP API returned an invalid Mailbox/get response.");
   }
 
@@ -1537,7 +1623,9 @@ function parseBodyParts(value: unknown): JmapBodyPart[] {
       {
         partId: part.partId,
         type: boundedString(part.type, 128),
-        name: boundedString(part.name, 256),
+        name: typeof part.name === "string"
+          ? sanitizeAttachmentName(part.name.slice(0, 256))
+          : null,
         size:
           typeof part.size === "number" &&
           Number.isSafeInteger(part.size) &&
@@ -1586,14 +1674,17 @@ function firstBodyValue(
 
 function parseEmailAttachments(value: unknown): JmapEmailAttachmentSummary[] {
   if (!Array.isArray(value)) return [];
-  return value.slice(0, 50).flatMap((rawPart) => {
+  return value.slice(0, MAX_EMAIL_ATTACHMENT_PARTS).flatMap((rawPart, attachmentIndex) => {
     if (!rawPart || typeof rawPart !== "object" || Array.isArray(rawPart)) {
       return [];
     }
     const part = rawPart as Record<string, unknown>;
     return [
       {
-        name: boundedString(part.name, 256),
+        attachmentIndex,
+        name: typeof part.name === "string"
+          ? sanitizeAttachmentName(part.name.slice(0, 256))
+          : null,
         type: boundedString(part.type, 128),
         size:
           typeof part.size === "number" &&
@@ -1613,7 +1704,11 @@ function parseEmailMailboxIds(value: unknown): string[] {
     .slice(0, 64);
 }
 
-function detailGetRequest(accountId: string, emailId: string) {
+function detailGetRequest(
+  accountId: string,
+  emailId: string,
+  includeAttachmentBlobIds = false,
+) {
   return {
     using: [CORE_CAPABILITY, MAIL_CAPABILITY],
     methodCalls: [
@@ -1643,7 +1738,9 @@ function detailGetRequest(accountId: string, emailId: string) {
             "attachments",
             "mailboxIds",
           ],
-          bodyProperties: ["partId", "type", "name", "size"],
+          bodyProperties: includeAttachmentBlobIds
+            ? ["partId", "blobId", "type", "name", "size", "disposition"]
+            : ["partId", "type", "name", "size"],
           fetchTextBodyValues: true,
           fetchHTMLBodyValues: true,
           maxBodyValueBytes: EMAIL_BODY_VALUE_MAX_BYTES,
@@ -1663,6 +1760,7 @@ function parseEmailDetail(responseJson: unknown, expectedId: string): JmapEmailD
   if (!Array.isArray(payload.list)) {
     throw new JmapPocError("The JMAP API returned an invalid email detail response.");
   }
+  const emailState = validateOfflineState(payload.state);
 
   const rawEmail = payload.list.find(
     (candidate) =>
@@ -1677,6 +1775,14 @@ function parseEmailDetail(responseJson: unknown, expectedId: string): JmapEmailD
   }
 
   const email = rawEmail as Record<string, unknown>;
+  return parseJmapEmailDetail(email, expectedId, emailState);
+}
+
+function parseJmapEmailDetail(
+  email: Record<string, unknown>,
+  expectedId: string,
+  emailState: string,
+): JmapEmailDetail {
   const bodyValues =
     email.bodyValues &&
     typeof email.bodyValues === "object" &&
@@ -1703,6 +1809,7 @@ function parseEmailDetail(responseJson: unknown, expectedId: string): JmapEmailD
 
   return {
     id: expectedId,
+    emailState,
     threadId:
       typeof email.threadId === "string" &&
       email.threadId.length > 0 &&
@@ -1729,6 +1836,536 @@ function parseEmailDetail(responseJson: unknown, expectedId: string): JmapEmailD
     bodyTruncated: text.truncated || rawHtml.truncated,
     attachments: parseEmailAttachments(email.attachments),
     mailboxIds: parseEmailMailboxIds(email.mailboxIds),
+  };
+}
+
+function offlineEmailChangesRequest(accountId: string, sinceState: string) {
+  return {
+    using: [CORE_CAPABILITY, MAIL_CAPABILITY],
+    methodCalls: [[
+      "Email/changes",
+      { accountId, sinceState, maxChanges: 100 },
+      EMAIL_OFFLINE_CHANGES_CALL_ID,
+    ]],
+  };
+}
+
+function offlineEmailGetRequest(
+  accountId: string,
+  ids: string[],
+  callId: string,
+) {
+  return {
+    using: [CORE_CAPABILITY, MAIL_CAPABILITY],
+    methodCalls: [[
+      "Email/get",
+      {
+        accountId,
+        ids,
+        properties: [
+          "id",
+          "from",
+          "subject",
+          "sentAt",
+          "receivedAt",
+          "keywords",
+          "textBody",
+          "htmlBody",
+          "bodyValues",
+        ],
+        bodyProperties: ["partId", "type"],
+        fetchTextBodyValues: true,
+        fetchHTMLBodyValues: true,
+        maxBodyValueBytes: EMAIL_BODY_VALUE_MAX_BYTES,
+      },
+      callId,
+    ]],
+  };
+}
+
+function offlineEmailStateRequest(
+  accountId: string,
+  callId = EMAIL_OFFLINE_STATE_GET_CALL_ID,
+) {
+  return {
+    using: [CORE_CAPABILITY, MAIL_CAPABILITY],
+    methodCalls: [[
+      "Email/get",
+      { accountId, ids: [], properties: ["id"] },
+      callId,
+    ]],
+  };
+}
+
+function validateOfflineEmailIds(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length > 20) {
+    throw new JmapPocError("The offline mail sync request is invalid.");
+  }
+  const seen = new Set<string>();
+  return value.map((candidate) => {
+    if (
+      typeof candidate !== "string" ||
+      candidate.length === 0 ||
+      candidate.length > 256 ||
+      /[\u0000-\u001f\u007f]/.test(candidate) ||
+      seen.has(candidate)
+    ) {
+      throw new JmapPocError("The offline mail sync request is invalid.");
+    }
+    seen.add(candidate);
+    return candidate;
+  });
+}
+
+function validateOfflineState(value: unknown): string {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.length > 256 ||
+    /[\u0000-\u001f\u007f]/.test(value)
+  ) {
+    throw new JmapPocError("The offline mail sync state is invalid.");
+  }
+  return value;
+}
+
+function parseOfflineChangeIds(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length > 100) {
+    throw new JmapPocError("The JMAP API returned invalid email changes.");
+  }
+  const seen = new Set<string>();
+  return value.map((candidate) => {
+    if (
+      typeof candidate !== "string" ||
+      candidate.length === 0 ||
+      candidate.length > 256 ||
+      /[\u0000-\u001f\u007f]/.test(candidate) ||
+      seen.has(candidate)
+    ) {
+      throw new JmapPocError("The JMAP API returned invalid email changes.");
+    }
+    seen.add(candidate);
+    return candidate;
+  });
+}
+
+async function getOfflineEmailDetails(
+  context: JmapApiContext,
+  emailIds: string[],
+): Promise<{ updated: JmapEmailDetail[]; notFound: string[] }> {
+  const updated: JmapEmailDetail[] = [];
+  const notFound: string[] = [];
+  const batchSize = maxObjectsInGet(context);
+  for (let start = 0; start < emailIds.length; start += batchSize) {
+    const requestedIds = emailIds.slice(start, start + batchSize);
+    const callId = `phase7-offline-email-get-${start}`;
+    const responseJson = await postJmapApi({
+      apiUrl: context.apiUrl,
+      authorization: context.authorization,
+      requestBody: offlineEmailGetRequest(context.accountId, requestedIds, callId),
+      methodName: "Email/get offline details",
+      fetchImpl: context.fetchImpl,
+      maxResponseBytes: EMAIL_DETAIL_RESPONSE_MAX_BYTES,
+    });
+    const { payload } = getMethodResponse(responseJson, callId, "Email/get");
+    if (
+      payload.accountId !== context.accountId ||
+      typeof payload.state !== "string" ||
+      payload.state.length === 0 ||
+      payload.state.length > 256 ||
+      !Array.isArray(payload.list) ||
+      !Array.isArray(payload.notFound)
+    ) {
+      throw new JmapPocError("The JMAP API returned invalid offline email details.");
+    }
+
+    const requested = new Set(requestedIds);
+    const returned = new Set<string>();
+    for (const candidate of payload.list) {
+      const email = objectValue(candidate);
+      const id = email?.id;
+      if (
+        !email ||
+        typeof id !== "string" ||
+        !requested.has(id) ||
+        returned.has(id)
+      ) {
+        throw new JmapPocError("The JMAP API returned invalid offline email coverage.");
+      }
+      returned.add(id);
+      updated.push(parseJmapEmailDetail(email, id, payload.state));
+    }
+    for (const id of payload.notFound) {
+      if (
+        typeof id !== "string" ||
+        !requested.has(id) ||
+        returned.has(id) ||
+        notFound.includes(id)
+      ) {
+        throw new JmapPocError("The JMAP API returned invalid offline email coverage.");
+      }
+      returned.add(id);
+      notFound.push(id);
+    }
+    if (returned.size !== requested.size) {
+      throw new JmapPocError("The JMAP API omitted an offline email result.");
+    }
+  }
+  return { updated, notFound };
+}
+
+function ensureOfflineSyncResponseIsBounded(result: JmapOfflineSyncResult): void {
+  if (Buffer.byteLength(JSON.stringify(result), "utf8") > 3 * 1024 * 1024) {
+    throw new JmapOfflineSyncIncompleteError();
+  }
+}
+
+async function resetOfflineSyncState(
+  context: JmapApiContext,
+  emailIds: string[],
+): Promise<JmapOfflineSyncResult> {
+  const stateResponse = await postJmapApi({
+    apiUrl: context.apiUrl,
+    authorization: context.authorization,
+    requestBody: offlineEmailStateRequest(context.accountId),
+    methodName: "Email/get offline state",
+    fetchImpl: context.fetchImpl,
+    maxResponseBytes: 256 * 1024,
+  });
+  const { payload } = getMethodResponse(
+    stateResponse,
+    EMAIL_OFFLINE_STATE_GET_CALL_ID,
+    "Email/get",
+  );
+  if (
+    payload.accountId !== context.accountId ||
+    typeof payload.state !== "string" ||
+    payload.state.length === 0 ||
+    payload.state.length > 256 ||
+    !Array.isArray(payload.list) ||
+    payload.list.length !== 0 ||
+    !Array.isArray(payload.notFound) ||
+    payload.notFound.length !== 0
+  ) {
+    throw new JmapPocError("The JMAP API returned an invalid offline sync state.");
+  }
+  const state = validateOfflineState(payload.state);
+  const refreshed = await getOfflineEmailDetails(context, emailIds);
+  const result: JmapOfflineSyncResult = {
+    emailState: state,
+    updated: refreshed.updated,
+    destroyed: refreshed.notFound,
+    hasMore: false,
+    reset: true,
+  };
+  ensureOfflineSyncResponseIsBounded(result);
+  return result;
+}
+
+export async function runJmapOAuthOfflineSync({
+  accessToken,
+  expectedAccountId,
+  sinceState,
+  emailIds,
+  sessionUrl = "https://mail.rekad.id/.well-known/jmap",
+  trustedOrigins = ["https://mail.rekad.id"],
+  allowInsecureHttp = false,
+  fetchImpl = fetch,
+}: {
+  accessToken: string;
+  expectedAccountId: string;
+  sinceState: string;
+  emailIds: string[];
+  sessionUrl?: string;
+  trustedOrigins?: string[];
+  allowInsecureHttp?: boolean;
+  fetchImpl?: typeof fetch;
+}): Promise<JmapOfflineSyncResult> {
+  const validatedState = validateOfflineState(sinceState);
+  const validatedIds = validateOfflineEmailIds(emailIds);
+  if (validatedIds.length === 0) {
+    throw new JmapPocError("The offline mail sync request is invalid.");
+  }
+  const operationFetchImpl = withJmapOperationDeadline(
+    fetchImpl,
+    OFFLINE_SYNC_OPERATION_TIMEOUT_MS,
+    () => new JmapOfflineSyncIncompleteError(),
+  );
+  const context = await createOAuthJmapContext({
+    accessToken,
+    expectedAccountId,
+    sessionUrl,
+    trustedOrigins,
+    allowInsecureHttp,
+    fetchImpl: operationFetchImpl,
+  });
+
+  let changesPayload: Record<string, unknown>;
+  try {
+    const changesResponse = await postJmapApi({
+      apiUrl: context.apiUrl,
+      authorization: context.authorization,
+      requestBody: offlineEmailChangesRequest(context.accountId, validatedState),
+      methodName: "Email/changes",
+      fetchImpl: operationFetchImpl,
+      maxResponseBytes: 256 * 1024,
+    });
+    changesPayload = getMethodResponse(
+      changesResponse,
+      EMAIL_OFFLINE_CHANGES_CALL_ID,
+      "Email/changes",
+    ).payload;
+  } catch (error) {
+    if (error instanceof JmapOfflineStateUnavailableError) {
+      return resetOfflineSyncState(context, validatedIds);
+    }
+    throw error;
+  }
+
+  const newState = validateOfflineState(changesPayload.newState);
+  if (
+    changesPayload.accountId !== context.accountId ||
+    changesPayload.oldState !== validatedState ||
+    typeof changesPayload.hasMoreChanges !== "boolean"
+  ) {
+    throw new JmapPocError("The JMAP API returned invalid email changes.");
+  }
+  const created = parseOfflineChangeIds(changesPayload.created);
+  const updatedIds = parseOfflineChangeIds(changesPayload.updated);
+  const destroyedIds = parseOfflineChangeIds(changesPayload.destroyed);
+  const changedIds = new Set([...created, ...updatedIds, ...destroyedIds]);
+  if (changedIds.size !== created.length + updatedIds.length + destroyedIds.length) {
+    throw new JmapPocError("The JMAP API returned overlapping email changes.");
+  }
+
+  const cachedIds = new Set(validatedIds);
+  const destroyed = destroyedIds.filter((id) => cachedIds.has(id));
+  const cachedUpdates = updatedIds.filter((id) =>
+    cachedIds.has(id) && !destroyed.includes(id),
+  );
+  const refreshed = await getOfflineEmailDetails(context, cachedUpdates);
+  const allDestroyed = [...new Set([...destroyed, ...refreshed.notFound])];
+  const result: JmapOfflineSyncResult = {
+    emailState: newState,
+    updated: refreshed.updated,
+    destroyed: allDestroyed,
+    hasMore: changesPayload.hasMoreChanges,
+    reset: false,
+  };
+  ensureOfflineSyncResponseIsBounded(result);
+  if (isJmapOperationDeadlineExceeded(operationFetchImpl)) {
+    throw jmapOperationDeadlineError(operationFetchImpl);
+  }
+  return result;
+}
+
+async function getCurrentEmailState(
+  context: JmapApiContext,
+  callId: string,
+): Promise<string> {
+  const responseJson = await postJmapApi({
+    apiUrl: context.apiUrl,
+    authorization: context.authorization,
+    requestBody: offlineEmailStateRequest(context.accountId, callId),
+    methodName: "Email/get notification state",
+    fetchImpl: context.fetchImpl,
+    maxResponseBytes: 256 * 1024,
+  });
+  const { payload } = getMethodResponse(responseJson, callId, "Email/get");
+  if (
+    payload.accountId !== context.accountId ||
+    !Array.isArray(payload.list) || payload.list.length !== 0 ||
+    !Array.isArray(payload.notFound) || payload.notFound.length !== 0
+  ) {
+    throw new JmapPocError("The JMAP API returned an invalid notification state.");
+  }
+  return validateOfflineState(payload.state);
+}
+
+function notificationChangesRequest(accountId: string, sinceState: string) {
+  return {
+    using: [CORE_CAPABILITY, MAIL_CAPABILITY],
+    methodCalls: [[
+      "Email/changes",
+      { accountId, sinceState, maxChanges: 100 },
+      EMAIL_NOTIFICATION_CHANGES_CALL_ID,
+    ]],
+  };
+}
+
+function notificationEmailGetRequest(accountId: string, ids: string[], callId: string) {
+  return {
+    using: [CORE_CAPABILITY, MAIL_CAPABILITY],
+    methodCalls: [[
+      "Email/get",
+      { accountId, ids, properties: ["id", "mailboxIds"] },
+      callId,
+    ]],
+  };
+}
+
+async function getInboxMembershipForEmails(
+  context: JmapApiContext,
+  emailIds: string[],
+  inboxId: string,
+): Promise<Set<string>> {
+  const inInbox = new Set<string>();
+  const batchSize = maxObjectsInGet(context);
+  for (let start = 0; start < emailIds.length; start += batchSize) {
+    const requestedIds = emailIds.slice(start, start + batchSize);
+    const callId = `phase8-notification-email-get-${start}`;
+    const responseJson = await postJmapApi({
+      apiUrl: context.apiUrl,
+      authorization: context.authorization,
+      requestBody: notificationEmailGetRequest(context.accountId, requestedIds, callId),
+      methodName: "Email/get notification metadata",
+      fetchImpl: context.fetchImpl,
+      maxResponseBytes: 256 * 1024,
+    });
+    const { payload } = getMethodResponse(responseJson, callId, "Email/get");
+    if (
+      payload.accountId !== context.accountId ||
+      typeof payload.state !== "string" ||
+      payload.state.length === 0 ||
+      !Array.isArray(payload.list) ||
+      !Array.isArray(payload.notFound)
+    ) {
+      throw new JmapPocError("The JMAP API returned invalid notification metadata.");
+    }
+    const requested = new Set(requestedIds);
+    const covered = new Set<string>();
+    for (const candidate of payload.list) {
+      const email = objectValue(candidate);
+      if (
+        !email ||
+        typeof email.id !== "string" ||
+        !requested.has(email.id) ||
+        covered.has(email.id)
+      ) {
+        throw new JmapPocError("The JMAP API returned inconsistent notification metadata.");
+      }
+      covered.add(email.id);
+      const mailboxIds = objectValue(email.mailboxIds);
+      if (mailboxIds?.[inboxId] === true) inInbox.add(email.id);
+    }
+    for (const missingId of payload.notFound) {
+      if (typeof missingId !== "string" || !requested.has(missingId) || covered.has(missingId)) {
+        throw new JmapPocError("The JMAP API returned inconsistent notification coverage.");
+      }
+      covered.add(missingId);
+    }
+    if (covered.size !== requested.size) {
+      throw new JmapPocError("The JMAP API omitted notification metadata.");
+    }
+  }
+  return inInbox;
+}
+
+export async function runJmapOAuthInboxChanges({
+  accessToken,
+  expectedAccountId,
+  sinceState,
+  sessionUrl = "https://mail.rekad.id/.well-known/jmap",
+  trustedOrigins = ["https://mail.rekad.id"],
+  allowInsecureHttp = false,
+  fetchImpl = fetch,
+}: {
+  accessToken: string;
+  expectedAccountId: string;
+  sinceState: string | null;
+  sessionUrl?: string;
+  trustedOrigins?: string[];
+  allowInsecureHttp?: boolean;
+  fetchImpl?: typeof fetch;
+}): Promise<JmapInboxChangesResult> {
+  const validatedState = sinceState === null ? null : validateOfflineState(sinceState);
+  const operationFetchImpl = withJmapOperationDeadline(
+    fetchImpl,
+    OFFLINE_SYNC_OPERATION_TIMEOUT_MS,
+    () => new JmapInboxChangesIncompleteError(),
+  );
+  const context = await createOAuthJmapContext({
+    accessToken,
+    expectedAccountId,
+    sessionUrl,
+    trustedOrigins,
+    allowInsecureHttp,
+    fetchImpl: operationFetchImpl,
+  });
+  if (validatedState === null) {
+    const emailState = await getCurrentEmailState(context, EMAIL_NOTIFICATION_STATE_GET_CALL_ID);
+    return {
+      emailState,
+      newInboxEmailIds: [],
+      hasMore: false,
+      hasInboxChanges: false,
+      reset: true,
+    };
+  }
+
+  let changesPayload: Record<string, unknown>;
+  try {
+    const responseJson = await postJmapApi({
+      apiUrl: context.apiUrl,
+      authorization: context.authorization,
+      requestBody: notificationChangesRequest(context.accountId, validatedState),
+      methodName: "Email/changes notifications",
+      fetchImpl: operationFetchImpl,
+      maxResponseBytes: 256 * 1024,
+    });
+    changesPayload = getMethodResponse(
+      responseJson,
+      EMAIL_NOTIFICATION_CHANGES_CALL_ID,
+      "Email/changes",
+    ).payload;
+  } catch (error) {
+    if (!(error instanceof JmapOfflineStateUnavailableError)) throw error;
+    return {
+      emailState: await getCurrentEmailState(context, EMAIL_NOTIFICATION_STATE_GET_CALL_ID),
+      newInboxEmailIds: [],
+      hasMore: false,
+      hasInboxChanges: false,
+      reset: true,
+    };
+  }
+
+  const emailState = validateOfflineState(changesPayload.newState);
+  if (
+    changesPayload.accountId !== context.accountId ||
+    changesPayload.oldState !== validatedState ||
+    typeof changesPayload.hasMoreChanges !== "boolean"
+  ) {
+    throw new JmapPocError("The JMAP API returned invalid notification changes.");
+  }
+  const created = parseOfflineChangeIds(changesPayload.created);
+  const updated = parseOfflineChangeIds(changesPayload.updated);
+  const destroyed = parseOfflineChangeIds(changesPayload.destroyed);
+  const allIds = new Set([...created, ...updated, ...destroyed]);
+  if (
+    allIds.size !== created.length + updated.length + destroyed.length ||
+    allIds.size > 100
+  ) {
+    throw new JmapPocError("The JMAP API returned overlapping notification changes.");
+  }
+
+  let newInboxEmailIds: string[] = [];
+  const candidateIds = [...new Set([...created, ...updated])];
+  if (candidateIds.length > 0) {
+    const inboxId = (await fetchMailboxList(context)).find((mailbox) => mailbox.role === "inbox")?.id;
+    if (inboxId) {
+      const inInbox = await getInboxMembershipForEmails(context, candidateIds, inboxId);
+      newInboxEmailIds = created.filter((emailId) => inInbox.has(emailId));
+    }
+  }
+  if (isJmapOperationDeadlineExceeded(operationFetchImpl)) {
+    throw jmapOperationDeadlineError(operationFetchImpl);
+  }
+  return {
+    emailState,
+    newInboxEmailIds,
+    hasMore: changesPayload.hasMoreChanges,
+    hasInboxChanges: allIds.size > 0,
+    reset: false,
   };
 }
 
@@ -1781,6 +2418,8 @@ function verifyEmailMarkRead(responseJson: unknown, emailId: string): void {
 
 interface JmapApiContext {
   apiUrl: URL;
+  uploadUrl: URL;
+  downloadUrl: URL;
   accountId: string;
   capabilities: Record<string, unknown>;
   accountCapabilities: Record<string, unknown>;
@@ -1837,6 +2476,8 @@ async function createJmapApiContext({
 
   return {
     apiUrl: endpoints.apiUrl,
+    uploadUrl: endpoints.uploadUrl,
+    downloadUrl: endpoints.downloadUrl,
     accountId,
     capabilities: session.capabilities ?? {},
     accountCapabilities: account.accountCapabilities ?? {},
@@ -2234,6 +2875,41 @@ function getCreatedId(
   throw new JmapPocError(`The JMAP API did not confirm ${typeName} creation.`);
 }
 
+function validatedMailAttachments(
+  attachments: JmapMailAttachmentInput[] | undefined,
+): JmapMailAttachmentInput[] {
+  if (!attachments) return [];
+  if (attachments.length > MAX_MAIL_ATTACHMENTS) {
+    throw new JmapSendRejectedError("message_too_large");
+  }
+  let totalBytes = 0;
+  for (const attachment of attachments) {
+    if (
+      !attachment ||
+      typeof attachment.blobId !== "string" ||
+      !attachment.blobId ||
+      attachment.blobId.length > 256 ||
+      /[\u0000-\u001f\u007f]/.test(attachment.blobId) ||
+      typeof attachment.name !== "string" ||
+      !attachment.name ||
+      attachment.name.length > 256 ||
+      /[\u0000-\u001f\u007f]/.test(attachment.name) ||
+      typeof attachment.type !== "string" ||
+      !/^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i.test(attachment.type) ||
+      !Number.isSafeInteger(attachment.size) ||
+      attachment.size < 0 ||
+      attachment.size > MAX_MAIL_ATTACHMENT_BYTES
+    ) {
+      throw new JmapSendRejectedError("message_too_large");
+    }
+    totalBytes += attachment.size;
+    if (totalBytes > MAX_MAIL_ATTACHMENT_TOTAL_BYTES) {
+      throw new JmapSendRejectedError("message_too_large");
+    }
+  }
+  return attachments;
+}
+
 function emailCreateDraftRequest(
   accountId: string,
   draftsMailboxId: string,
@@ -2269,6 +2945,23 @@ function emailCreateDraftRequest(
   ) {
     throw new JmapSendRejectedError("message_too_large");
   }
+  const attachments = validatedMailAttachments(input.attachments);
+  const textPart = { type: "text/plain", partId: "rekad-text-body" };
+  const bodyStructure = attachments.length > 0
+    ? {
+        type: "multipart/mixed",
+        subParts: [
+          textPart,
+          ...attachments.map((attachment) => ({
+            blobId: attachment.blobId,
+            type: attachment.type,
+            name: attachment.name,
+            disposition: "attachment",
+            size: attachment.size,
+          })),
+        ],
+      }
+    : textPart;
 
   const email: Record<string, unknown> = {
     mailboxIds: { [draftsMailboxId]: true },
@@ -2278,7 +2971,7 @@ function emailCreateDraftRequest(
     cc: input.cc,
     bcc,
     subject: input.subject,
-    bodyStructure: { type: "text/plain", partId: "rekad-text-body" },
+    bodyStructure,
     bodyValues: { "rekad-text-body": { value: input.body } },
   };
   if (identity.replyTo.length > 0) email.replyTo = identity.replyTo;
@@ -2329,6 +3022,376 @@ async function createOAuthJmapContext({
   return context;
 }
 
+function encodeUriTemplateValue(value: string): string {
+  return encodeURIComponent(value).replace(/[!'()*]/g, (character) =>
+    `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+}
+
+function expandJmapUrlTemplate(
+  template: URL,
+  variables: Record<string, string>,
+  requiredVariables: string[],
+  allowInsecureHttp: boolean,
+): URL {
+  const source = template.href;
+  const placeholderPattern = /(?:%7B|\{)([A-Za-z][A-Za-z0-9]*)(?:%7D|\})/gi;
+  const matches = [...source.matchAll(placeholderPattern)];
+  const counts = new Map<string, number>();
+  for (const match of matches) {
+    const name = match[1];
+    if (!name || !Object.hasOwn(variables, name)) {
+      throw new JmapPocError("The JMAP URL template contains an unsupported variable.");
+    }
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  if (requiredVariables.some((name) => counts.get(name) !== 1)) {
+    throw new JmapPocError("The JMAP URL template is missing a required variable.");
+  }
+  const expanded = source.replace(placeholderPattern, (_placeholder, name: string) => {
+    const value = variables[name];
+    if (!value || /[\u0000-\u001f\u007f]/.test(value)) {
+      throw new JmapPocError("A JMAP URL template value is invalid.");
+    }
+    return encodeUriTemplateValue(value);
+  });
+  return resolveTrustedUrl(
+    expanded,
+    template,
+    new Set([template.origin]),
+    allowInsecureHttp,
+  );
+}
+
+async function readLimitedResponseBytes(
+  response: Response,
+  maxBytes: number,
+  methodName: string,
+): Promise<Uint8Array> {
+  const declaredLength = response.headers.get("content-length");
+  if (declaredLength !== null) {
+    if (!/^\d+$/.test(declaredLength)) {
+      throw new JmapPocError(`JMAP ${methodName} returned an invalid content length.`);
+    }
+    if (Number(declaredLength) > maxBytes) {
+      throw new JmapPocError(`JMAP ${methodName} response exceeded the size limit.`);
+    }
+  }
+  const reader = response.body?.getReader();
+  if (!reader) throw new JmapPocError(`JMAP ${methodName} returned an empty response.`);
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > maxBytes) {
+        void reader.cancel().catch(() => undefined);
+        throw new JmapPocError(`JMAP ${methodName} response exceeded the size limit.`);
+      }
+      chunks.push(value);
+    }
+  } catch (error) {
+    if (error instanceof JmapPocError) throw error;
+    throw new JmapPocError(`Could not read the JMAP ${methodName} response.`);
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
+function attachmentGetRequest(accountId: string, emailId: string) {
+  return {
+    using: [CORE_CAPABILITY, MAIL_CAPABILITY],
+    methodCalls: [[
+      "Email/get",
+      {
+        accountId,
+        ids: [emailId],
+        properties: ["id", "attachments"],
+        bodyProperties: ["blobId", "name", "type", "size", "disposition"],
+      },
+      EMAIL_ATTACHMENT_GET_CALL_ID,
+    ]],
+  };
+}
+
+export async function runJmapOAuthUploadAttachment({
+  accessToken,
+  expectedAccountId,
+  bytes,
+  type,
+  sessionUrl = "https://mail.rekad.id/.well-known/jmap",
+  trustedOrigins = ["https://mail.rekad.id"],
+  allowInsecureHttp = false,
+  fetchImpl = fetch,
+}: {
+  accessToken: string;
+  expectedAccountId: string;
+  bytes: Uint8Array;
+  type: string;
+  sessionUrl?: string;
+  trustedOrigins?: string[];
+  allowInsecureHttp?: boolean;
+  fetchImpl?: typeof fetch;
+}): Promise<JmapUploadedAttachment> {
+  if (bytes.byteLength > MAX_MAIL_ATTACHMENT_BYTES) {
+    throw new JmapAttachmentTooLargeError();
+  }
+  const safeType = /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i.test(type)
+    ? type.toLowerCase()
+    : "application/octet-stream";
+  const operationFetchImpl = withJmapOperationDeadline(fetchImpl, 30_000);
+  const context = await createOAuthJmapContext({
+    accessToken,
+    expectedAccountId,
+    sessionUrl,
+    trustedOrigins,
+    allowInsecureHttp,
+    fetchImpl: operationFetchImpl,
+  });
+  const uploadUrl = expandJmapUrlTemplate(
+    context.uploadUrl,
+    { accountId: context.accountId },
+    ["accountId"],
+    allowInsecureHttp,
+  );
+
+  let response: Response;
+  try {
+    response = await operationFetchImpl(uploadUrl, {
+      method: "POST",
+      headers: {
+        authorization: context.authorization,
+        accept: "application/json",
+        "content-type": safeType,
+      },
+      body: new Uint8Array(bytes).buffer,
+      redirect: "manual",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch {
+    if (isJmapOperationDeadlineExceeded(operationFetchImpl)) {
+      throw jmapOperationDeadlineError(operationFetchImpl);
+    }
+    throw new JmapPocError("Could not reach the JMAP upload endpoint.");
+  }
+  if ([301, 302, 303, 307, 308].includes(response.status)) {
+    throw new JmapPocError("The JMAP upload endpoint redirected unexpectedly.");
+  }
+  if (!response.ok) {
+    throw new JmapPocError(`The JMAP upload endpoint returned HTTP ${response.status}.`);
+  }
+
+  const responseBytes = await readLimitedResponseBytes(response, 64 * 1024, "upload");
+  let payload: unknown;
+  try {
+    payload = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(responseBytes)) as unknown;
+  } catch {
+    throw new JmapPocError("The JMAP upload endpoint returned invalid JSON.");
+  }
+  const result = objectValue(payload);
+  if (
+    result?.accountId !== context.accountId ||
+    typeof result.blobId !== "string" ||
+    result.blobId.length === 0 ||
+    result.blobId.length > 256 ||
+    /[\u0000-\u001f\u007f]/.test(result.blobId) ||
+    result.type !== safeType ||
+    result.size !== bytes.byteLength
+  ) {
+    throw new JmapPocError("The JMAP upload endpoint returned invalid metadata.");
+  }
+  return {
+    blobId: result.blobId,
+    type: safeType,
+    size: bytes.byteLength,
+  };
+}
+
+export async function runJmapOAuthDownloadAttachment({
+  accessToken,
+  expectedAccountId,
+  emailId,
+  attachmentIndex,
+  sessionUrl = "https://mail.rekad.id/.well-known/jmap",
+  trustedOrigins = ["https://mail.rekad.id"],
+  allowInsecureHttp = false,
+  fetchImpl = fetch,
+}: {
+  accessToken: string;
+  expectedAccountId: string;
+  emailId: string;
+  attachmentIndex: number;
+  sessionUrl?: string;
+  trustedOrigins?: string[];
+  allowInsecureHttp?: boolean;
+  fetchImpl?: typeof fetch;
+}): Promise<{ bytes: Uint8Array; name: string; size: number }> {
+  validateEmailId(emailId);
+  if (
+    !Number.isSafeInteger(attachmentIndex) ||
+    attachmentIndex < 0 ||
+    attachmentIndex >= MAX_EMAIL_ATTACHMENT_PARTS
+  ) {
+    throw new JmapEmailNotFoundError();
+  }
+  const operationFetchImpl = withJmapOperationDeadline(fetchImpl, 30_000);
+  const context = await createOAuthJmapContext({
+    accessToken,
+    expectedAccountId,
+    sessionUrl,
+    trustedOrigins,
+    allowInsecureHttp,
+    fetchImpl: operationFetchImpl,
+  });
+  const responseJson = await postJmapApi({
+    apiUrl: context.apiUrl,
+    authorization: context.authorization,
+    requestBody: attachmentGetRequest(context.accountId, emailId),
+    methodName: "Email/get attachments",
+    fetchImpl: operationFetchImpl,
+    maxResponseBytes: 256 * 1024,
+  });
+  const { payload } = getMethodResponse(
+    responseJson,
+    EMAIL_ATTACHMENT_GET_CALL_ID,
+    "Email/get",
+  );
+  if (
+    payload.accountId !== context.accountId ||
+    typeof payload.state !== "string" ||
+    payload.state.length === 0 ||
+    !Array.isArray(payload.list) ||
+    !Array.isArray(payload.notFound)
+  ) {
+    throw new JmapPocError("The JMAP API returned invalid attachment metadata.");
+  }
+  const emails = payload.list as unknown[];
+  const matchingEmails = emails.filter(
+    (candidate) => objectValue(candidate)?.id === emailId,
+  );
+  const notFound = payload.notFound;
+  const isNotFound = notFound.includes(emailId);
+  if (
+    notFound.length > 1 ||
+    notFound.some((candidate) => candidate !== emailId) ||
+    (isNotFound && emails.length !== 0) ||
+    (!isNotFound && (emails.length !== 1 || matchingEmails.length !== 1))
+  ) {
+    throw new JmapPocError("The JMAP API returned inconsistent attachment metadata.");
+  }
+  if (isNotFound) throw new JmapEmailNotFoundError();
+  const email = matchingEmails[0];
+  if (!email || typeof email !== "object" || Array.isArray(email)) {
+    throw new JmapPocError("The JMAP API did not confirm the requested email.");
+  }
+  const attachments = (email as Record<string, unknown>).attachments;
+  if (!Array.isArray(attachments)) {
+    throw new JmapPocError("The JMAP API returned invalid attachment metadata.");
+  }
+  const part = objectValue(attachments[attachmentIndex]);
+  if (!part) throw new JmapEmailNotFoundError();
+  if (
+    typeof part.blobId !== "string" ||
+    part.blobId.length === 0 ||
+    part.blobId.length > 256 ||
+    /[\u0000-\u001f\u007f]/.test(part.blobId) ||
+    (part.name !== undefined && part.name !== null && typeof part.name !== "string") ||
+    (typeof part.name === "string" && part.name.length > 256) ||
+    typeof part.size !== "number" ||
+    !Number.isSafeInteger(part.size) ||
+    part.size < 0
+  ) {
+    throw new JmapPocError("The JMAP API returned invalid attachment metadata.");
+  }
+  if (part.size > MAX_MAIL_ATTACHMENT_BYTES) {
+    throw new JmapAttachmentTooLargeError();
+  }
+  const type = typeof part.type === "string" &&
+      /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i.test(part.type)
+    ? part.type.toLowerCase()
+    : "application/octet-stream";
+  const name = sanitizeAttachmentName(typeof part.name === "string" ? part.name : "attachment");
+  const downloadUrl = expandJmapUrlTemplate(
+    context.downloadUrl,
+    {
+      accountId: context.accountId,
+      blobId: part.blobId,
+      name,
+      type,
+    },
+    ["accountId", "blobId", "name", "type"],
+    allowInsecureHttp,
+  );
+
+  let downloadResponse: Response;
+  try {
+    downloadResponse = await operationFetchImpl(downloadUrl, {
+      method: "GET",
+      headers: {
+        authorization: context.authorization,
+        accept: "application/octet-stream",
+      },
+      redirect: "manual",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch {
+    if (isJmapOperationDeadlineExceeded(operationFetchImpl)) {
+      throw jmapOperationDeadlineError(operationFetchImpl);
+    }
+    throw new JmapPocError("Could not reach the JMAP download endpoint.");
+  }
+  if ([301, 302, 303, 307, 308].includes(downloadResponse.status)) {
+    throw new JmapPocError("The JMAP download endpoint redirected unexpectedly.");
+  }
+  if (!downloadResponse.ok) {
+    throw new JmapPocError(`The JMAP download endpoint returned HTTP ${downloadResponse.status}.`);
+  }
+  const bytes = await readLimitedResponseBytes(
+    downloadResponse,
+    MAX_MAIL_ATTACHMENT_BYTES,
+    "download",
+  );
+  if (bytes.byteLength !== part.size) {
+    throw new JmapPocError("The JMAP download did not match the advertised attachment size.");
+  }
+  return { bytes, name, size: bytes.byteLength };
+}
+
+function parseDraftAttachmentParts(value: unknown): JmapMailAttachmentInput[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value) || value.length > MAX_MAIL_ATTACHMENTS) {
+    throw new JmapPocError("The saved draft contains invalid attachments.");
+  }
+  const attachments = value.map((candidate) => {
+    const part = objectValue(candidate);
+    if (
+      !part ||
+      typeof part.blobId !== "string" ||
+      (part.name !== null && part.name !== undefined && typeof part.name !== "string") ||
+      typeof part.type !== "string" ||
+      typeof part.size !== "number"
+    ) {
+      throw new JmapPocError("The saved draft contains invalid attachments.");
+    }
+    return {
+      blobId: part.blobId,
+      name: sanitizeAttachmentName(typeof part.name === "string" ? part.name : "attachment"),
+      type: part.type,
+      size: part.size,
+    };
+  });
+  return validatedMailAttachments(attachments);
+}
+
 async function getDraftFromContext(
   context: JmapApiContext,
   draftsMailboxId: string,
@@ -2338,7 +3401,7 @@ async function getDraftFromContext(
   const responseJson = await postJmapApi({
     apiUrl: context.apiUrl,
     authorization: context.authorization,
-    requestBody: detailGetRequest(context.accountId, emailId),
+    requestBody: detailGetRequest(context.accountId, emailId, true),
     methodName: "Email/get",
     fetchImpl: context.fetchImpl,
     maxResponseBytes: EMAIL_DETAIL_RESPONSE_MAX_BYTES,
@@ -2352,6 +3415,10 @@ async function getDraftFromContext(
     throw new JmapPocError("The JMAP API returned an invalid email state.");
   }
   const detail = parseEmailDetail(responseJson, emailId);
+  const rawDraft = (payload.list as unknown[]).find(
+    (candidate) => objectValue(candidate)?.id === emailId,
+  );
+  const attachments = parseDraftAttachmentParts(objectValue(rawDraft)?.attachments);
   if (!detail.isDraft || !detail.mailboxIds.includes(draftsMailboxId)) {
     throw new JmapEmailNotFoundError();
   }
@@ -2366,6 +3433,7 @@ async function getDraftFromContext(
       bcc: detail.bcc,
       subject: detail.subject ?? "",
       body: detail.textBody ?? "",
+      attachments,
       inReplyTo: detail.inReplyTo,
       references: detail.references,
     },
@@ -2392,6 +3460,19 @@ function sameAddresses(
 
 function sameStringList(left: string[], right: string[] = []): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function sameMailAttachments(
+  left: JmapMailAttachmentInput[],
+  right: JmapMailAttachmentInput[] = [],
+): boolean {
+  return left.length === right.length && left.every((attachment, index) => {
+    const other = right[index];
+    return attachment.blobId === other?.blobId &&
+      attachment.name === other.name &&
+      attachment.type === other.type &&
+      attachment.size === other.size;
+  });
 }
 
 function draftSendMarkerForAttempt(attemptKey: string): string {
@@ -2574,6 +3655,7 @@ function draftMatchesSend(
     sameAddresses(draft.bcc, expectedBcc) &&
     draft.subject === input.subject &&
     draft.body === input.body &&
+    sameMailAttachments(draft.attachments, input.attachments) &&
     sameStringList(draft.inReplyTo, input.inReplyTo) &&
     sameStringList(draft.references, input.references)
   );
@@ -2611,6 +3693,7 @@ export async function runJmapOAuthGetDraft({
   accessToken,
   expectedAccountId,
   draftId,
+  attachmentReceiptSecret,
   sessionUrl = "https://mail.rekad.id/.well-known/jmap",
   trustedOrigins = ["https://mail.rekad.id"],
   allowInsecureHttp = false,
@@ -2619,6 +3702,7 @@ export async function runJmapOAuthGetDraft({
   accessToken: string;
   expectedAccountId: string;
   draftId: string;
+  attachmentReceiptSecret: string;
   sessionUrl?: string;
   trustedOrigins?: string[];
   allowInsecureHttp?: boolean;
@@ -2635,7 +3719,18 @@ export async function runJmapOAuthGetDraft({
   const draftsMailboxId = (await fetchMailboxList(context))
     .find((mailbox) => mailbox.role === "drafts")?.id;
   if (!draftsMailboxId) throw new JmapEmailNotFoundError();
-  return (await getDraftFromContext(context, draftsMailboxId, draftId)).draft;
+  const draft = (await getDraftFromContext(context, draftsMailboxId, draftId)).draft;
+  return {
+    ...draft,
+    attachments: draft.attachments.map((attachment) => ({
+      ...attachment,
+      blobId: createMailAttachmentReceipt(
+        context.accountId,
+        attachment,
+        attachmentReceiptSecret,
+      ),
+    })),
+  };
 }
 
 export async function runJmapOAuthSaveDraft({
@@ -2643,6 +3738,7 @@ export async function runJmapOAuthSaveDraft({
   expectedAccountId,
   input,
   draftId,
+  attachmentReceiptSecret,
   sessionUrl = "https://mail.rekad.id/.well-known/jmap",
   trustedOrigins = ["https://mail.rekad.id"],
   allowInsecureHttp = false,
@@ -2652,6 +3748,7 @@ export async function runJmapOAuthSaveDraft({
   expectedAccountId: string;
   input: JmapMailDraftInput;
   draftId?: string;
+  attachmentReceiptSecret: string;
   sessionUrl?: string;
   trustedOrigins?: string[];
   allowInsecureHttp?: boolean;
@@ -2665,13 +3762,21 @@ export async function runJmapOAuthSaveDraft({
     allowInsecureHttp,
     fetchImpl,
   });
+  const verifiedInput: JmapMailDraftInput = {
+    ...input,
+    attachments: resolveMailAttachmentReceipts(
+      input.attachments,
+      context.accountId,
+      attachmentReceiptSecret,
+    ),
+  };
   const preflight = await fetchComposePreflightFromContext(context);
   if (!preflight.draftsMailboxId) {
     throw new JmapSendRejectedError("submission_unavailable");
   }
-  const identity = preflight.identities.find((item) => item.id === input.identityId);
+  const identity = preflight.identities.find((item) => item.id === verifiedInput.identityId);
   if (!identity) throw new JmapSendRejectedError("identity_invalid");
-  const fromEmail = getIdentityFromAddress(identity, input.fromEmail);
+  const fromEmail = getIdentityFromAddress(identity, verifiedInput.fromEmail);
   if (draftId) await getDraftFromContext(context, preflight.draftsMailboxId, draftId);
 
   const responseJson = await postJmapApi({
@@ -2682,7 +3787,7 @@ export async function runJmapOAuthSaveDraft({
       preflight.draftsMailboxId,
       identity,
       fromEmail,
-      input,
+      verifiedInput,
       true,
       EMAIL_DRAFT_CREATE_CALL_ID,
     ),
@@ -2727,6 +3832,7 @@ export async function runJmapOAuthCreateDraft({
   expectedAccountId,
   input,
   existingDraftId,
+  attachmentReceiptSecret,
   sessionUrl = "https://mail.rekad.id/.well-known/jmap",
   trustedOrigins = ["https://mail.rekad.id"],
   allowInsecureHttp = false,
@@ -2736,6 +3842,7 @@ export async function runJmapOAuthCreateDraft({
   expectedAccountId: string;
   input: JmapMailSendInput;
   existingDraftId?: string;
+  attachmentReceiptSecret: string;
   sessionUrl?: string;
   trustedOrigins?: string[];
   allowInsecureHttp?: boolean;
@@ -2749,6 +3856,14 @@ export async function runJmapOAuthCreateDraft({
     allowInsecureHttp,
     fetchImpl,
   });
+  const verifiedInput: JmapMailSendInput = {
+    ...input,
+    attachments: resolveMailAttachmentReceipts(
+      input.attachments,
+      context.accountId,
+      attachmentReceiptSecret,
+    ),
+  };
   const preflight = await fetchComposePreflightFromContext(context);
   if (
     !preflight.submissionAvailable ||
@@ -2758,9 +3873,9 @@ export async function runJmapOAuthCreateDraft({
     throw new JmapSendRejectedError("submission_unavailable");
   }
 
-  const identity = preflight.identities.find((item) => item.id === input.identityId);
+  const identity = preflight.identities.find((item) => item.id === verifiedInput.identityId);
   if (!identity) throw new JmapSendRejectedError("identity_invalid");
-  const fromEmail = getIdentityFromAddress(identity, input.fromEmail);
+  const fromEmail = getIdentityFromAddress(identity, verifiedInput.fromEmail);
 
   if (existingDraftId) {
     const draftSnapshot = await getDraftFromContext(
@@ -2770,7 +3885,7 @@ export async function runJmapOAuthCreateDraft({
     );
     if (
       draftSnapshot.sendPending ||
-      !draftMatchesSend(draftSnapshot.draft, identity, fromEmail, input)
+      !draftMatchesSend(draftSnapshot.draft, identity, fromEmail, verifiedInput)
     ) {
       throw new JmapDraftMismatchError();
     }
@@ -2785,7 +3900,7 @@ export async function runJmapOAuthCreateDraft({
       preflight.draftsMailboxId,
       identity,
       fromEmail,
-      input,
+      verifiedInput,
     ),
     methodName: "Email/set",
     fetchImpl,

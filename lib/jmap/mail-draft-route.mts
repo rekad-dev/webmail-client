@@ -9,6 +9,7 @@ import {
   OversizedMailDraftRequest,
   parseMailDraftRequest,
 } from "./mail-draft-request.mts";
+import { InvalidMailAttachmentReceipt } from "./mail-attachment-receipt.mts";
 
 const RESPONSE_HEADERS = {
   "Cache-Control": "no-store",
@@ -17,12 +18,12 @@ const RESPONSE_HEADERS = {
   Vary: "Cookie",
 };
 
-type GetDraftOptions = Parameters<
+type GetDraftOptions = Omit<Parameters<
   typeof import("./client.mts").runJmapOAuthGetDraft
->[0];
-type SaveDraftOptions = Parameters<
+>[0], "attachmentReceiptSecret">;
+type SaveDraftOptions = Omit<Parameters<
   typeof import("./client.mts").runJmapOAuthSaveDraft
->[0];
+>[0], "attachmentReceiptSecret">;
 
 export interface MailDraftSession {
   accessToken: string;
@@ -78,6 +79,9 @@ async function failureResponse(
   sessionId: string,
   dependencies: MailDraftRouteDependencies,
 ): Promise<Response> {
+  if (error instanceof InvalidMailAttachmentReceipt) {
+    return jsonResponse({ error: "invalid_request" }, 400);
+  }
   if (error instanceof JmapAccountMismatchError) {
     try {
       await dependencies.revokeSession(sessionId);

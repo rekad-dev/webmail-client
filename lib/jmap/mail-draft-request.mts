@@ -1,4 +1,8 @@
 import type { JmapMailDraftInput } from "./client.mts";
+import {
+  OversizedMailAttachmentRequest,
+  parseMailDraftAttachments,
+} from "./mail-attachment-request.mts";
 
 export const MAX_MAIL_DRAFT_REQUEST_BYTES = 384 * 1024;
 export const MAX_MAIL_DRAFT_BODY_BYTES = 256 * 1024;
@@ -144,6 +148,7 @@ export async function parseMailDraftRequest(
     "bcc",
     "subject",
     "body",
+    "attachments",
     "inReplyTo",
     "references",
   ]);
@@ -189,6 +194,15 @@ export async function parseMailDraftRequest(
   }
   const inReplyTo = parseMessageIds(body.inReplyTo);
   const references = parseMessageIds(body.references);
+  let attachments;
+  try {
+    attachments = parseMailDraftAttachments(body.attachments);
+  } catch (error) {
+    if (error instanceof OversizedMailAttachmentRequest) {
+      throw new OversizedMailDraftRequest();
+    }
+    throw new InvalidMailDraftRequest();
+  }
   return {
     ...(typeof body.draftId === "string" ? { draftId: body.draftId } : {}),
     input: {
@@ -199,6 +213,7 @@ export async function parseMailDraftRequest(
       bcc,
       subject: body.subject,
       body: body.body,
+      attachments,
       ...(inReplyTo ? { inReplyTo } : {}),
       ...(references ? { references } : {}),
     },

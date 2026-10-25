@@ -1,4 +1,8 @@
 import type { JmapEmailAddress, JmapMailSendInput } from "./client.mts";
+import {
+  OversizedMailAttachmentRequest,
+  parseMailDraftAttachments,
+} from "./mail-attachment-request.mts";
 
 export const MAX_MAIL_SEND_REQUEST_BYTES = 384 * 1024;
 export const MAX_MAIL_SEND_BODY_BYTES = 256 * 1024;
@@ -126,6 +130,7 @@ export async function parseMailSendRequest(
     "bcc",
     "subject",
     "body",
+    "attachments",
     "inReplyTo",
     "references",
   ]);
@@ -182,6 +187,15 @@ export async function parseMailSendRequest(
 
   const inReplyTo = messageIds(body.inReplyTo);
   const references = messageIds(body.references);
+  let attachments;
+  try {
+    attachments = parseMailDraftAttachments(body.attachments);
+  } catch (error) {
+    if (error instanceof OversizedMailAttachmentRequest) {
+      throw new OversizedMailSendRequest();
+    }
+    throw new InvalidMailSendRequest();
+  }
 
   if (
     body.fromEmail !== undefined &&
@@ -214,6 +228,7 @@ export async function parseMailSendRequest(
     bcc,
     subject: body.subject,
     body: body.body,
+    attachments,
     ...(inReplyTo ? { inReplyTo } : {}),
     ...(references ? { references } : {}),
   };

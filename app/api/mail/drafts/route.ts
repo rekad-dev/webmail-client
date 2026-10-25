@@ -11,6 +11,12 @@ import {
 import { createMailDraftHandlers } from "@/lib/jmap/mail-draft-route.mts";
 import { getJmapSettings } from "@/lib/jmap/settings.mts";
 
+function attachmentReceiptSecret(): string {
+  const secret = process.env.AUTH_SECRET;
+  if (!secret) throw new Error("AUTH_SECRET is unavailable.");
+  return secret;
+}
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -20,8 +26,14 @@ const handlers = createMailDraftHandlers({
   revokeSession: revokeOAuthSession,
   isTrustedOrigin: isTrustedAppOrigin,
   getJmapSettings,
-  getDraft: runJmapOAuthGetDraft,
-  saveDraft: runJmapOAuthSaveDraft,
+  getDraft: (options) => runJmapOAuthGetDraft({
+    ...options,
+    attachmentReceiptSecret: attachmentReceiptSecret(),
+  }),
+  saveDraft: (options) => runJmapOAuthSaveDraft({
+    ...options,
+    attachmentReceiptSecret: attachmentReceiptSecret(),
+  }),
 });
 
 export const GET = handlers.GET;

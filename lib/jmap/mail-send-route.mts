@@ -15,6 +15,7 @@ import type {
   MailSendAttempt,
   MailSendAttemptState,
 } from "../mail/send-attempt-store.mts";
+import { InvalidMailAttachmentReceipt } from "./mail-attachment-receipt.mts";
 
 const RESPONSE_HEADERS = {
   "Cache-Control": "no-store",
@@ -28,9 +29,9 @@ type JmapSettings = Pick<
   Parameters<typeof import("./client.mts").runJmapOAuthCreateDraft>[0],
   "sessionUrl" | "trustedOrigins" | "allowInsecureHttp"
 >;
-type CreateDraftOptions = Parameters<
+type CreateDraftOptions = Omit<Parameters<
   typeof import("./client.mts").runJmapOAuthCreateDraft
->[0];
+>[0], "attachmentReceiptSecret">;
 type SubmitOptions = Parameters<
   typeof import("./client.mts").runJmapOAuthSubmitEmail
 >[0];
@@ -462,6 +463,10 @@ async function runNewAttempt({
     });
     return resultResponse(state);
   } catch (error) {
+    if (error instanceof InvalidMailAttachmentReceipt) {
+      await markAttemptSafely(dependencies, key, "reserved", "rejected");
+      return jsonResponse({ error: "invalid_request" }, 400);
+    }
     if (error instanceof JmapDraftMismatchError) {
       await markAttemptSafely(dependencies, key, "reserved", "rejected");
       return rejectedResponse("draft_changed");
