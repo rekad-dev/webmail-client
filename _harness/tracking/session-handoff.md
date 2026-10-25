@@ -39,9 +39,9 @@ permanently deleted.
 
 The offline scope route returned 200 with a valid scope; `/offline.html`
 reported no saved copies. No message was opened or cached. The notification
-poll route returned 200 with no Inbox changes and zero new IDs. Browser
-notification permission remains `default`, and alerts remain off; no permission
-prompt was granted. The browser was returned to the signed-in Inbox.
+poll route returned 200 with no Inbox changes and zero new IDs. At that check,
+browser notification permission was `default` and alerts were off. The browser
+was returned to the signed-in Inbox.
 
 Phase 6 is complete. Phase 5 remains `in_progress` because the earlier
 intermediate Trash-membership observation is unresolved and this account has no
@@ -50,6 +50,18 @@ sign-out cache clearing remain unverified because no message was saved locally.
 Phase 8 live notification delivery remains unverified. The approved checklist
 excluded opening messages and granting notification permission. Do not send
 email, change Stalwart settings, or use the admin API key.
+
+On 2026-10-25, the user authorized a metadata-only lookup to identify the exact,
+already-read message subject `Test` before caching it. The authenticated
+candidate search returned four candidates across two threads, but none of the
+candidate or member subjects exactly matched `Test`; the result was complete
+and untruncated. No message detail was opened and no IndexedDB record was
+created. Stop the Phase 7 live cache test until the exact target is
+identifiable. The user separately approved browser notification permission
+and one test email to `mail-client@rekad.id`. Ego TaskSpace 16 is currently
+handed to the user because its browser-owned notification prompt appeared. Do
+not interact with that space until the user confirms the prompt was handled;
+then resume the same space.
 
 ## Phase 5 historical context
 

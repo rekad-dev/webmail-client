@@ -43,9 +43,18 @@ scope: progress
   page showed no saved copies. No message was opened or cached, so offline
   `Email/changes` sync, reconnect behavior, cross-account cache isolation, and
   sign-out cache clearing remain unverified. Notification polling returned
-  200 with no inbox changes and zero new IDs; permission remains `default` and
-  alerts are off. No permission prompt was granted. Notification delivery
-  remains unverified.
+  200 with no inbox changes and zero new IDs. At that check, permission was
+  `default` and alerts were off; notification delivery remained unverified.
+- On 2026-10-25, the user authorized a subject-only lookup for the exact
+  already-read message subject `Test` before any offline-cache test. The
+  authenticated candidate search completed with four candidates across two
+  threads, but no candidate or member subject exactly matched `Test`. The
+  lookup was complete and untruncated, so no message was opened and nothing was
+  written to IndexedDB. Phase 7 live verification stays pending until the exact
+  target is identifiable. The user separately approved browser notification
+  permission and one test email to `mail-client@rekad.id`; Ego TaskSpace 16 is
+  currently handed to the user at the browser-owned permission prompt. Resume
+  that same space only after the user confirms the prompt was handled.
 - Phase 6 is complete based on local tests, production attachment round-trip,
   keyboard checks, responsive review, and the clean independent UI review.
 - Phase 5 remains marked `in_progress` because its final mailbox action checks
