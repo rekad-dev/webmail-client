@@ -15,7 +15,7 @@ while the recorded verification gaps are resolved.
 | 6 | Attachments, responsive UX, and accessibility refinement | P1 | Complete: production attachment upload/download, desktop/phone rendering, keyboard focus, and independent review passed |
 | 7 | Limited offline storage and synchronization | P2, optional | In progress: bounded cache and JMAP sync implemented; offline reconnect, account-isolation, and logout checks remain pending |
 | 8 | Polling, JMAP events, and optional notifications | P2, optional | In progress: polling and opt-in browser alerts implemented; live notification behavior remains unverified; EventSource and Web Push remain deferred |
-| Cross-phase | Rich-text composition and managed `core@rekad.id` banners | P1 | Implemented locally; requires database migration and an explicit OAuth subject allowlist before admin access is available |
+| Cross-phase | Rich-text composition and managed `core@rekad.id` banners | P1 | Implementation committed; production migration applied; deployment waits for the authorized OAuth subject allowlist |
 
 Phase 4 is the first usable MVP boundary. Phase 1 reused the existing `webmail`
 client and exact callback
@@ -37,10 +37,11 @@ The approved cross-phase compose feature adds a Tiptap rich-text editor for all
 users and a server-sanitized plain-text alternative. A server-backed admin
 page lets OAuth-subject allowlisted administrators update the managed
 `core@rekad.id` header and footer; those banners appear in compose previews and
-are applied to every outgoing message. Local implementation is committed, but
-the new migration has not been applied and production admin subject IDs have
-not been configured. No Stalwart settings, production mailbox data, or
-deployment were changed for this feature.
+are applied to every outgoing message. The migration is applied to the
+confirmed production application database. A read-only check confirmed the
+singleton row at version 0 with empty banners. Production admin subject IDs
+have not been configured, so the feature has not been deployed. No Stalwart
+settings or production mailbox data were changed.
 
 The latest reference UI is deployed as `dpl_6tcSUUPDK5stvVwAUeZ5xBDroZZT`
 and aliased to `https://webmail.rekad.id`. The anonymous home page shows the

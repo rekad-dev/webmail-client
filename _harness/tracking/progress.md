@@ -14,16 +14,20 @@ scope: progress
   allowlist of stable OAuth subject IDs from
   `REKAD_BANNER_ADMIN_SUBJECTS`; empty/unconfigured disables admin access.
   Banners are previewed during compose and added to every outgoing message.
-- Added the application database migration and migration-runner entry, but did
-  not apply it. Configure the allowlist with the appropriate OAuth subject IDs
-  before enabling the page. Production database or deployment work was not
-  authorized and was not performed.
+- Added the application database migration and migration-runner entry. After
+  the user confirmed the production database target, `pnpm db:migrate`
+  completed successfully; a read-only query confirmed singleton row `id=1`,
+  version `0`, and empty header/footer values. Configure
+  `REKAD_BANNER_ADMIN_SUBJECTS` with authorized OAuth subject IDs before
+  deployment. The user requested deployment only after providing those IDs,
+  so no deployment was made.
 - HTML is sanitized server-side; JMAP drafts retain both formats, and send
   verifies that the saved draft carries the current banner version before
   submission. A definitive rejected attempt gets a new idempotency key on
   retry; unknown/in-progress attempts keep their original key.
-- No tests, typecheck, build, browser, Stalwart, production database, mailbox,
-  or deployment operations were run for this change.
+- No tests, typecheck, build, browser, Stalwart, mailbox, or deployment
+  operations were run for this change. The authorized production database
+  migration and its read-only verification are the only live operations.
 
 ## Current work: Phase 6 complete; Phases 5, 7, and 8 in progress
 

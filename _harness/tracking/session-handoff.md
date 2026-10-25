@@ -10,11 +10,14 @@ scope: session-handoff
 The user approved a rich-text editor for all users and an admin page for
 `core@rekad.id` header/footer banners. Admin authorization is an explicit
 allowlist of stable OAuth subject IDs (`REKAD_BANNER_ADMIN_SUBJECTS`), and
-managed banners apply to all outgoing messages. The feature is implemented in
-the working tree; the database migration is included but has not been applied.
-Production subject IDs are not configured here. Do not change Stalwart global
-settings or use its admin API. No tests, typecheck, build, browser, production
-database, mailbox, or deployment operations were run for this feature.
+managed banners apply to all outgoing messages. The implementation is
+committed. After the user confirmed the production database target,
+`pnpm db:migrate` completed and a read-only query verified singleton row
+`id=1`, version `0`, with empty header/footer values. Production subject IDs are
+not configured yet; the user requested deployment after providing them. Do
+not deploy until then. Do not change Stalwart global settings or use its admin
+API. No tests, typecheck, build, browser, mailbox, or deployment operations
+were run for this feature.
 
 Rich HTML is sanitized on the server and saved as JMAP HTML with a plain-text
 alternative. Compose previews current banners, and send checks the saved draft
