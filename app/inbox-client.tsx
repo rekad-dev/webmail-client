@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import { ComposeDialog } from "./compose-dialog";
 import type { ComposeFields } from "./compose-dialog";
 import { SignOutButton } from "./sign-out-button";
+import { PasswordChangeForm } from "./password-change-form";
 import { MailIcon, type MailIconName } from "./mail-icons";
 import {
   applyOfflineSyncPage,
@@ -1883,7 +1884,11 @@ export function InboxClient({ accountName, accountEmail }: {
             <span className="header-divider" />
             <details className="account-menu">
               <summary className="account-trigger"><span>{displayAccount}</span><MailIcon name="chevron-down" size={14} /></summary>
-              <div className="account-menu-popover"><p>{accountEmail || "Signed in to rekad Mail"}</p><SignOutButton /></div>
+              <div className="account-menu-popover">
+                <p>{accountEmail || "Signed in to rekad Mail"}</p>
+                <PasswordChangeForm />
+                <SignOutButton />
+              </div>
             </details>
           </div>
         </header>
