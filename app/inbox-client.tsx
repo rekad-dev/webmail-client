@@ -905,6 +905,7 @@ export function InboxClient({ accountName, accountEmail }: {
   const [bodyFormat, setBodyFormat] = useState<BodyFormat>("formatted");
   const [readUpdateError, setReadUpdateError] = useState(false);
   const [isComposeOpen, setIsComposeOpen] = useState(false);
+  const [isComposeMinimized, setIsComposeMinimized] = useState(false);
   const [composeMode, setComposeMode] = useState<"new" | "reply" | "forward" | "draft">("new");
   const [composeDraftId, setComposeDraftId] = useState<string | undefined>();
   const [composeSeed, setComposeSeed] = useState<Partial<ComposeFields> | undefined>();
@@ -1337,7 +1338,7 @@ export function InboxClient({ accountName, accountEmail }: {
 
   useEffect(() => {
     function focusSearch(event: globalThis.KeyboardEvent) {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k" && !isComposeOpen) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k" && (!isComposeOpen || isComposeMinimized)) {
         event.preventDefault();
         setSidebarCollapsed(false);
         window.requestAnimationFrame(() => searchInputRef.current?.focus());
@@ -1345,7 +1346,7 @@ export function InboxClient({ accountName, accountEmail }: {
     }
     window.addEventListener("keydown", focusSearch);
     return () => window.removeEventListener("keydown", focusSearch);
-  }, [isComposeOpen]);
+  }, [isComposeOpen, isComposeMinimized]);
 
   useEffect(() => {
     setSelectedThreadIds(new Set());
@@ -1468,6 +1469,11 @@ export function InboxClient({ accountName, accountEmail }: {
     headers?: { inReplyTo: string[]; references: string[] },
     trigger?: HTMLButtonElement | null,
   ) {
+    if (isComposeOpen) {
+      setIsComposeMinimized(false);
+      return;
+    }
+    setIsComposeMinimized(false);
     composeTriggerRef.current = trigger ?? composeButtonRef.current;
     setComposeMode(mode);
     setComposeDraftId(undefined);
@@ -1583,6 +1589,11 @@ export function InboxClient({ accountName, accountEmail }: {
   }
 
   function openSavedDraft(draftId: string, trigger?: HTMLButtonElement | null) {
+    if (isComposeOpen) {
+      setIsComposeMinimized(false);
+      return;
+    }
+    setIsComposeMinimized(false);
     composeTriggerRef.current = trigger ?? composeButtonRef.current;
     setComposeMode("draft");
     setComposeDraftId(draftId);
@@ -1691,6 +1702,7 @@ export function InboxClient({ accountName, accountEmail }: {
 
   function closeComposeDialog() {
     setIsComposeOpen(false);
+    setIsComposeMinimized(false);
     setComposeDraftId(undefined);
     setComposeSeed(undefined);
     setComposeReplyHeaders(undefined);
@@ -1704,6 +1716,13 @@ export function InboxClient({ accountName, accountEmail }: {
   const accountInitial = Array.from(displayAccount)[0]?.toLocaleUpperCase() || "r";
   const archiveAvailable = Boolean(listing?.mailboxes.some((mailbox) => mailbox.role === "archive"));
   const trashAvailable = Boolean(listing?.mailboxes.some((mailbox) => mailbox.role === "trash"));
+  const currentViewLoading = openEmailId ? detailLoading : openThreadId ? threadLoading : isLoading;
+  const refreshLabel = currentViewLoading
+    ? openEmailId ? "Refreshing message…" : openThreadId ? "Refreshing conversation…" : listing ? "Refreshing messages…" : "Loading messages…"
+    : openEmailId ? "Refresh message" : openThreadId ? "Refresh conversation" : "Refresh messages";
+  const listStatus = isLoading
+    ? listing ? "Refreshing messages…" : "Loading conversations…"
+    : selectedCount > 0 ? `${selectedCount} selected` : listing ? resultRange : "";
 
   function renderMailbox(mailbox: Mailbox) {
     const isSelected = mailbox.id === listing?.selectedMailboxId;
@@ -1739,7 +1758,7 @@ export function InboxClient({ accountName, accountEmail }: {
             <input autoComplete="off" id="mail-search" ref={searchInputRef}
               onChange={(event) => setSearchInput(event.target.value)} placeholder="Search..."
               type="search" value={searchInput} aria-keyshortcuts="Control+k Meta+k" />
-            <kbd aria-hidden="true">⌘ K</kbd>
+            <kbd aria-hidden="true">Ctrl / ⌘ K</kbd>
           </div>
           <label className="search-scope-label" htmlFor="mail-search-scope">Search in
             <select id="mail-search-scope" onChange={(event) => {
@@ -1794,10 +1813,13 @@ export function InboxClient({ accountName, accountEmail }: {
               <h1 id="mail-title" ref={mailTitleRef} tabIndex={-1}>{openEmailId ? "Reading message" : openThreadId ? "Conversation" : searchText ? "Search results" : selectedMailbox?.name ?? "Inbox"}</h1>
             </div>
           </div>
+          <span className="visually-hidden" role="status" aria-live="polite" aria-atomic="true">
+            {openEmailId || openThreadId ? currentViewLoading ? refreshLabel : "" : listStatus}
+          </span>
           <div className="mail-header-account">
-            <button className="icon-button refresh-button" disabled={openEmailId ? detailLoading : openThreadId ? threadLoading : isLoading}
-              onClick={refresh} type="button" aria-label={openEmailId ? "Refresh message" : openThreadId ? "Refresh conversation" : "Refresh messages"}
-              title="Refresh"><MailIcon name="refresh" size={18} /></button>
+            <button className="icon-button refresh-button" disabled={currentViewLoading} aria-busy={currentViewLoading}
+              onClick={refresh} type="button" aria-label={refreshLabel}
+              title={refreshLabel}><MailIcon name="refresh" size={18} /></button>
             <button className="icon-button header-notification" disabled={!notificationsSupported || !notificationsReady}
               aria-label={notificationsEnabled ? "Turn off new mail alerts" : "Enable new mail alerts"}
               aria-pressed={notificationsEnabled} onClick={() => void toggleNewMailNotifications()} type="button"
@@ -1844,10 +1866,10 @@ export function InboxClient({ accountName, accountEmail }: {
               </div>
             </div>
             <div className="message-toolbar-actions">
-              <p className="result-count" aria-live="polite">{selectedCount > 0 ? `${selectedCount} selected` : listing ? resultRange : isLoading ? "Loading conversations…" : ""}</p>
+              <p className="result-count">{listStatus}</p>
               <button className="compose-launch-button" disabled={!listing || isLoading}
                 onClick={(event) => openCompose("new", undefined, undefined, event.currentTarget)} ref={composeButtonRef}
-                type="button" aria-label="Compose new message"><MailIcon name="plus" size={20} />Write Message</button>
+                type="button" aria-label={isComposeOpen ? "Restore open message" : "Compose new message"}><MailIcon name="plus" size={20} />{isComposeOpen ? "Restore Message" : "Write Message"}</button>
             </div>
           </div>
         ) : null}
@@ -2101,6 +2123,8 @@ export function InboxClient({ accountName, accountEmail }: {
       </section>
       {isComposeOpen ? (
         <ComposeDialog
+          isMinimized={isComposeMinimized}
+          onMinimizedChange={setIsComposeMinimized}
           fallbackFocusRef={mailTitleRef}
           onClose={closeComposeDialog}
           onInspectSent={() => {

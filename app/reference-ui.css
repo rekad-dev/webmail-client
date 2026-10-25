@@ -176,6 +176,7 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
 .empty-envelope { background: #f1efff; color: var(--accent); }
 .loading-indicator { border-color: #e0dcf8; border-top-color: var(--accent); }
 .compose-backdrop { display: flex; align-items: flex-end; justify-content: flex-end; padding: 24px; background: transparent; }
+.compose-backdrop.is-minimized { inset: auto 24px 24px auto; padding: 0; }
 .compose-dialog { width: clamp(560px, 43vw, 780px); max-width: calc(100vw - 48px); min-height: 360px; height: calc(100dvh - 155px); max-height: calc(100dvh - 64px); border: 1px solid #f1f1f5; border-radius: 18px; background: #fff; box-shadow: 0 8px 50px #21233820, 0 2px 8px #21233808; }
 .compose-dialog.is-expanded { width: min(1150px, calc(100vw - 72px)); height: calc(100dvh - 72px); max-height: calc(100dvh - 72px); }
 .compose-backdrop:has(.compose-dialog.is-expanded) { align-items: center; justify-content: center; }
@@ -210,7 +211,7 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
 .compose-body-field > .compose-help { display: none; }
 .compose-default-note, .compose-default-bcc { margin: 4px 0 7px 74px; font-size: 10px; }
 .compose-attachment-help { flex: none; }
-.compose-attachment-help p { margin: 5px 0; color: #9a9ba4; font-size: 10px; }
+.compose-attachment-help p { margin: 5px 0; color: #5f626c; font-size: 12px; line-height: 1.5; }
 .compose-attachment-list { flex: none; gap: 7px; margin: 8px 0 7px; }
 .compose-attachment-list li { grid-template-columns: 34px minmax(0, 1fr) 26px; gap: 10px; border: 0; border-radius: 8px; background: #f7f8fa; padding: 11px 12px; }
 .compose-file-icon { display: flex; width: 30px; height: 34px; align-items: center; justify-content: center; border-radius: 3px; background: #ffe7e6; color: #ed7b78; }
@@ -320,8 +321,9 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
   .thread-header h2 { font-size: 19px; }
   .mail-alert, .stale-list-note { margin-right: 14px; margin-left: 14px; }
   .compose-backdrop { padding: 0; }
+  .compose-backdrop.is-minimized { inset: auto 12px 12px auto; }
   .compose-dialog, .compose-dialog.is-expanded { width: 100%; max-width: 100%; min-height: 0; height: 100vh; height: 100dvh; max-height: 100vh; max-height: 100dvh; border: 0; border-radius: 0; }
-  .compose-dialog.is-minimized { width: calc(100vw - 24px); max-width: 400px; height: auto; margin: 12px; border: 1px solid var(--line); border-radius: 12px; }
+  .compose-dialog.is-minimized { width: calc(100vw - 24px); max-width: 400px; height: auto; margin: 0; border: 1px solid var(--line); border-radius: 12px; }
   .compose-header { min-height: 69px; padding: max(15px, env(safe-area-inset-top)) 18px 15px; }
   .compose-header h2 { font-size: 19px; }
   .compose-expand { display: none; }

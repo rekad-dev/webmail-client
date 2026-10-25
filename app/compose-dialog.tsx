@@ -331,6 +331,8 @@ export function ComposeDialog({
   onClose,
   onInspectSent,
   onSubmitted,
+  isMinimized,
+  onMinimizedChange,
   fallbackFocusRef,
   triggerRef,
   mode = "new",
@@ -341,6 +343,8 @@ export function ComposeDialog({
   onClose(): void;
   onInspectSent(): void;
   onSubmitted(): void;
+  isMinimized: boolean;
+  onMinimizedChange(minimized: boolean): void;
   fallbackFocusRef: RefObject<HTMLHeadingElement | null>;
   triggerRef: RefObject<HTMLButtonElement | null>;
   mode?: "new" | "reply" | "forward" | "draft";
@@ -348,7 +352,6 @@ export function ComposeDialog({
   initialFields?: Partial<ComposeFields>;
   initialReplyHeaders?: ReplyHeaders;
 }) {
-  const [isMinimized, setIsMinimized] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [showCc, setShowCc] = useState(false);
   const [showBcc, setShowBcc] = useState(false);
@@ -396,16 +399,20 @@ export function ComposeDialog({
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
     titleRef.current?.focus();
     return () => {
-      document.body.style.overflow = previousOverflow;
       const trigger = triggerRef.current;
       if (trigger && !trigger.disabled) trigger.focus();
       else fallbackFocusRef.current?.focus();
     };
   }, [fallbackFocusRef, triggerRef]);
+
+  useEffect(() => {
+    if (isMinimized) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [isMinimized]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -891,7 +898,7 @@ export function ComposeDialog({
       if (!isSending) void closeCompose();
       return;
     }
-    if (event.key !== "Tab" || !dialogRef.current) return;
+    if (event.key !== "Tab" || isMinimized || !dialogRef.current) return;
 
     const focusables = visibleFocusables(dialogRef.current);
     if (focusables.length === 0) {
@@ -926,10 +933,10 @@ export function ComposeDialog({
         : "New Message";
 
   return (
-    <div className="compose-backdrop">
+    <div className={`compose-backdrop${isMinimized ? " is-minimized" : ""}`}>
       <section
         aria-labelledby="compose-title"
-        aria-modal="true"
+        aria-modal={!isMinimized}
         className={`compose-dialog${isExpanded ? " is-expanded" : ""}${isMinimized ? " is-minimized" : ""}`}
         onKeyDown={handleKeyDown}
         ref={dialogRef}
@@ -943,11 +950,12 @@ export function ComposeDialog({
           </div>
           <div className="compose-window-controls">
             <button className="icon-button" aria-label={isMinimized ? "Restore compose" : "Minimize compose"}
-              aria-expanded={!isMinimized} onClick={() => { setIsMinimized((value) => !value); setIsExpanded(false); }} type="button">
+              aria-expanded={!isMinimized} aria-controls="compose-content"
+              onClick={() => { onMinimizedChange(!isMinimized); setIsExpanded(false); }} type="button">
               <MailIcon name="minimize" size={19} />
             </button>
             <button className="icon-button compose-expand" aria-label={isExpanded ? "Exit expanded compose" : "Expand compose"}
-              aria-pressed={isExpanded} onClick={() => { setIsMinimized(false); setIsExpanded((value) => !value); }} type="button">
+              aria-pressed={isExpanded} onClick={() => { onMinimizedChange(false); setIsExpanded((value) => !value); }} type="button">
               <MailIcon name="expand" size={19} />
             </button>
             <button aria-label="Close compose" className="icon-button compose-close"
@@ -956,7 +964,7 @@ export function ComposeDialog({
             </button>
           </div>
         </header>
-        <div className="compose-content" hidden={isMinimized}>
+        <div className="compose-content" id="compose-content" hidden={isMinimized}>
 
         {isLoading ? (
           <div className="compose-state" role="status" aria-live="polite">
