@@ -23,15 +23,19 @@ generated `next-env.d.ts`; that build-only diff was restored. Fresh review
 findings about `hasMoreChanges` and bidi attachment names were fixed and
 confirmed; see `phase-6-8-review-2026-10-25`.
 
-No Phase 6–8 production deployment, browser review, live Stalwart upload,
-send, or production mailbox check was performed. Real attachment upload and
-download, offline reconnect/account isolation/logout, browser notification
-delivery, and desktop/mobile visual behavior remain unverified. Follow the
-project's explicit deployment, browser, and mailbox-mutation approval gates.
-Do not use the admin API key or change Stalwart settings. Phase 5 remains
-`in_progress` due an unresolved Trash-membership observation and the absence
-of an Archive-role mailbox on the first test account; the user explicitly
-authorized proceeding with Phases 6–8 while that remains documented.
+The user approved production deployment and the named browser checklist.
+Deployment `dpl_6nYhAKughLqXt1FRS71mUSS5jykx` is READY and aliased to
+`https://webmail.rekad.id`. The Vercel dry run confirmed `reference.png` was
+excluded; `.vercelignore` keeps the local test image out of future deployments.
+The approved Ego TaskSpace 16 is at the sign-in page, so authenticated browser
+review and Stalwart attachment upload/download are still pending. The user
+separately authorized uploading/downloading `reference.png` in the first
+dedicated test account and cleaning up the temporary draft. No email send is
+authorized. Offline reconnect/account-isolation/logout, notification delivery,
+and desktop/mobile visual behavior remain unverified. Do not use the admin API
+key or change Stalwart settings. Phase 5 remains `in_progress` due the recorded
+Trash-membership observation and the first account's lack of an Archive-role
+mailbox; the user authorized proceeding through Phases 6–8 with this documented.
 
 ## Phase 5 historical context
 
@@ -347,13 +351,14 @@ access. The provider-settings audit can remain deferred.
 
 ## Current safe step
 
-Request approval for concrete production/browser checks of Phase 6–8 before
-deployment or browser automation. Attachment upload/download verification may
-create a server-side blob and temporary draft, so agree on the dedicated test
-account, exact test file, and cleanup first. Sending mail needs separate
-recipient-specific approval. Offline-save and notification-permission tests
-should be limited to the signed-in test account and named routes. No Phase 6–8
-live or browser checks have run yet.
+Resume Ego TaskSpace 16, `rekad phase 6-8 production verification 2026-10-25`,
+after the user signs in as the first dedicated test account. The approved
+read-only checklist is the Inbox and compose UI, offline-cache controls and
+scope/sync routes, plus notification controls and polling without granting
+notification permission or opening messages. Then perform the separately
+approved `reference.png` upload/download test, create and remove only its
+temporary draft, and send no email. Keep Stalwart settings and the admin API
+key out of scope.
 
 The new authenticated, body-free `/api/mail/location?emailId=...` endpoint was
 deployed to `https://webmail.rekad.id` as

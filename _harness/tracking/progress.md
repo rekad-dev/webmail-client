@@ -25,11 +25,16 @@ scope: progress
   `pnpm build`, production build, `node --check public/offline.js`,
   `node --check public/sw.js`, and `git diff --check`. Next.js's generated
   `next-env.d.ts` change was restored.
-- No production deployment, browser review, Stalwart attachment upload, mail
-  send, or production mailbox check was performed. Real attachment flow,
-  offline reconnect/account-isolation behavior, browser notifications, and
-  mobile/desktop visual behavior remain externally unverified and need the
-  project approval gates before live checking.
+- The user approved production deployment and the named first-account browser
+  checklist. Deployment `dpl_6nYhAKughLqXt1FRS71mUSS5jykx` is READY and aliased
+  to `https://webmail.rekad.id`. The Vercel dry run confirmed that the local
+  `reference.png` test attachment was excluded from deployment and `.vercelignore`
+  now keeps it excluded from future deployments.
+- The approved Ego TaskSpace is open at the sign-in page because it has no
+  authenticated session. No authenticated browser review or Stalwart attachment
+  upload/download has run yet. The user separately authorized `reference.png`
+  on the first dedicated test account, including cleanup of the temporary
+  draft; no email send is authorized. Resume after the user signs in.
 - Phase 5 remains marked `in_progress` because its final mailbox action checks
   retained an unresolved Trash-membership observation and the first test
   account has no Archive-role mailbox. The user authorized proceeding with
@@ -367,9 +372,10 @@ scope: progress
 
 ## Next
 
-The next useful step is an explicitly approved production/browser review for
-the Phase 6–8 routes and UI. Any live attachment upload or temporary draft
-creation needs a specific target account, test file, and cleanup plan; do not
-send an email without separate recipient-specific approval. Keep the Vercel
-project, Stalwart global OAuth/registration settings, and admin API key out of
-this verification.
+Resume Ego TaskSpace 16, `rekad phase 6-8 production verification 2026-10-25`,
+after the user signs in as the first dedicated test account. Complete the
+approved Inbox/compose, offline-cache scope/sync, and notification polling
+review without granting notification permission or opening messages. Then use
+`reference.png` for the separately approved upload/download test, save a
+temporary draft, and remove that exact draft. Do not send email or change
+Stalwart settings; never use the admin API key for mailbox access.
