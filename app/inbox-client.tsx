@@ -4,8 +4,23 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import { ComposeDialog } from "./compose-dialog";
 import type { ComposeFields } from "./compose-dialog";
 import { SignOutButton } from "./sign-out-button";
+import {
+  applyOfflineSyncPage,
+  clearOtherOfflineAccounts,
+  commitOfflineNotificationChanges,
+  getOfflineNotificationState,
+  getOfflineCache,
+  MAX_OFFLINE_MESSAGES,
+  OfflineCacheLimitError,
+  removeOfflineMessage,
+  saveOfflineMessage,
+  setOfflineNotificationsEnabled,
+  setActiveOfflineScope,
+  type OfflineMessageContent,
+} from "../lib/offline/mail-cache.mts";
 
 const PAGE_SIZE = 25;
+const MAX_ATTACHMENT_DOWNLOAD_BYTES = 4 * 1024 * 1024;
 
 interface Mailbox {
   id: string;
@@ -51,6 +66,7 @@ interface EmailAddress {
 }
 
 interface EmailAttachment {
+  attachmentIndex: number;
   name: string | null;
   type: string | null;
   size: number | null;
@@ -58,6 +74,7 @@ interface EmailAttachment {
 
 interface EmailDetail {
   id: string;
+  emailState: string;
   threadId: string;
   from: EmailAddress[];
   replyTo: EmailAddress[];
@@ -79,6 +96,34 @@ interface EmailDetail {
   bodyTruncated: boolean;
   attachments: EmailAttachment[];
   mailboxIds: string[];
+}
+
+interface OfflineUpdatedEmail {
+  id: string;
+  from: EmailAddress[];
+  subject: string | null;
+  sentAt: string | null;
+  receivedAt: string | null;
+  textBody: string | null;
+  htmlBody: string | null;
+}
+
+interface OfflineSyncBody {
+  cacheScope: string;
+  emailState: string;
+  updated: OfflineUpdatedEmail[];
+  destroyed: string[];
+  hasMore: boolean;
+  reset: boolean;
+}
+
+interface InboxChangesBody {
+  cacheScope: string;
+  emailState: string;
+  newInboxEmailIds: string[];
+  hasMore: boolean;
+  hasInboxChanges: boolean;
+  reset: boolean;
 }
 
 type MailAction = "mark_read" | "mark_unread" | "star" | "unstar" | "move" | "archive" | "trash";
@@ -166,6 +211,7 @@ async function readEmailDetail(response: Response): Promise<EmailDetail> {
     !body ||
     typeof body !== "object" ||
     typeof (body as EmailDetail).id !== "string" ||
+    typeof (body as EmailDetail).emailState !== "string" ||
     !Array.isArray((body as EmailDetail).from) ||
     !Array.isArray((body as EmailDetail).replyTo) ||
     !Array.isArray((body as EmailDetail).messageId) ||
@@ -175,6 +221,194 @@ async function readEmailDetail(response: Response): Promise<EmailDetail> {
     throw new Error("mail_unavailable");
   }
   return body as EmailDetail;
+}
+
+function parseOfflineSyncBody(value: unknown, expectedScope: string): OfflineSyncBody | null {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value)
+  ) return null;
+  const body = value as Record<string, unknown>;
+  if (
+    body.cacheScope !== expectedScope ||
+    typeof body.emailState !== "string" ||
+    !Array.isArray(body.updated) ||
+    body.updated.length > MAX_OFFLINE_MESSAGES ||
+    !Array.isArray(body.destroyed) ||
+    body.destroyed.length > MAX_OFFLINE_MESSAGES ||
+    !body.destroyed.every((id) => typeof id === "string") ||
+    typeof body.hasMore !== "boolean" ||
+    typeof body.reset !== "boolean"
+  ) return null;
+  const updated: OfflineUpdatedEmail[] = [];
+  for (const item of body.updated) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+    const email = item as Record<string, unknown>;
+    if (
+      typeof email.id !== "string" ||
+      !Array.isArray(email.from) ||
+      typeof email.subject !== "string" && email.subject !== null ||
+      typeof email.sentAt !== "string" && email.sentAt !== null ||
+      typeof email.receivedAt !== "string" && email.receivedAt !== null ||
+      typeof email.textBody !== "string" && email.textBody !== null ||
+      typeof email.htmlBody !== "string" && email.htmlBody !== null
+    ) return null;
+    const from = email.from.flatMap((candidate) => {
+      if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return [];
+      const address = candidate as Record<string, unknown>;
+      return typeof address.email === "string" &&
+        (typeof address.name === "string" || address.name === null)
+        ? [{ email: address.email, name: address.name }]
+        : [];
+    });
+    if (from.length !== email.from.length) return null;
+    updated.push({
+      id: email.id,
+      from,
+      subject: email.subject,
+      sentAt: email.sentAt,
+      receivedAt: email.receivedAt,
+      textBody: email.textBody,
+      htmlBody: email.htmlBody,
+    });
+  }
+  return {
+    cacheScope: expectedScope,
+    emailState: body.emailState,
+    updated,
+    destroyed: body.destroyed as string[],
+    hasMore: body.hasMore,
+    reset: body.reset,
+  };
+}
+
+function parseInboxChangesBody(value: unknown, expectedScope: string): InboxChangesBody | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const body = value as Record<string, unknown>;
+  if (
+    body.cacheScope !== expectedScope ||
+    typeof body.emailState !== "string" ||
+    !Array.isArray(body.newInboxEmailIds) ||
+    body.newInboxEmailIds.length > 100 ||
+    !body.newInboxEmailIds.every((id) => typeof id === "string" && id.length > 0 && id.length <= 256) ||
+    typeof body.hasMore !== "boolean" ||
+    typeof body.hasInboxChanges !== "boolean" ||
+    typeof body.reset !== "boolean"
+  ) return null;
+  return body as unknown as InboxChangesBody;
+}
+
+async function requestInboxChanges(
+  cacheScope: string,
+  sinceState: string | null,
+  signal?: AbortSignal,
+): Promise<InboxChangesBody> {
+  const response = await fetch("/api/mail/notifications", {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    signal,
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ sinceState }),
+  });
+  let body: unknown = null;
+  try {
+    body = await response.json();
+  } catch {
+    // Keep the service error generic.
+  }
+  if (!response.ok) {
+    const error = body && typeof body === "object" && "error" in body &&
+        typeof body.error === "string"
+      ? body.error
+      : "notification_sync_failed";
+    throw new Error(error);
+  }
+  const parsed = parseInboxChangesBody(body, cacheScope);
+  if (!parsed) throw new Error("notification_sync_failed");
+  return parsed;
+}
+
+function textFromSanitizedHtml(html: string): string {
+  const documentValue = new DOMParser().parseFromString(html, "text/html");
+  for (const element of documentValue.querySelectorAll("script, style, iframe, object, form")) {
+    element.remove();
+  }
+  for (const element of documentValue.querySelectorAll("br")) {
+    element.replaceWith(documentValue.createTextNode("\n"));
+  }
+  for (const element of documentValue.querySelectorAll("p, div, li, blockquote, h1, h2, h3, tr")) {
+    element.append(documentValue.createTextNode("\n"));
+  }
+  return (documentValue.body.textContent ?? "").replace(/\u00a0/g, " ").trim();
+}
+
+function offlineContentFromEmail(email: OfflineUpdatedEmail | EmailDetail): OfflineMessageContent {
+  const sender = email.from[0];
+  const body = email.textBody ?? (email.htmlBody ? textFromSanitizedHtml(email.htmlBody) : "");
+  return {
+    emailId: email.id,
+    subject: email.subject ?? "",
+    senderName: sender?.name ?? "",
+    senderEmail: sender?.email ?? "",
+    receivedAt: email.sentAt ?? email.receivedAt ?? "",
+    textBody: body,
+  };
+}
+
+async function syncOfflineCache(
+  cacheScope: string,
+  emailIds: string[],
+  sinceState: string,
+  signal?: AbortSignal,
+): Promise<{ emailState: string; hasMore: boolean; destroyed: Set<string> }> {
+  let emailState = sinceState;
+  const destroyed = new Set<string>();
+  let hasMore = false;
+  for (let pageIndex = 0; pageIndex < 5; pageIndex += 1) {
+    const response = await fetch("/api/mail/offline-sync", {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      signal,
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ sinceState: emailState, emailIds }),
+    });
+    let responseBody: unknown = null;
+    try {
+      responseBody = await response.json();
+    } catch {
+      // Report a generic service failure below.
+    }
+    if (!response.ok) {
+      const error = responseBody && typeof responseBody === "object" &&
+          "error" in responseBody && typeof responseBody.error === "string"
+        ? responseBody.error
+        : "offline_sync_failed";
+      throw new Error(error);
+    }
+    const page = parseOfflineSyncBody(responseBody, cacheScope);
+    if (!page) throw new Error("offline_sync_failed");
+    const updated = page.updated.map(offlineContentFromEmail);
+    await applyOfflineSyncPage(cacheScope, {
+      emailState: page.emailState,
+      updated,
+      destroyed: page.destroyed,
+      reset: page.reset,
+    });
+    for (const emailId of page.destroyed) destroyed.add(emailId);
+    emailState = page.emailState;
+    hasMore = page.hasMore;
+    if (!hasMore) break;
+  }
+  return { emailState, hasMore, destroyed };
 }
 
 function detailErrorMessage(error: string): string {
@@ -202,10 +436,15 @@ function MessageDetailView({
   mailboxes,
   actionPending,
   actionError,
+  offlineAvailable,
+  offlineSaved,
+  offlineSavePending,
+  offlineSaveError,
   onAction,
   onMove,
   onReply,
   onForward,
+  onToggleOffline,
 }: {
   detail: EmailDetail | null;
   isLoading: boolean;
@@ -221,10 +460,15 @@ function MessageDetailView({
   mailboxes: Mailbox[];
   actionPending: boolean;
   actionError: string | null;
+  offlineAvailable: boolean;
+  offlineSaved: boolean;
+  offlineSavePending: boolean;
+  offlineSaveError: string | null;
   onAction(action: MailAction): void;
   onMove(destinationMailboxId: string): void;
   onReply(detail: EmailDetail, trigger: HTMLButtonElement): void;
   onForward(detail: EmailDetail, trigger: HTMLButtonElement): void;
+  onToggleOffline(detail: EmailDetail): void;
 }) {
   const backButton = (
     <button
@@ -281,6 +525,18 @@ function MessageDetailView({
             {detail.subject?.trim() || "(no subject)"}
           </h2>
           <div className="message-action-bar" role="group" aria-label="Message actions">
+            <button
+              aria-pressed={offlineSaved}
+              disabled={!offlineAvailable || offlineSavePending}
+              onClick={() => onToggleOffline(detail)}
+              type="button"
+            >
+              {offlineSavePending
+                ? "Saving…"
+                : offlineSaved
+                  ? "Remove offline copy"
+                  : "Save offline"}
+            </button>
             <button disabled={actionPending} onClick={() => onAction(detail.isUnread ? "mark_read" : "mark_unread")} type="button">
               {detail.isUnread ? "Mark read" : "Mark unread"}
             </button>
@@ -310,6 +566,10 @@ function MessageDetailView({
             <button disabled={actionPending} onClick={(event) => onForward(detail, event.currentTarget)} type="button">Forward</button>
           </div>
           {actionError ? <p className="mail-alert" role="alert">{actionError}</p> : null}
+          {offlineSaveError ? <p className="mail-alert" role="alert">{offlineSaveError}</p> : null}
+          {!offlineAvailable ? (
+            <p className="attachment-upload-status">Offline storage is not available in this browser.</p>
+          ) : null}
           <dl className="message-metadata">
             {detail.from.length > 0 ? (
               <div>
@@ -415,18 +675,29 @@ function MessageDetailView({
               Attachments <span>({detail.attachments.length})</span>
             </h3>
             <ul>
-              {detail.attachments.map((attachment, index) => (
-                <li key={`${attachment.name ?? "attachment"}-${index}`}>
-                  <span className="attachment-name">
+              {detail.attachments.map((attachment) => (
+                <li key={`${attachment.attachmentIndex}-${attachment.name ?? "attachment"}`}>
+                  <span className="attachment-name" dir="auto">
                     {attachment.name || "Unnamed attachment"}
                   </span>
                   <span className="attachment-details">
                     {attachment.type || "Type unavailable"} · {formatFileSize(attachment.size)}
                   </span>
+                  {attachment.size !== null && attachment.size > MAX_ATTACHMENT_DOWNLOAD_BYTES ? (
+                    <span className="attachment-over-limit">Over 4 MiB</span>
+                  ) : (
+                    <a
+                      className="attachment-download"
+                      download
+                      href={`/api/mail/attachments/download?emailId=${encodeURIComponent(detail.id)}&attachmentIndex=${attachment.attachmentIndex}`}
+                    >
+                      Download
+                    </a>
+                  )}
                 </li>
               ))}
             </ul>
-            <p>Attachment downloads are not available yet.</p>
+            <p>Files download as attachments. Downloads are limited to 4 MiB per file.</p>
           </section>
         ) : null}
 
@@ -559,6 +830,21 @@ export function InboxClient() {
   const [detailError, setDetailError] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailRefreshVersion, setDetailRefreshVersion] = useState(0);
+  const [offlineScope, setOfflineScope] = useState<string | null>(null);
+  const [offlineCount, setOfflineCount] = useState(0);
+  const [offlineSavedIds, setOfflineSavedIds] = useState<Set<string>>(() => new Set());
+  const [offlineReady, setOfflineReady] = useState(false);
+  const [offlineStatus, setOfflineStatus] = useState("Preparing offline copies…");
+  const [offlineSavePendingId, setOfflineSavePendingId] = useState<string | null>(null);
+  const [offlineSaveError, setOfflineSaveError] = useState<string | null>(null);
+  const [notificationsReady, setNotificationsReady] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [notificationsSupported] = useState(
+    () => typeof window !== "undefined" && "Notification" in window,
+  );
+  const [notificationStatus, setNotificationStatus] = useState<string | null>(null);
+  const offlineSyncPending = useRef(false);
+  const notificationPollRef = useRef<(() => void) | null>(null);
   const [bodyFormat, setBodyFormat] = useState<BodyFormat>("formatted");
   const [readUpdateError, setReadUpdateError] = useState(false);
   const [isComposeOpen, setIsComposeOpen] = useState(false);
@@ -581,6 +867,56 @@ export function InboxClient() {
   const restoreThreadFocus = useRef(false);
 
   useEffect(() => {
+    let active = true;
+    if ("serviceWorker" in navigator) {
+      void navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {
+        if (active) setOfflineStatus("Offline copies are ready, but the offline page could not be installed.");
+      });
+    } else {
+      setOfflineStatus("Offline copies are available, but this browser does not support an offline page.");
+    }
+
+    async function prepareOfflineStorage() {
+      try {
+        const response = await fetch("/api/mail/offline-scope", {
+          method: "GET",
+          credentials: "same-origin",
+          cache: "no-store",
+          headers: { accept: "application/json" },
+        });
+        const body: unknown = await response.json();
+        const scope = body && typeof body === "object" && "cacheScope" in body
+          ? (body as { cacheScope?: unknown }).cacheScope
+          : null;
+        if (!response.ok || typeof scope !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(scope)) {
+          throw new Error("Offline storage could not be prepared.");
+        }
+        await clearOtherOfflineAccounts(scope);
+        setActiveOfflineScope(scope);
+        const cache = await getOfflineCache(scope);
+        const notificationState = await getOfflineNotificationState(scope);
+        if (!active) return;
+        setOfflineScope(scope);
+        setOfflineCount(cache.messages.length);
+        setOfflineSavedIds(new Set(cache.messages.map((message) => message.emailId)));
+        setOfflineReady(true);
+        setNotificationsEnabled(notificationState?.enabled ?? false);
+        setNotificationsReady(true);
+        setOfflineStatus(cache.messages.length === 0
+          ? "Choose Save offline on a message to keep a copy on this device."
+          : `${cache.messages.length} offline ${cache.messages.length === 1 ? "copy" : "copies"} on this device.`);
+      } catch {
+        if (!active) return;
+        setOfflineReady(false);
+        setOfflineStatus("Offline storage is unavailable. Sign in online and try again.");
+      }
+    }
+
+    void prepareOfflineStorage();
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
     const timer = window.setTimeout(() => {
       const normalized = searchInput.trim();
       if (normalized !== searchText) {
@@ -591,6 +927,128 @@ export function InboxClient() {
     }, 250);
     return () => window.clearTimeout(timer);
   }, [searchInput, searchText]);
+
+  useEffect(() => {
+    if (!offlineReady || !offlineScope) return;
+    let active = true;
+    let running = false;
+    const controller = new AbortController();
+
+    async function synchronizeSavedCopies() {
+      if (!navigator.onLine || running || controller.signal.aborted) return;
+      running = true;
+      try {
+        const cache = await getOfflineCache(offlineScope!);
+        if (!cache.account || cache.messages.length === 0) return;
+        const result = await syncOfflineCache(
+          offlineScope!,
+          cache.messages.map((message) => message.emailId),
+          cache.account.emailState,
+          controller.signal,
+        );
+        const updatedCache = await getOfflineCache(offlineScope!);
+        if (!active) return;
+        setOfflineCount(updatedCache.messages.length);
+        setOfflineSavedIds(new Set(updatedCache.messages.map((message) => message.emailId)));
+        setOfflineStatus(result.hasMore
+          ? "Some offline copies still need updates. Refresh to continue."
+          : `Offline copies synced · ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`);
+      } catch {
+        if (!active || controller.signal.aborted) return;
+        setOfflineStatus("Offline copies could not sync. They remain available on this device.");
+      } finally {
+        running = false;
+      }
+    }
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void synchronizeSavedCopies();
+    };
+    window.addEventListener("online", synchronizeSavedCopies);
+    document.addEventListener("visibilitychange", onVisible);
+    void synchronizeSavedCopies();
+    return () => {
+      active = false;
+      controller.abort();
+      window.removeEventListener("online", synchronizeSavedCopies);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [offlineReady, offlineScope, refreshVersion]);
+
+  useEffect(() => {
+    if (!notificationsReady || !offlineScope) return;
+    let active = true;
+    let running = false;
+    const controller = new AbortController();
+
+    async function pollInboxChanges() {
+      if (
+        running ||
+        !navigator.onLine ||
+        document.visibilityState !== "visible" ||
+        controller.signal.aborted
+      ) return;
+      running = true;
+      try {
+        const state = await getOfflineNotificationState(offlineScope!);
+        let sinceState = state?.emailState || null;
+        for (let pageIndex = 0; pageIndex < 5; pageIndex += 1) {
+          const page = await requestInboxChanges(offlineScope!, sinceState, controller.signal);
+          const committed = await commitOfflineNotificationChanges(
+            offlineScope!,
+            sinceState,
+            page.emailState,
+            page.newInboxEmailIds,
+          );
+          if (!committed.committed) break;
+          if (!active) return;
+          if (page.hasInboxChanges) setRefreshVersion((value) => value + 1);
+          if (
+            notificationsSupported &&
+            committed.enabled &&
+            committed.notifyEmailIds.length > 0 &&
+            Notification.permission === "granted"
+          ) {
+            const count = committed.notifyEmailIds.length;
+            try {
+              new Notification("New mail", {
+                body: count === 1 ? "A new message arrived." : `${count} new messages arrived.`,
+                tag: `rekad-new-mail-${Date.now()}`,
+              });
+            } catch {
+              // Polling and list refresh continue when the browser blocks a notification.
+            }
+          }
+          sinceState = page.emailState;
+          if (!page.hasMore) break;
+        }
+        if (active) setNotificationStatus(null);
+      } catch {
+        if (active && !controller.signal.aborted) {
+          setNotificationStatus("New mail checks are temporarily unavailable. Use Refresh to retry.");
+        }
+      } finally {
+        running = false;
+      }
+    }
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void pollInboxChanges();
+    };
+    notificationPollRef.current = () => void pollInboxChanges();
+    window.addEventListener("online", pollInboxChanges);
+    document.addEventListener("visibilitychange", onVisible);
+    const interval = window.setInterval(() => void pollInboxChanges(), 60_000);
+    void pollInboxChanges();
+    return () => {
+      active = false;
+      controller.abort();
+      window.clearInterval(interval);
+      window.removeEventListener("online", pollInboxChanges);
+      document.removeEventListener("visibilitychange", onVisible);
+      if (notificationPollRef.current) notificationPollRef.current = null;
+    };
+  }, [notificationsReady, notificationsSupported, offlineScope]);
 
   useEffect(() => {
     if (mailboxId && skipMailboxFetch.current === mailboxId) {
@@ -836,6 +1294,7 @@ export function InboxClient() {
     : "";
 
   function refresh() {
+    notificationPollRef.current?.();
     if (openEmailId) {
       setDetailRefreshVersion((value) => value + 1);
       setRefreshVersion((value) => value + 1);
@@ -1017,6 +1476,7 @@ export function InboxClient() {
   function openMessage(emailId: string) {
     restoreMessageFocus.current = true;
     setActionError(null);
+    setOfflineSaveError(null);
     lastOpenedMessageIdRef.current = emailId;
     setDetailLoading(true);
     setDetailError(null);
@@ -1054,6 +1514,104 @@ export function InboxClient() {
     setComposeSeed(undefined);
     setComposeReplyHeaders(undefined);
     setIsComposeOpen(true);
+  }
+
+  async function toggleOfflineCopy(detail: EmailDetail): Promise<void> {
+    if (!offlineReady || !offlineScope || offlineSavePendingId) return;
+    setOfflineSavePendingId(detail.id);
+    setOfflineSaveError(null);
+    let successMessage: string | null = null;
+    try {
+      const cache = await getOfflineCache(offlineScope);
+      if (offlineSavedIds.has(detail.id)) {
+        await removeOfflineMessage(offlineScope, detail.id);
+      } else {
+        let emailIds = cache.messages.map((message) => message.emailId);
+        if (!emailIds.includes(detail.id)) emailIds.push(detail.id);
+        if (emailIds.length > MAX_OFFLINE_MESSAGES) {
+          const oldest = [...cache.messages]
+            .sort((left, right) => left.lastAccessAt - right.lastAccessAt)[0];
+          if (oldest) emailIds = emailIds.filter((emailId) => emailId !== oldest.emailId);
+        }
+        if (navigator.onLine) {
+          const synced = await syncOfflineCache(
+            offlineScope,
+            emailIds,
+            cache.account?.emailState ?? detail.emailState,
+          );
+          if (synced.destroyed.has(detail.id)) {
+            throw new Error("message_not_found");
+          }
+        }
+        const updatedCache = await getOfflineCache(offlineScope);
+        const latest = updatedCache.messages.find((message) => message.emailId === detail.id);
+        const content = latest
+          ? {
+              emailId: latest.emailId,
+              subject: latest.subject,
+              senderName: latest.senderName,
+              senderEmail: latest.senderEmail,
+              receivedAt: latest.receivedAt,
+              textBody: latest.textBody,
+            }
+          : offlineContentFromEmail(detail);
+        const saved = await saveOfflineMessage(
+          offlineScope,
+          content,
+          updatedCache.account?.emailState ?? detail.emailState,
+        );
+        if (saved.evictedEmailIds.length > 0) {
+          successMessage = "Saved offline. The oldest offline copy was removed to stay within the device limit.";
+        }
+      }
+      const nextCache = await getOfflineCache(offlineScope);
+      setOfflineCount(nextCache.messages.length);
+      setOfflineSavedIds(new Set(nextCache.messages.map((message) => message.emailId)));
+      setOfflineStatus(successMessage ?? (offlineSavedIds.has(detail.id)
+        ? "Offline copy removed from this device."
+        : "Saved on this device. It will sync when you are online."));
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "offline_save_failed";
+      setOfflineSaveError(reason === "message_not_found"
+        ? "This message is no longer available to save."
+        : error instanceof OfflineCacheLimitError
+          ? "This message is too large for the offline storage limit."
+          : "The offline copy could not be saved. Check storage space and try again.");
+    } finally {
+      setOfflineSavePendingId(null);
+    }
+  }
+
+  async function toggleNewMailNotifications(): Promise<void> {
+    if (!offlineScope || !notificationsReady) return;
+    setNotificationStatus(null);
+    try {
+      if (notificationsEnabled) {
+        await setOfflineNotificationsEnabled(offlineScope, false);
+        setNotificationsEnabled(false);
+        setNotificationStatus("New mail alerts are off for this account.");
+        return;
+      }
+      if (!notificationsSupported) {
+        setNotificationStatus("This browser does not support notifications.");
+        return;
+      }
+      let permission = Notification.permission;
+      if (permission === "default") {
+        permission = await Notification.requestPermission();
+      }
+      if (permission !== "granted") {
+        setNotificationStatus(permission === "denied"
+          ? "Notifications are blocked in browser settings."
+          : "Notifications were not enabled.");
+        return;
+      }
+      await setOfflineNotificationsEnabled(offlineScope, true);
+      setNotificationsEnabled(true);
+      setNotificationStatus("New mail alerts are on for this account.");
+    } catch {
+      setNotificationStatus("The notification preference could not be saved.");
+    }
   }
 
   function closeComposeDialog() {
@@ -1099,6 +1657,29 @@ export function InboxClient() {
             <p className="sidebar-note">Loading mailboxes…</p>
           ) : null}
         </nav>
+
+        <div className="offline-nav">
+          <a href="/offline.html">Offline copies <span>{offlineCount}</span></a>
+          <p className="offline-copy-status" role="status">{offlineStatus}</p>
+          {notificationsSupported ? (
+            <button
+              aria-pressed={notificationsEnabled}
+              className="notification-toggle"
+              disabled={!notificationsReady}
+              onClick={() => void toggleNewMailNotifications()}
+              type="button"
+            >
+              {!notificationsReady
+                ? "Preparing alerts…"
+                : notificationsEnabled
+                  ? "Turn off new mail alerts"
+                  : "Enable new mail alerts"}
+            </button>
+          ) : (
+            <p className="notification-status">Browser notifications are not available.</p>
+          )}
+          {notificationStatus ? <p className="notification-status" role="status">{notificationStatus}</p> : null}
+        </div>
 
         <div className="sidebar-footer">
           <SignOutButton />
@@ -1434,10 +2015,15 @@ export function InboxClient() {
             mailboxes={listing?.mailboxes ?? []}
             actionPending={actionPending}
             actionError={actionError}
+            offlineAvailable={offlineReady && Boolean(offlineScope)}
+            offlineSaved={Boolean(emailDetail && offlineSavedIds.has(emailDetail.id))}
+            offlineSavePending={Boolean(emailDetail && offlineSavePendingId === emailDetail.id)}
+            offlineSaveError={offlineSaveError}
             onAction={(action) => void performMailAction(action, { emailId: openEmailId })}
             onMove={(destinationId) => void performMailAction("move", { emailId: openEmailId }, destinationId)}
             onReply={(detail, trigger) => replyToMessage(detail, trigger)}
             onForward={(detail, trigger) => forwardMessage(detail, trigger)}
+            onToggleOffline={(detail) => void toggleOfflineCopy(detail)}
           />
         ) : null}
 

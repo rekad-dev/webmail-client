@@ -45,11 +45,23 @@ interface ReplyHeaders {
   references: string[];
 }
 
+interface ComposeAttachment {
+  blobId: string;
+  name: string;
+  type: string;
+  size: number;
+}
+
 interface LoadedDraft extends ComposeFields {
   id: string;
+  attachments: ComposeAttachment[];
   inReplyTo: string[];
   references: string[];
 }
+
+const MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024;
+const MAX_ATTACHMENT_TOTAL_BYTES = 20 * 1024 * 1024;
+const MAX_ATTACHMENTS = 10;
 
 type SendState =
   | "submitted"
@@ -103,6 +115,33 @@ function parseLoadedDraft(value: unknown): LoadedDraft | null {
   const cc = parseAddresses(draft.cc);
   const bcc = parseAddresses(draft.bcc);
   if (!from || !to || !cc || !bcc) return null;
+  const attachmentsValue = draft.attachments ?? [];
+  if (!Array.isArray(attachmentsValue) || attachmentsValue.length > MAX_ATTACHMENTS) {
+    return null;
+  }
+  const attachments: ComposeAttachment[] = [];
+  let attachmentBytes = 0;
+  for (const candidate of attachmentsValue) {
+    const attachment = objectValue(candidate);
+    if (
+      !attachment ||
+      typeof attachment.blobId !== "string" ||
+      typeof attachment.name !== "string" ||
+      typeof attachment.type !== "string" ||
+      typeof attachment.size !== "number" ||
+      !Number.isSafeInteger(attachment.size) ||
+      attachment.size < 0 ||
+      attachment.size > MAX_ATTACHMENT_BYTES
+    ) return null;
+    attachmentBytes += attachment.size;
+    if (attachmentBytes > MAX_ATTACHMENT_TOTAL_BYTES) return null;
+    attachments.push({
+      blobId: attachment.blobId,
+      name: safeAttachmentName(attachment.name),
+      type: attachment.type,
+      size: attachment.size,
+    });
+  }
   return {
     id: draft.id,
     fromEmail: from[0]?.email ?? "",
@@ -111,6 +150,7 @@ function parseLoadedDraft(value: unknown): LoadedDraft | null {
     bcc: bcc.map((address) => address.email).join(", "),
     subject: draft.subject,
     body: draft.body,
+    attachments,
     inReplyTo: draft.inReplyTo,
     references: draft.references,
   };
@@ -205,6 +245,19 @@ function preflightErrorMessage(error: string): string {
   return "Sender identities could not be loaded. Check your connection and try again.";
 }
 
+function attachmentErrorMessage(error: string): string {
+  if (error === "attachment_too_large") {
+    return "Each attachment must be 4 MiB or smaller, with no more than 20 MiB total.";
+  }
+  if (error === "sign_in_required") {
+    return "Your mail session has ended. Sign in again before uploading attachments.";
+  }
+  if (error === "origin_not_allowed") {
+    return "The upload could not be verified. Reload rekad Mail and try again.";
+  }
+  return "An attachment could not be uploaded. Try choosing it again.";
+}
+
 function sendErrorMessage(error: string | undefined): string {
   switch (error) {
     case "sign_in_required":
@@ -218,6 +271,8 @@ function sendErrorMessage(error: string | undefined): string {
       return "This message has too many recipients.";
     case "message_too_large":
       return "This message is too large to submit.";
+    case "attachment_too_large":
+      return "Each attachment must be 4 MiB or smaller, with no more than 20 MiB total.";
     case "sender_forbidden":
       return "Stalwart does not allow this From address.";
     case "identity_invalid":
@@ -250,6 +305,19 @@ function stateMessage(state: SendState): string {
     case "unknown":
       return "Submission could not be confirmed. Check Sent before taking another action.";
   }
+}
+
+function safeAttachmentName(value: string): string {
+  return value.replace(/[\u0000-\u001f\u007f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "")
+    .replace(/[\\/]/g, "_")
+    .trim()
+    .slice(0, 256) || "attachment";
+}
+
+function attachmentSizeLabel(size: number): string {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function visibleFocusables(dialog: HTMLElement): HTMLElement[] {
@@ -292,6 +360,13 @@ export function ComposeDialog({
     subject: "",
     body: "",
   });
+  const [attachments, setAttachments] = useState<ComposeAttachment[]>([]);
+  const [attachmentUploadPending, setAttachmentUploadPending] = useState(false);
+  const [attachmentUploadProgress, setAttachmentUploadProgress] = useState<{
+    current: number;
+    total: number;
+  } | null>(null);
+  const [attachmentUploadError, setAttachmentUploadError] = useState<string | null>(null);
   const [sendState, setSendState] = useState<SendState | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
@@ -313,6 +388,7 @@ export function ComposeDialog({
   const titleRef = useRef<HTMLHeadingElement | null>(null);
   const identitySelectRef = useRef<HTMLSelectElement | null>(null);
   const toFieldRef = useRef<HTMLInputElement | null>(null);
+  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -403,6 +479,7 @@ export function ComposeDialog({
           subject: initialFields?.subject ?? "",
           body: initialFields?.body ?? signature,
         });
+        setAttachments(loadedDraft?.attachments ?? []);
         hasBodyEditsRef.current = Boolean(loadedDraft || initialFields?.body);
         draftRevisionRef.current = loadedDraft
           ? 0
@@ -444,7 +521,9 @@ export function ComposeDialog({
     preflight.draftsMailboxId &&
     preflight.sentMailboxId &&
     selectedIdentity &&
-    canEdit,
+    canEdit &&
+    !attachmentUploadPending &&
+    !attachmentUploadError,
   );
   const canCheckStatus =
     (sendState === "unknown" || sendState === "in_progress") &&
@@ -452,6 +531,7 @@ export function ComposeDialog({
 
   function queueDraftSave(
     snapshot: ComposeFields,
+    attachmentsSnapshot: ComposeAttachment[],
     selectedIdentityId: string,
     revision: number,
     force = false,
@@ -480,6 +560,7 @@ export function ComposeDialog({
           bcc: parseAddressesField(snapshot.bcc),
           subject: snapshot.subject,
           body: snapshot.body,
+          attachments: attachmentsSnapshot,
           inReplyTo: replyHeaders.inReplyTo,
           references: replyHeaders.references,
         }),
@@ -508,11 +589,12 @@ export function ComposeDialog({
     const revision = draftRevisionRef.current;
     if (revision <= savedDraftRevisionRef.current && draftIdRef.current) return;
     if (!selectedIdentity) throw new Error("draft_identity_missing");
-    await queueDraftSave(fields, selectedIdentity.id, revision, true);
+    await queueDraftSave(fields, attachments, selectedIdentity.id, revision, true);
     if (!draftIdRef.current) throw new Error("draft_save_failed");
   }
 
   async function closeCompose(): Promise<void> {
+    if (attachmentUploadPending) return;
     if (
       selectedIdentity &&
       sendState !== "submitted" &&
@@ -540,13 +622,14 @@ export function ComposeDialog({
       draftRevisionRef.current <= savedDraftRevisionRef.current
     ) return;
     const snapshot = fields;
+    const attachmentsSnapshot = attachments;
     const identityIdSnapshot = selectedIdentity.id;
     const revision = draftRevisionRef.current;
     const timer = window.setTimeout(() => {
-      void queueDraftSave(snapshot, identityIdSnapshot, revision).catch(() => undefined);
+      void queueDraftSave(snapshot, attachmentsSnapshot, identityIdSnapshot, revision).catch(() => undefined);
     }, 700);
     return () => window.clearTimeout(timer);
-  }, [fields, identityId, isLoading, isSending, preflight?.draftsMailboxId, sendState]);
+  }, [attachments, fields, identityId, isLoading, isSending, preflight?.draftsMailboxId, sendState]);
 
   function updateFields(patch: Partial<ComposeFields>) {
     setFields((current) => ({ ...current, ...patch }));
@@ -585,6 +668,96 @@ export function ComposeDialog({
     window.setTimeout(() => toFieldRef.current?.focus(), 0);
   }
 
+  function markAttachmentsChanged(): void {
+    draftRevisionRef.current += 1;
+    setDraftSaveState("idle");
+    setDraftSaveError(false);
+    attemptKeyRef.current = null;
+    setSendState(null);
+    setSendError(null);
+    setFormError(null);
+  }
+
+  async function uploadSelectedFiles(fileList: FileList | null): Promise<void> {
+    const files = fileList ? Array.from(fileList) : [];
+    if (files.length === 0 || attachmentUploadPending) return;
+    setAttachmentUploadError(null);
+
+    const totalBytes = attachments.reduce((total, item) => total + item.size, 0) +
+      files.reduce((total, item) => total + item.size, 0);
+    if (
+      attachments.length + files.length > MAX_ATTACHMENTS ||
+      files.some((file) => file.size > MAX_ATTACHMENT_BYTES) ||
+      totalBytes > MAX_ATTACHMENT_TOTAL_BYTES
+    ) {
+      setAttachmentUploadError("attachment_too_large");
+      return;
+    }
+
+    setAttachmentUploadPending(true);
+    let uploaded: ComposeAttachment[] = [];
+    let failure: string | null = null;
+    for (let index = 0; index < files.length; index += 1) {
+      const file = files[index];
+      if (!file) continue;
+      setAttachmentUploadProgress({ current: index + 1, total: files.length });
+      try {
+        const response = await fetch("/api/mail/attachments/upload", {
+          method: "POST",
+          credentials: "same-origin",
+          cache: "no-store",
+          headers: {
+            accept: "application/json",
+            "content-type": file.type || "application/octet-stream",
+          },
+          body: file,
+        });
+        const body: unknown = await response.json();
+        const result = objectValue(body);
+        if (
+          !response.ok ||
+          typeof result?.blobId !== "string" ||
+          typeof result.type !== "string" ||
+          result.size !== file.size
+        ) {
+          failure = typeof result?.error === "string"
+            ? result.error
+            : "mail_unavailable";
+          break;
+        }
+        uploaded.push({
+          blobId: result.blobId,
+          name: safeAttachmentName(file.name),
+          type: result.type,
+          size: result.size,
+        });
+      } catch {
+        failure = "mail_unavailable";
+        break;
+      }
+    }
+
+    if (uploaded.length > 0) {
+      setAttachments((current) => [...current, ...uploaded]);
+      markAttachmentsChanged();
+    }
+    setAttachmentUploadError(failure);
+    setAttachmentUploadProgress(null);
+    setAttachmentUploadPending(false);
+  }
+
+  function removeAttachment(blobId: string, name: string): void {
+    if (attachmentUploadPending) return;
+    setAttachments((current) => {
+      const index = current.findIndex((item) => item.blobId === blobId && item.name === name);
+      if (index < 0) return current;
+      const next = current.slice();
+      next.splice(index, 1);
+      return next;
+    });
+    markAttachmentsChanged();
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedIdentity || !preflight || isSending) return;
@@ -603,6 +776,14 @@ export function ComposeDialog({
     }
     if (selectedIdentity.isWildcard && !fields.fromEmail.trim()) {
       setFormError("Enter the From address to use for this wildcard identity.");
+      return;
+    }
+    if (attachmentUploadPending) {
+      setFormError("Wait for attachments to finish uploading before sending.");
+      return;
+    }
+    if (attachmentUploadError) {
+      setFormError("Resolve the attachment upload issue before sending.");
       return;
     }
 
@@ -654,6 +835,7 @@ export function ComposeDialog({
           bcc,
           subject: fields.subject,
           body: fields.body,
+          attachments,
           inReplyTo: replyHeaders.inReplyTo,
           references: replyHeaders.references,
         }),
@@ -756,7 +938,7 @@ export function ComposeDialog({
           <button
             aria-label="Close compose"
             className="compose-close"
-            disabled={isSending}
+            disabled={isSending || attachmentUploadPending}
             onClick={() => void closeCompose()}
             type="button"
           >
@@ -968,6 +1150,62 @@ export function ComposeDialog({
               </span>
             </div>
 
+            <div className="compose-field compose-attachment-field">
+              <label htmlFor="compose-attachments">Attachments</label>
+              <input
+                aria-describedby="compose-attachments-help"
+                disabled={!canEdit || attachmentUploadPending}
+                id="compose-attachments"
+                multiple
+                onChange={(event) => {
+                  void uploadSelectedFiles(event.currentTarget.files);
+                  event.currentTarget.value = "";
+                }}
+                ref={attachmentInputRef}
+                type="file"
+              />
+              <span className="compose-help" id="compose-attachments-help">
+                Up to 10 files, 4 MiB each and 20 MiB total. Files upload securely to Stalwart and stay attached to this draft.
+              </span>
+            </div>
+            {attachmentUploadProgress ? (
+              <p className="attachment-upload-status" role="status" aria-live="polite">
+                Uploading attachment {attachmentUploadProgress.current} of {attachmentUploadProgress.total}…
+              </p>
+            ) : null}
+            {attachmentUploadError ? (
+              <div className="attachment-upload-error" role="alert">
+                <p>{attachmentErrorMessage(attachmentUploadError)}</p>
+                <button
+                  className="compose-secondary-action"
+                  disabled={attachmentUploadPending || !canEdit}
+                  onClick={() => attachmentInputRef.current?.click()}
+                  type="button"
+                >
+                  Choose files to retry
+                </button>
+              </div>
+            ) : null}
+            {attachments.length > 0 ? (
+              <ul className="compose-attachment-list" aria-label="Attached files">
+                {attachments.map((attachment, index) => (
+                  <li key={`${attachment.blobId}-${attachment.name}-${index}`}>
+                    <span className="compose-attachment-name" dir="auto">{attachment.name}</span>
+                    <span className="compose-attachment-size">{attachmentSizeLabel(attachment.size)}</span>
+                    <button
+                      aria-label={`Remove ${attachment.name}`}
+                      className="compose-attachment-remove"
+                      disabled={!canEdit || attachmentUploadPending}
+                      onClick={() => removeAttachment(attachment.blobId, attachment.name)}
+                      type="button"
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
             {sendError ? (
               <p className="compose-send-error" role="alert">{sendError}</p>
             ) : null}
@@ -1015,7 +1253,7 @@ export function ComposeDialog({
               ) : (
                 <button
                   className="compose-secondary-action"
-                  disabled={isSending}
+                  disabled={isSending || attachmentUploadPending}
                   onClick={() => void closeCompose()}
                   type="button"
                 >

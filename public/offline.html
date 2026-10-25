@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f5f6f5">
+    <title>Offline copies · rekad Mail</title>
+    <link rel="stylesheet" href="/offline.css">
+    <script src="/offline.js" defer></script>
+  </head>
+  <body>
+    <main class="offline-shell">
+      <header class="offline-header">
+        <a class="offline-brand" href="/" aria-label="rekad Mail home">
+          <span class="brand-mark" aria-hidden="true">r</span>
+          <span>rekad Mail</span>
+        </a>
+        <p class="offline-status" id="connection-status" role="status">Offline view</p>
+      </header>
+      <section class="offline-content" aria-labelledby="offline-title">
+        <p class="eyebrow">Saved on this device</p>
+        <h1 id="offline-title">Offline copies</h1>
+        <p class="offline-intro">Only messages you chose to save are available here. Message content stays in this browser.</p>
+        <p class="offline-message" id="offline-message" role="status" aria-live="polite">Loading saved copies…</p>
+        <ol class="offline-list" id="offline-list" aria-label="Saved email copies"></ol>
+      </section>
+    </main>
+  </body>
+</html>
