@@ -17,6 +17,9 @@
     "jmap:smoke": "node scripts/jmap-smoke.mts"
   },
   "dependencies": {
+    "@tiptap/react": "^3.32.0",
+    "@tiptap/starter-kit": "^3.32.0",
+    "html-to-text": "^10.0.1",
     "next": "16.4.2",
     "next-auth": "5.0.0-beta.32",
     "postgres": "3.4.9",
