@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import test from "node:test";
 
 import {
+  MAX_MAIL_SEND_REQUEST_BYTES,
   InvalidMailSendRequest,
   OversizedMailSendRequest,
   parseMailSendRequest,
@@ -105,7 +106,9 @@ test("rejects oversized subjects, bodies, keys, controls, and malformed JSON", a
 
   await assert.rejects(
     parseMailSendRequest(
-      request(validBody(), { "content-length": String(384 * 1024 + 1) }),
+      request(validBody(), {
+        "content-length": String(MAX_MAIL_SEND_REQUEST_BYTES + 1),
+      }),
     ),
     OversizedMailSendRequest,
   );
