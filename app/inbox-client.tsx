@@ -1940,7 +1940,7 @@ export function InboxClient({ accountName, accountEmail }: {
         ) : null}
 
         {!openEmailId && !openThreadId && !listing && isLoading ? (
-          <div className="mail-state" role="status" aria-live="polite">
+          <div className="mail-state">
             <span className="loading-indicator" aria-hidden="true" />
             <p>Loading your mail…</p>
           </div>
