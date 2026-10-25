@@ -8,6 +8,7 @@ import {
   type KeyboardEvent,
   type RefObject,
 } from "react";
+import { MailIcon } from "./mail-icons";
 
 interface EmailAddress {
   name: string | null;
@@ -347,6 +348,10 @@ export function ComposeDialog({
   initialFields?: Partial<ComposeFields>;
   initialReplyHeaders?: ReplyHeaders;
 }) {
+  const [isMinimized, setIsMinimized] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [showCc, setShowCc] = useState(false);
+  const [showBcc, setShowBcc] = useState(false);
   const [preflight, setPreflight] = useState<ComposePreflight | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -500,13 +505,14 @@ export function ComposeDialog({
   }, [reloadVersion, initialDraftId]);
 
   useEffect(() => {
+    if (isMinimized) return;
     if (isLoading || loadError || !preflight) {
       titleRef.current?.focus();
       return;
     }
     if (toFieldRef.current) toFieldRef.current.focus();
     else identitySelectRef.current?.focus();
-  }, [isLoading, loadError, preflight]);
+  }, [isLoading, loadError, preflight, isMinimized]);
 
   const selectedIdentity = preflight?.identities.find(
     (identity) => identity.id === identityId,
@@ -916,35 +922,41 @@ export function ComposeDialog({
     : mode === "forward"
       ? "Forward"
       : mode === "draft"
-        ? "Continue draft"
-        : "Compose";
+        ? "Draft Message"
+        : "New Message";
 
   return (
     <div className="compose-backdrop">
       <section
         aria-labelledby="compose-title"
         aria-modal="true"
-        className="compose-dialog"
+        className={`compose-dialog${isExpanded ? " is-expanded" : ""}${isMinimized ? " is-minimized" : ""}`}
         onKeyDown={handleKeyDown}
         ref={dialogRef}
         role="dialog"
         tabIndex={-1}
       >
         <header className="compose-header">
-          <div>
-            <p className="eyebrow">{mode === "reply" ? "Replying" : mode === "forward" ? "Forwarding" : mode === "draft" ? "Saved draft" : "New message"}</p>
+          <div className="compose-title-group">
+            <span className="compose-envelope"><MailIcon name="mail" size={24} /></span>
             <h2 id="compose-title" ref={titleRef} tabIndex={-1}>{composeHeading}</h2>
           </div>
-          <button
-            aria-label="Close compose"
-            className="compose-close"
-            disabled={isSending || attachmentUploadPending}
-            onClick={() => void closeCompose()}
-            type="button"
-          >
-            <span aria-hidden="true">×</span>
-          </button>
+          <div className="compose-window-controls">
+            <button className="icon-button" aria-label={isMinimized ? "Restore compose" : "Minimize compose"}
+              aria-expanded={!isMinimized} onClick={() => { setIsMinimized((value) => !value); setIsExpanded(false); }} type="button">
+              <MailIcon name="minimize" size={19} />
+            </button>
+            <button className="icon-button compose-expand" aria-label={isExpanded ? "Exit expanded compose" : "Expand compose"}
+              aria-pressed={isExpanded} onClick={() => { setIsMinimized(false); setIsExpanded((value) => !value); }} type="button">
+              <MailIcon name="expand" size={19} />
+            </button>
+            <button aria-label="Close compose" className="icon-button compose-close"
+              disabled={isSending || attachmentUploadPending} onClick={() => void closeCompose()} type="button">
+              <MailIcon name="close" size={20} />
+            </button>
+          </div>
         </header>
+        <div className="compose-content" hidden={isMinimized}>
 
         {isLoading ? (
           <div className="compose-state" role="status" aria-live="polite">
@@ -1001,7 +1013,7 @@ export function ComposeDialog({
         {selectedIdentity && preflight && !preflightUnavailable ? (
           <form className="compose-form" onSubmit={submit}>
             {preflight.identities.length === 1 ? (
-              <div className="compose-field">
+              <div className="compose-field compose-sender-field">
                 {selectedIdentity.isWildcard ? (
                   <>
                     <label htmlFor="compose-from">From address</label>
@@ -1025,7 +1037,7 @@ export function ComposeDialog({
               </div>
             ) : null}
             {preflight.identities.length > 1 ? (
-              <div className="compose-field">
+              <div className="compose-field compose-sender-field">
                 <label htmlFor="compose-identity">From</label>
                 <select
                   autoComplete="off"
@@ -1075,23 +1087,24 @@ export function ComposeDialog({
               </div>
             ) : null}
 
-            <div className="compose-field">
+            <div className="compose-field compose-address-field">
               <label htmlFor="compose-to">To</label>
               <input
                 autoComplete="off"
                 autoCapitalize="none"
                 disabled={!canEdit}
                 id="compose-to"
+                aria-describedby="compose-to-help"
                 inputMode="email"
                 onChange={(event) => updateFields({ to: event.target.value })}
-                placeholder="name@example.com, another@example.com"
+                placeholder="Add recipients"
                 ref={toFieldRef}
                 type="text"
                 value={fields.to}
               />
-              <span className="compose-help">Separate addresses with commas.</span>
+              <span className="compose-help visually-hidden" id="compose-to-help">Separate addresses with commas.</span>
             </div>
-            <div className="compose-field">
+            {showCc || fields.cc ? <div className="compose-field compose-address-field">
               <label htmlFor="compose-cc">Cc</label>
               <input
                 autoComplete="off"
@@ -1104,8 +1117,8 @@ export function ComposeDialog({
                 type="text"
                 value={fields.cc}
               />
-            </div>
-            <div className="compose-field">
+            </div> : null}
+            {showBcc || fields.bcc ? <div className="compose-field compose-address-field">
               <label htmlFor="compose-bcc">Bcc</label>
               <input
                 autoComplete="off"
@@ -1118,25 +1131,30 @@ export function ComposeDialog({
                 type="text"
                 value={fields.bcc}
               />
-              <span className="compose-help">Separate addresses with commas.</span>
-            </div>
-            <div className="compose-field">
+            </div> : null}
+            <div className="compose-field compose-subject-field">
               <label htmlFor="compose-subject">Subject</label>
               <input
                 autoComplete="off"
                 disabled={!canEdit}
                 id="compose-subject"
+                placeholder="Add a subject"
                 maxLength={998}
                 onChange={(event) => updateFields({ subject: event.target.value })}
                 type="text"
                 value={fields.subject}
               />
+              <div className="compose-recipient-toggles">
+                <button aria-expanded={showCc || Boolean(fields.cc)} disabled={!canEdit || Boolean(fields.cc)} onClick={() => setShowCc((value) => !value)} type="button">Cc</button>
+                <button aria-expanded={showBcc || Boolean(fields.bcc)} disabled={!canEdit || Boolean(fields.bcc)} onClick={() => setShowBcc((value) => !value)} type="button">Bcc</button>
+              </div>
             </div>
             <div className="compose-field compose-body-field">
               <label htmlFor="compose-body">Message</label>
               <textarea
                 disabled={!canEdit}
                 id="compose-body"
+                placeholder="Write your message…"
                 maxLength={256 * 1024}
                 onChange={(event) => {
                   hasBodyEditsRef.current = true;
@@ -1150,23 +1168,12 @@ export function ComposeDialog({
               </span>
             </div>
 
-            <div className="compose-field compose-attachment-field">
-              <label htmlFor="compose-attachments">Attachments</label>
-              <input
-                aria-describedby="compose-attachments-help"
-                disabled={!canEdit || attachmentUploadPending}
-                id="compose-attachments"
-                multiple
-                onChange={(event) => {
-                  void uploadSelectedFiles(event.currentTarget.files);
-                  event.currentTarget.value = "";
-                }}
-                ref={attachmentInputRef}
-                type="file"
-              />
-              <span className="compose-help" id="compose-attachments-help">
-                Up to 10 files, 4 MiB each and 20 MiB total. Files upload securely to Stalwart and stay attached to this draft.
-              </span>
+            <div className="compose-attachment-help">
+              <input aria-describedby="compose-attachments-help" disabled={!canEdit || attachmentUploadPending}
+                id="compose-attachments" multiple hidden onChange={(event) => {
+                  void uploadSelectedFiles(event.currentTarget.files); event.currentTarget.value = "";
+                }} ref={attachmentInputRef} type="file" />
+              <p id="compose-attachments-help">Up to 10 attachments · 4 MiB each · 20 MiB total</p>
             </div>
             {attachmentUploadProgress ? (
               <p className="attachment-upload-status" role="status" aria-live="polite">
@@ -1190,8 +1197,8 @@ export function ComposeDialog({
               <ul className="compose-attachment-list" aria-label="Attached files">
                 {attachments.map((attachment, index) => (
                   <li key={`${attachment.blobId}-${attachment.name}-${index}`}>
-                    <span className="compose-attachment-name" dir="auto">{attachment.name}</span>
-                    <span className="compose-attachment-size">{attachmentSizeLabel(attachment.size)}</span>
+                    <span className="compose-file-icon"><MailIcon name="file" size={25} /></span>
+                    <span className="compose-attachment-info"><span className="compose-attachment-name" dir="auto">{attachment.name}</span><span className="compose-attachment-size">{attachmentSizeLabel(attachment.size)}</span></span>
                     <button
                       aria-label={`Remove ${attachment.name}`}
                       className="compose-attachment-remove"
@@ -1199,7 +1206,7 @@ export function ComposeDialog({
                       onClick={() => removeAttachment(attachment.blobId, attachment.name)}
                       type="button"
                     >
-                      Remove
+                      <MailIcon name="close" size={15} />
                     </button>
                   </li>
                 ))}
@@ -1242,37 +1249,23 @@ export function ComposeDialog({
             </p>
 
             <footer className="compose-actions">
+              <button className="compose-send-button" disabled={isSending || (!canSend && !canCheckStatus)} type="submit">
+                {isSending ? "Sending…" : sendState === "unknown" || sendState === "in_progress" ? "Check status" : "Send"}
+                <MailIcon name="send" size={17} />
+              </button>
+              <button className="icon-button compose-attach-button" aria-label="Attach files" aria-describedby="compose-attachments-help"
+                disabled={!canEdit || attachmentUploadPending} onClick={() => attachmentInputRef.current?.click()} type="button" title="Attach files">
+                <MailIcon name="paperclip" size={21} />
+              </button>
+              <span className="compose-format-label">Plain text</span>
+              <span className="compose-action-spacer" />
               {(sendState === "unknown" || sendState === "in_progress") ? (
-                <button
-                  className="compose-secondary-action"
-                  onClick={onInspectSent}
-                  type="button"
-                >
-                  Open Sent
-                </button>
+                <button className="compose-secondary-action" onClick={onInspectSent} type="button">Open Sent</button>
               ) : (
-                <button
-                  className="compose-secondary-action"
-                  disabled={isSending || attachmentUploadPending}
-                  onClick={() => void closeCompose()}
-                  type="button"
-                >
-                  {sendState === "submitted" || sendState === "submitted_sent_update_pending"
-                    ? "Close"
-                    : "Cancel"}
+                <button className="compose-secondary-action" disabled={isSending || attachmentUploadPending} onClick={() => void closeCompose()} type="button">
+                  {sendState === "submitted" || sendState === "submitted_sent_update_pending" ? "Close" : "Save & close"}
                 </button>
               )}
-              <button
-                className="compose-send-button"
-                disabled={isSending || (!canSend && !canCheckStatus)}
-                type="submit"
-              >
-                {isSending
-                  ? "Sending…"
-                  : sendState === "unknown" || sendState === "in_progress"
-                    ? "Check status"
-                    : "Send"}
-              </button>
             </footer>
           </form>
         ) : !isLoading && !loadError && !preflightUnavailable && !requiresIdentity ? (
@@ -1280,6 +1273,7 @@ export function ComposeDialog({
             <p>Choose a sender identity to continue.</p>
           </div>
         ) : null}
+        </div>
       </section>
     </div>
   );

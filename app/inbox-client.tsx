@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import { ComposeDialog } from "./compose-dialog";
 import type { ComposeFields } from "./compose-dialog";
 import { SignOutButton } from "./sign-out-button";
+import { MailIcon, type MailIconName } from "./mail-icons";
 import {
   applyOfflineSyncPage,
   clearOtherOfflineAccounts,
@@ -136,6 +137,55 @@ function senderLabel(email: EmailSummary): string {
   const name = sender.name?.trim();
   const address = sender.email.trim();
   return name || address || "Unknown sender";
+}
+
+function senderInitials(email: EmailSummary): string {
+  const name = senderLabel(email).split("@")[0];
+  return name.split(/[\s._-]+/).filter(Boolean).slice(0, 2)
+    .map((part) => Array.from(part)[0]).join("").toLocaleUpperCase() || "?";
+}
+
+function avatarTone(email: EmailSummary): number {
+  return Array.from(senderLabel(email)).reduce((sum, letter) => sum + (letter.codePointAt(0) ?? 0), 0) % 6;
+}
+
+function mailboxIcon(role: string | null): MailIconName {
+  switch (role) {
+    case "inbox": return "inbox";
+    case "sent": return "send";
+    case "drafts": return "file";
+    case "archive": return "archive";
+    case "trash": return "trash";
+    case "junk": return "mail";
+    default: return "folder";
+  }
+}
+
+async function requestMailAction(
+  action: MailAction,
+  target: { emailId: string } | { threadId: string },
+  destinationMailboxId?: string,
+  sourceMailboxId?: string,
+): Promise<void> {
+  const body: Record<string, string> = { action, ...target };
+  if (action === "move" && destinationMailboxId) {
+    body.destinationMailboxId = destinationMailboxId;
+    if (sourceMailboxId) body.sourceMailboxId = sourceMailboxId;
+  }
+  const response = await fetch("/api/mail/actions", {
+    method: "POST", credentials: "same-origin", cache: "no-store",
+    headers: { accept: "application/json", "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (response.ok) return;
+  let reason = "mail_unavailable";
+  try {
+    const result: unknown = await response.json();
+    if (result && typeof result === "object" && "error" in result && typeof result.error === "string") {
+      reason = result.error;
+    }
+  } catch { /* Keep a generic error for non-JSON responses. */ }
+  throw new Error(reason);
 }
 
 function formatDate(value: string | null): string {
@@ -810,7 +860,14 @@ function mailActionErrorMessage(error: string): string {
   }
 }
 
-export function InboxClient() {
+export function InboxClient({ accountName, accountEmail }: {
+  accountName?: string | null;
+  accountEmail?: string | null;
+}) {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [selectedThreadIds, setSelectedThreadIds] = useState<Set<string>>(() => new Set());
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const pageSelectionRef = useRef<HTMLInputElement | null>(null);
   const [mailboxId, setMailboxId] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [searchText, setSearchText] = useState("");
@@ -1278,6 +1335,29 @@ export function InboxClient() {
     }
   }, [emailDetail?.id, openEmailId]);
 
+  useEffect(() => {
+    function focusSearch(event: globalThis.KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k" && !isComposeOpen) {
+        event.preventDefault();
+        setSidebarCollapsed(false);
+        window.requestAnimationFrame(() => searchInputRef.current?.focus());
+      }
+    }
+    window.addEventListener("keydown", focusSearch);
+    return () => window.removeEventListener("keydown", focusSearch);
+  }, [isComposeOpen]);
+
+  useEffect(() => {
+    setSelectedThreadIds(new Set());
+  }, [mailboxId, position, searchText, searchScope]);
+
+  useEffect(() => {
+    if (!pageSelectionRef.current) return;
+    const selectable = listing?.messages.filter((message) => !message.isDraft) ?? [];
+    const selectedCount = selectable.filter((message) => selectedThreadIds.has(message.threadId)).length;
+    pageSelectionRef.current.indeterminate = selectedCount > 0 && selectedCount < selectable.length;
+  }, [listing, selectedThreadIds]);
+
   const selectedMailbox = listing?.mailboxes.find(
     (mailbox) => mailbox.id === listing.selectedMailboxId,
   );
@@ -1337,37 +1417,8 @@ export function InboxClient() {
     if (actionPending) return;
     setActionPending(true);
     setActionError(null);
-    const body: Record<string, string> = { action, ...target };
-    if (action === "move" && destinationMailboxId) {
-      body.destinationMailboxId = destinationMailboxId;
-      if (listing?.selectedMailboxId) {
-        body.sourceMailboxId = listing.selectedMailboxId;
-      }
-    }
     try {
-      const response = await fetch("/api/mail/actions", {
-        method: "POST",
-        credentials: "same-origin",
-        cache: "no-store",
-        headers: {
-          accept: "application/json",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify(body),
-      });
-      if (!response.ok) {
-        let reason = "mail_unavailable";
-        try {
-          const responseBody: unknown = await response.json();
-          const value = responseBody && typeof responseBody === "object" && "error" in responseBody
-            ? (responseBody as { error?: unknown }).error
-            : null;
-          if (typeof value === "string") reason = value;
-        } catch {
-          // Keep the generic failure for non-JSON responses.
-        }
-        throw new Error(reason);
-      }
+      await requestMailAction(action, target, destinationMailboxId, listing?.selectedMailboxId);
       if (action === "mark_unread" && "emailId" in target && target.emailId === openEmailId) {
         closeMessage();
       }
@@ -1383,6 +1434,30 @@ export function InboxClient() {
       setRefreshVersion((value) => value + 1);
       if (openThreadId) setThreadRefreshVersion((value) => value + 1);
     } finally {
+      setActionPending(false);
+    }
+  }
+
+  async function performSelectedMailAction(action: MailAction, destinationMailboxId?: string) {
+    const targets = listing?.messages.filter((message) =>
+      !message.isDraft && selectedThreadIds.has(message.threadId)) ?? [];
+    if (actionPending || targets.length === 0) return;
+    setActionPending(true);
+    setActionError(null);
+    const completed = new Set<string>();
+    try {
+      for (const message of targets) {
+        await requestMailAction(action, { threadId: message.threadId }, destinationMailboxId, listing?.selectedMailboxId);
+        completed.add(message.threadId);
+      }
+    } catch (error) {
+      const reason = mailActionErrorMessage(error instanceof Error ? error.message : "mail_unavailable");
+      setActionError(completed.size > 0
+        ? `${completed.size} conversations were updated before the action stopped. ${reason}`
+        : reason);
+    } finally {
+      setSelectedThreadIds((current) => new Set([...current].filter((id) => !completed.has(id))));
+      setRefreshVersion((value) => value + 1);
       setActionPending(false);
     }
   }
@@ -1622,156 +1697,157 @@ export function InboxClient() {
     setRefreshVersion((value) => value + 1);
   }
 
+  const selectableMessages = listing?.messages.filter((message) => !message.isDraft) ?? [];
+  const selectedCount = selectableMessages.filter((message) => selectedThreadIds.has(message.threadId)).length;
+  const allPageSelected = selectableMessages.length > 0 && selectedCount === selectableMessages.length;
+  const displayAccount = accountName?.trim() || accountEmail?.trim() || "rekad account";
+  const accountInitial = Array.from(displayAccount)[0]?.toLocaleUpperCase() || "r";
+  const archiveAvailable = Boolean(listing?.mailboxes.some((mailbox) => mailbox.role === "archive"));
+  const trashAvailable = Boolean(listing?.mailboxes.some((mailbox) => mailbox.role === "trash"));
+
+  function renderMailbox(mailbox: Mailbox) {
+    const isSelected = mailbox.id === listing?.selectedMailboxId;
+    return (
+      <button aria-pressed={isSelected} className={`mailbox-link${isSelected ? " is-selected" : ""}`}
+        key={mailbox.id} onClick={() => selectMailbox(mailbox.id)} type="button" title={mailbox.name}>
+        <MailIcon name={mailboxIcon(mailbox.role)} />
+        <span className="mailbox-name">{mailbox.name}</span>
+        {mailbox.unreadEmails > 0 ? <span className="mailbox-unread"><span className="visually-hidden">unread: </span>{mailbox.unreadEmails.toLocaleString()}</span> : null}
+      </button>
+    );
+  }
+
   return (
-    <main className="mail-shell">
+    <main className={`mail-shell${sidebarCollapsed ? " is-sidebar-collapsed" : ""}`}>
       <aside className="mail-sidebar" aria-label="Mail navigation">
-        <a className="mail-brand" href="/" aria-label="rekad Mail home">
-          <span className="brand-mark" aria-hidden="true">
-            r
-          </span>
-          <span>rekad Mail</span>
-        </a>
+        <div className="sidebar-brand-row">
+          <a className="mail-brand" href="/" aria-label="rekad Mail home">
+            <span className="brand-mark"><MailIcon name="mail" size={24} /></span>
+            <span className="brand-name">rekad Mail</span>
+          </a>
+          <button className="icon-button sidebar-collapse" type="button"
+            aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
+            aria-expanded={!sidebarCollapsed} onClick={() => setSidebarCollapsed((value) => !value)}>
+            <MailIcon name="sidebar" size={19} />
+          </button>
+        </div>
+
+        <div className="sidebar-search">
+          <div className="sidebar-search-input">
+            <label className="visually-hidden" htmlFor="mail-search">Search mail</label>
+            <MailIcon name="search" size={17} />
+            <input autoComplete="off" id="mail-search" ref={searchInputRef}
+              onChange={(event) => setSearchInput(event.target.value)} placeholder="Search..."
+              type="search" value={searchInput} aria-keyshortcuts="Control+k Meta+k" />
+            <kbd aria-hidden="true">⌘ K</kbd>
+          </div>
+          <label className="search-scope-label" htmlFor="mail-search-scope">Search in
+            <select id="mail-search-scope" onChange={(event) => {
+              setSearchScope(event.target.value as "all" | "mailbox");
+              setPosition(0); setListing(null);
+            }} value={searchScope}>
+              <option value="all">All mail</option><option value="mailbox">Current mailbox</option>
+            </select>
+          </label>
+        </div>
 
         <nav className="mailbox-nav" aria-label="Mailboxes">
-          {listing?.mailboxes.map((mailbox) => {
-            const isSelected = mailbox.id === listing.selectedMailboxId;
-            return (
-              <button
-                aria-pressed={isSelected}
-                className={`mailbox-link${isSelected ? " is-selected" : ""}`}
-                key={mailbox.id}
-                onClick={() => selectMailbox(mailbox.id)}
-                type="button"
-              >
-                <span className="mailbox-name">{mailbox.name}</span>
-                {mailbox.unreadEmails > 0 ? (
-                  <span className="mailbox-unread">
-                    <span className="visually-hidden">unread: </span>
-                    {mailbox.unreadEmails.toLocaleString()}
-                  </span>
-                ) : null}
-              </button>
-            );
-          })}
-          {!listing && isLoading ? (
-            <p className="sidebar-note">Loading mailboxes…</p>
+          {listing?.mailboxes.filter((mailbox) => mailbox.role !== null).map(renderMailbox)}
+          {!listing && isLoading ? <p className="sidebar-note">Loading mailboxes…</p> : null}
+          {listing?.mailboxes.some((mailbox) => mailbox.role === null) ? (
+            <><p className="sidebar-section-label">Folders</p>{listing.mailboxes.filter((mailbox) => mailbox.role === null).map(renderMailbox)}</>
           ) : null}
         </nav>
 
-        <div className="offline-nav">
-          <a href="/offline.html">Offline copies <span>{offlineCount}</span></a>
+        <div className="sidebar-tools">
+          <a className="sidebar-tool-link" href="/offline.html" title="Offline copies">
+            <MailIcon name="offline" /><span>Offline copies</span><span className="tool-count">{offlineCount}</span>
+          </a>
           <p className="offline-copy-status" role="status">{offlineStatus}</p>
           {notificationsSupported ? (
-            <button
-              aria-pressed={notificationsEnabled}
-              className="notification-toggle"
-              disabled={!notificationsReady}
-              onClick={() => void toggleNewMailNotifications()}
-              type="button"
-            >
-              {!notificationsReady
-                ? "Preparing alerts…"
-                : notificationsEnabled
-                  ? "Turn off new mail alerts"
-                  : "Enable new mail alerts"}
+            <button aria-pressed={notificationsEnabled} className="sidebar-tool-link notification-toggle"
+              disabled={!notificationsReady} onClick={() => void toggleNewMailNotifications()} type="button"
+              title={notificationsEnabled ? "Turn off new mail alerts" : "Enable new mail alerts"}>
+              <MailIcon name="bell" /><span>{!notificationsReady ? "Preparing alerts…" : notificationsEnabled ? "Mail alerts on" : "Enable mail alerts"}</span>
             </button>
-          ) : (
-            <p className="notification-status">Browser notifications are not available.</p>
-          )}
+          ) : <p className="notification-status">Browser notifications are not available.</p>}
           {notificationStatus ? <p className="notification-status" role="status">{notificationStatus}</p> : null}
         </div>
-
         <div className="sidebar-footer">
-          <SignOutButton />
+          <span className="account-avatar" aria-hidden="true">{accountInitial}</span>
+          <span className="sidebar-account-copy"><strong>{displayAccount}</strong><span>{accountEmail || "Signed in to rekad Mail"}</span></span>
         </div>
       </aside>
 
       <section className="mail-content" aria-labelledby="mail-title">
         <header className="mail-header">
-          <div>
-            <p className="eyebrow">Your mailbox</p>
-            <h1 id="mail-title" ref={mailTitleRef} tabIndex={-1}>
-              {openEmailId ? "Reading message" : openThreadId ? "Conversation" : selectedMailbox?.name ?? "Inbox"}
-            </h1>
+          <div className="mail-header-navigation">
+            <nav className="pagination" aria-label="Message pages">
+              <button aria-label={openEmailId ? "Back to conversation" : openThreadId ? "Back to messages" : "Previous page"}
+                className="page-button" disabled={(!openEmailId && !openThreadId && position === 0) || isLoading || actionPending}
+                onClick={() => openEmailId ? closeMessage() : openThreadId ? closeThread() : changePage(Math.max(0, position - PAGE_SIZE))} type="button"><MailIcon name="chevron-left" size={17} /></button>
+              <button aria-label="Next page" className="page-button"
+                disabled={Boolean(openEmailId || openThreadId || !listing?.hasMore || isLoading || actionPending)}
+                onClick={() => changePage(position + PAGE_SIZE)} type="button"><MailIcon name="chevron-right" size={17} /></button>
+            </nav>
+            <div className="mail-breadcrumb"><span>rekad Mail</span><MailIcon name="chevron-right" size={14} />
+              <h1 id="mail-title" ref={mailTitleRef} tabIndex={-1}>{openEmailId ? "Reading message" : openThreadId ? "Conversation" : searchText ? "Search results" : selectedMailbox?.name ?? "Inbox"}</h1>
+            </div>
           </div>
-          <button
-            className="refresh-button"
-            disabled={openEmailId ? detailLoading : openThreadId ? threadLoading : isLoading}
-            onClick={refresh}
-            type="button"
-            aria-label={openEmailId ? "Refresh message" : openThreadId ? "Refresh conversation" : "Refresh messages"}
-          >
-            <span className="refresh-icon" aria-hidden="true">
-              ↻
-            </span>
-            {(openEmailId ? detailLoading : openThreadId ? threadLoading : isLoading) && listing
-              ? "Refreshing…"
-              : "Refresh"}
-          </button>
+          <div className="mail-header-account">
+            <button className="icon-button refresh-button" disabled={openEmailId ? detailLoading : openThreadId ? threadLoading : isLoading}
+              onClick={refresh} type="button" aria-label={openEmailId ? "Refresh message" : openThreadId ? "Refresh conversation" : "Refresh messages"}
+              title="Refresh"><MailIcon name="refresh" size={18} /></button>
+            <button className="icon-button header-notification" disabled={!notificationsSupported || !notificationsReady}
+              aria-label={notificationsEnabled ? "Turn off new mail alerts" : "Enable new mail alerts"}
+              aria-pressed={notificationsEnabled} onClick={() => void toggleNewMailNotifications()} type="button"
+              title={!notificationsSupported ? "Browser notifications are unavailable" : notificationsEnabled ? "New mail alerts are enabled" : "Enable new mail alerts"}>
+              <MailIcon name="bell" size={18} />
+            </button>
+            <span className="header-divider" />
+            <details className="account-menu">
+              <summary className="account-trigger"><span>{displayAccount}</span><MailIcon name="chevron-down" size={14} /></summary>
+              <div className="account-menu-popover"><p>{accountEmail || "Signed in to rekad Mail"}</p><SignOutButton /></div>
+            </details>
+          </div>
         </header>
 
         {!openEmailId && !openThreadId ? (
           <div className="message-toolbar" aria-label="Message list controls">
-            <div className="mail-search-controls">
-              <label htmlFor="mail-search">Search mail</label>
-              <input
-                autoComplete="off"
-                id="mail-search"
-                onChange={(event) => setSearchInput(event.target.value)}
-                placeholder="Search all mail"
-                type="search"
-                value={searchInput}
-              />
-              <label className="visually-hidden" htmlFor="mail-search-scope">Search scope</label>
-              <select
-                id="mail-search-scope"
-                onChange={(event) => {
-                  setSearchScope(event.target.value as "all" | "mailbox");
-                  setPosition(0);
-                  setListing(null);
-                }}
-                value={searchScope}
-              >
-                <option value="all">All mail</option>
-                <option value="mailbox">Current mailbox</option>
-              </select>
+            <div className="bulk-toolbar">
+              <label className="page-select" title="Select conversations on this page">
+                <input aria-label="Select all conversations on this page" checked={allPageSelected}
+                  disabled={isLoading || actionPending || selectableMessages.length === 0} ref={pageSelectionRef} type="checkbox"
+                  onChange={(event) => setSelectedThreadIds(event.target.checked ? new Set(selectableMessages.map((message) => message.threadId)) : new Set())} />
+                <span className="visually-hidden">{selectedCount} selected</span>
+              </label>
+              <div className="bulk-action-group" role="group" aria-label="Selected conversation actions">
+                <button className="toolbar-action" disabled={selectedCount === 0 || actionPending || !archiveAvailable}
+                  onClick={() => void performSelectedMailAction("archive")} title={archiveAvailable ? "Archive selected conversations" : "This account has no Archive mailbox"} type="button"><MailIcon name="archive" size={19} /><span>Archive</span></button>
+                <label className={`toolbar-action toolbar-folder${selectedCount === 0 || actionPending ? " is-disabled" : ""}`}>
+                  <MailIcon name="folder" size={19} /><span>Folder</span>
+                  <select aria-label="Move selected conversations to mailbox" value="" disabled={selectedCount === 0 || actionPending}
+                    onChange={(event) => { if (event.target.value) void performSelectedMailAction("move", event.target.value); }}>
+                    <option value="">Move to folder</option>{listing?.mailboxes.map((mailbox) => <option key={mailbox.id} value={mailbox.id}>{mailbox.name}</option>)}
+                  </select>
+                </label>
+                <button className="toolbar-action" disabled={selectedCount === 0 || actionPending || !trashAvailable}
+                  onClick={() => void performSelectedMailAction("trash")} title="Move selected conversations to Trash" type="button"><MailIcon name="trash" size={19} /><span>Delete</span></button>
+                <details className="selection-menu">
+                  <summary className="icon-button" aria-label="More selected conversation actions"><MailIcon name="more" size={19} /></summary>
+                  <div className="selection-menu-popover">
+                    {([['mark_read', 'Mark read'], ['mark_unread', 'Mark unread'], ['star', 'Star'], ['unstar', 'Unstar']] as const).map(([action, label]) => (
+                      <button key={action} disabled={selectedCount === 0 || actionPending} onClick={() => void performSelectedMailAction(action)} type="button">{label}</button>
+                    ))}
+                  </div>
+                </details>
+              </div>
             </div>
-            <p className="result-count" aria-live="polite">
-              {listing ? resultRange : isLoading ? "Loading conversations…" : ""}
-            </p>
             <div className="message-toolbar-actions">
-              <button
-                className="compose-launch-button"
-                disabled={!listing || isLoading}
-                onClick={(event) => openCompose("new", undefined, undefined, event.currentTarget)}
-                ref={composeButtonRef}
-                type="button"
-              >
-                <span aria-hidden="true">＋</span>
-                Compose
-              </button>
-              {listing ? (
-                <nav className="pagination" aria-label="Message pages">
-                  <button
-                    aria-label="Previous page"
-                    className="page-button"
-                    disabled={position === 0 || isLoading}
-                    onClick={() => changePage(Math.max(0, position - PAGE_SIZE))}
-                    type="button"
-                  >
-                    <span aria-hidden="true">←</span>
-                  </button>
-                  <button
-                    aria-label="Next page"
-                    className="page-button"
-                    disabled={!listing.hasMore || isLoading}
-                    onClick={() => changePage(position + PAGE_SIZE)}
-                    type="button"
-                  >
-                    <span aria-hidden="true">→</span>
-                  </button>
-                </nav>
-              ) : null}
+              <p className="result-count" aria-live="polite">{selectedCount > 0 ? `${selectedCount} selected` : listing ? resultRange : isLoading ? "Loading conversations…" : ""}</p>
+              <button className="compose-launch-button" disabled={!listing || isLoading}
+                onClick={(event) => openCompose("new", undefined, undefined, event.currentTarget)} ref={composeButtonRef}
+                type="button" aria-label="Compose new message"><MailIcon name="plus" size={20} />Write Message</button>
             </div>
           </div>
         ) : null}
@@ -1824,54 +1900,42 @@ export function InboxClient() {
         {!openEmailId && !openThreadId && listing && listing.messages.length > 0 ? (
           <ol className={`message-list${isLoading ? " is-loading" : ""}`} aria-label="Conversations">
             {listing.messages.map((message) => (
-              <li className="conversation-list-item" key={message.threadId}>
-                <button
-                  type="button"
-                  className={`message-row${message.isUnread ? " is-unread" : ""}`}
-                  data-email-id={message.id}
-                  data-thread-id={message.threadId}
+              <li className={`conversation-list-item${selectedThreadIds.has(message.threadId) ? " is-selected" : ""}`} key={message.threadId}>
+                <label className="conversation-select">
+                  <input aria-label={`Select conversation from ${senderLabel(message)}: ${message.subject?.trim() || "(no subject)"}`}
+                    checked={selectedThreadIds.has(message.threadId)} disabled={message.isDraft || actionPending || isLoading}
+                    title={message.isDraft ? "Open this draft to edit it" : undefined} type="checkbox"
+                    onChange={(event) => setSelectedThreadIds((current) => {
+                      const next = new Set(current);
+                      if (event.target.checked) next.add(message.threadId); else next.delete(message.threadId);
+                      return next;
+                    })} />
+                </label>
+                <button type="button" className={`message-row${message.isUnread ? " is-unread" : ""}`} disabled={actionPending}
+                  data-email-id={message.id} data-thread-id={message.threadId}
                   aria-label={`${message.isDraft ? "Edit saved draft" : `Open ${message.isUnread ? "unread" : "read"} conversation`}${message.isStarred ? ", starred" : ""} from ${senderLabel(message)}: ${message.subject?.trim() || "(no subject)"}`}
-                  onClick={(event) => message.isDraft
-                    ? openSavedDraft(message.id, event.currentTarget)
-                    : openThread(message.threadId)}
-                >
-                  <span className="message-state-dot" aria-hidden="true" />
-                  <span className="message-copy">
-                    <span className="message-sender">{senderLabel(message)}{message.isStarred ? <span className="conversation-star" aria-hidden="true"> ★</span> : null}</span>
-                    <span className="message-subject">
-                      {message.isDraft ? "Draft: " : ""}{message.subject?.trim() || "(no subject)"}
-                    </span>
-                    <span className="message-preview">{message.preview}</span>
-                  </span>
-                  <time
-                    className="message-date"
-                    dateTime={message.receivedAt ?? undefined}
-                  >
-                    {formatDate(message.receivedAt)}
-                  </time>
+                  onClick={(event) => message.isDraft ? openSavedDraft(message.id, event.currentTarget) : openThread(message.threadId)}>
+                  <span className={`message-avatar avatar-tone-${avatarTone(message)}`} aria-hidden="true">{senderInitials(message)}</span>
+                  <span className="message-sender">{senderLabel(message)}{message.isStarred ? <span className="conversation-star" aria-hidden="true"> ★</span> : null}</span>
+                  <span className="message-copy"><span className="message-subject">{message.isDraft ? <em>Draft: </em> : null}{message.subject?.trim() || "(no subject)"}</span><span className="message-preview"> — {message.preview}</span></span>
+                  <time className="message-date" dateTime={message.receivedAt ?? undefined}>{formatDate(message.receivedAt)}</time>
                 </button>
                 {!message.isDraft ? (
-                  <div className="conversation-row-actions" role="group" aria-label="Conversation actions">
-                    <label>
-                      <span className="visually-hidden">Move conversation to mailbox</span>
-                      <select
-                        aria-label="Move conversation to mailbox"
-                        defaultValue=""
-                        disabled={actionPending}
-                        onChange={(event) => {
-                          const destinationId = event.target.value;
-                          if (destinationId) void performMailAction("move", { threadId: message.threadId }, destinationId);
-                          event.target.value = "";
-                        }}
-                      >
-                        <option value="">Move to…</option>
-                        {listing.mailboxes.map((mailbox) => <option key={mailbox.id} value={mailbox.id}>{mailbox.name}</option>)}
-                      </select>
-                    </label>
-                    <button disabled={actionPending} onClick={() => void performMailAction("archive", { threadId: message.threadId })} type="button">Archive</button>
-                    <button disabled={actionPending} onClick={() => void performMailAction("trash", { threadId: message.threadId })} type="button">Trash</button>
-                  </div>
-                ) : null}
+                  <details className="conversation-row-menu">
+                    <summary className="icon-button" aria-label={`Actions for conversation from ${senderLabel(message)}`}><MailIcon name="more" size={18} /></summary>
+                    <div className="conversation-row-actions" role="group" aria-label="Conversation actions">
+                      <button disabled={actionPending} onClick={() => void performMailAction(message.isUnread ? "mark_read" : "mark_unread", { threadId: message.threadId })} type="button">{message.isUnread ? "Mark read" : "Mark unread"}</button>
+                      <button disabled={actionPending} onClick={() => void performMailAction(message.isStarred ? "unstar" : "star", { threadId: message.threadId })} type="button">{message.isStarred ? "Unstar" : "Star"}</button>
+                      <select aria-label="Move conversation to mailbox" defaultValue="" disabled={actionPending} onChange={(event) => {
+                        const destinationId = event.target.value;
+                        if (destinationId) void performMailAction("move", { threadId: message.threadId }, destinationId);
+                        event.target.value = "";
+                      }}><option value="">Move to…</option>{listing.mailboxes.map((mailbox) => <option key={mailbox.id} value={mailbox.id}>{mailbox.name}</option>)}</select>
+                      <button disabled={actionPending || !archiveAvailable} onClick={() => void performMailAction("archive", { threadId: message.threadId })} type="button">Archive</button>
+                      <button disabled={actionPending || !trashAvailable} onClick={() => void performMailAction("trash", { threadId: message.threadId })} type="button">Move to Trash</button>
+                    </div>
+                  </details>
+                ) : <span />}
               </li>
             ))}
           </ol>

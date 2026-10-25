@@ -1,5 +1,4 @@
 import { getAuthSession, signIn } from "@/auth";
-import { SignOutButton } from "./sign-out-button";
 import { InboxClient } from "./inbox-client";
 
 export default async function HomePage() {
@@ -14,7 +13,7 @@ export default async function HomePage() {
 
   return (
     isSignedIn ? (
-      <InboxClient />
+      <InboxClient accountName={session?.user?.name} accountEmail={session?.user?.email} />
     ) : (
       <main className="sign-in-shell">
         <section className="status-card" aria-labelledby="page-title">

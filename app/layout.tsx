@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./reference-ui.css";
 
 export const metadata: Metadata = {
   title: "rekad Mail",
