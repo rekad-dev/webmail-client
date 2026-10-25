@@ -1,6 +1,28 @@
 # Progress
 
-## Current milestone: Phase 4 compose and send complete
+## Current status — Phases 5–8 in progress
+
+- The reference UI is deployed to production at
+  [webmail.rekad.id](https://webmail.rekad.id). Vercel deployment
+  `dpl_6tcSUUPDK5stvVwAUeZ5xBDroZZT` is `READY` and aliased to the production
+  domain. The production build passed. The anonymous home page returns the
+  sign-in screen; sign in to see the mailbox UI. `reference.png` remains local
+  and is excluded from deployment.
+- The UI commits are `ceb7367`, `f5ffd31`, `6c7e166`, `05be54c`, `2b3da1c`,
+  `2f5bc16`, and `4de2c25`. Independent review found no actionable findings.
+  Local verification passes: 185 tests, `pnpm typecheck`, `pnpm build`, and
+  `git diff --check`.
+- The prompt's phases 0–4 are complete. Phases 5–8 remain in progress; not all
+  prompt requests are complete. Phase 5 still has an unresolved intermediate
+  Trash-membership observation, and this test account has no Archive-role
+  mailbox. Phase 6 authenticated browser and live attachment checks remain
+  pending. Phase 7 offline reconnect, account-isolation, and logout checks
+  remain pending. Phase 8 live notification behavior remains unverified.
+  EventSource and Web Push were not implemented because they are optional.
+- The latest UI deployment does not change Stalwart settings and does not use
+  the admin API key.
+
+## Phase 4 compose and send complete
 
 - The Phase 4 plan is recorded in the Traycer artifact
   `phase-4-compose-send-plan`. Local implementation adds read-only identity
@@ -18,8 +40,8 @@
   and the recipient's signed-in Gmail Inbox showed that same unread message.
   No other recipient was used.
 - No global Stalwart OAuth or registration setting changed; the admin API key
-  was not used. Phase 4 is complete. Stop before Phase 5 pending the user's
-  direction.
+  was not used. At this checkpoint, Phase 4 was complete before Phase 5 was
+  authorized.
 
 ## Completed milestone: Phase 3 safe email reading
 

@@ -1,7 +1,8 @@
 # Roadmap
 
 The work follows the product phases in `PROMPT.md`. Phases 0 through 4 are
-complete. Later phases remain sequential.
+complete. Phases 5 through 8 are implemented in part and remain in progress
+while the recorded verification gaps are resolved.
 
 | Phase | Scope | Priority | Status |
 | --- | --- | --- | --- |
@@ -10,10 +11,10 @@ complete. Later phases remain sequential.
 | 2 | Real inbox and mailbox listing | P0 | Complete: deployed and checked with a signed-in test account |
 | 3 | Safe email reading and HTML isolation | P0 | Complete: deployed and verified on a dedicated test message |
 | 4 | Compose and send through JMAP | P0 | Complete: JMAP submission, Sent copy, and approved recipient Inbox verified |
-| 5 | Essential mailbox actions, search, threads, and drafts | P1 | In progress: plan recorded; implementation underway |
-| 6 | Attachments, responsive UX, and accessibility refinement | P1 | Pending |
-| 7 | Limited offline storage and synchronization | P2, optional | Pending |
-| 8 | Polling, JMAP events, and optional notifications | P2, optional | Pending |
+| 5 | Essential mailbox actions, search, threads, and drafts | P1 | In progress: implementation and most checks are complete; Trash-membership observation remains unresolved and Archive is unavailable on the test account |
+| 6 | Attachments, responsive UX, and accessibility refinement | P1 | In progress: implemented and deployed; authenticated browser and live attachment checks remain pending |
+| 7 | Limited offline storage and synchronization | P2, optional | In progress: bounded cache and JMAP sync implemented; offline reconnect, account-isolation, and logout checks remain pending |
+| 8 | Polling, JMAP events, and optional notifications | P2, optional | In progress: polling and opt-in browser alerts implemented; live notification behavior remains unverified; EventSource and Web Push remain deferred |
 
 Phase 4 is the first usable MVP boundary. Phase 1 reused the existing `webmail`
 client and exact callback
@@ -31,8 +32,14 @@ Phase 4 is complete. The user directed Phase 5 to start. Its plan is recorded
 in the Traycer artifact `phase-5-mailbox-actions-search-threads-drafts-plan`.
 No Stalwart client or server-wide setting changed.
 
-The missing
-`stalwart-webui` registration remains a future hardening prerequisite, not an
-MVP blocker. Optional
-`requireClientRegistration` hardening remains separate and requires the user's
-explicit approval after a current settings/client review.
+The latest reference UI is deployed as `dpl_6tcSUUPDK5stvVwAUeZ5xBDroZZT`
+and aliased to `https://webmail.rekad.id`. The anonymous home page shows the
+sign-in screen; a signed-in user sees the mailbox UI. Local verification passes
+with 185 tests, typecheck, and production build. The independent UI review
+found no remaining actionable findings. `reference.png` remains local and is
+excluded from deployment.
+
+The missing `stalwart-webui` registration remains a future hardening
+prerequisite, not an MVP blocker. Optional `requireClientRegistration`
+hardening remains separate and requires the user's explicit approval after a
+current settings/client review.
