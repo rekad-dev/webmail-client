@@ -1,4 +1,5 @@
 import { getAuthSession, signIn } from "@/auth";
+import Image from "next/image";
 import { InboxClient } from "./inbox-client";
 
 export default async function HomePage() {
@@ -17,7 +18,10 @@ export default async function HomePage() {
     ) : (
       <main className="sign-in-shell">
         <section className="status-card" aria-labelledby="page-title">
-          <p className="eyebrow">rekad Mail</p>
+          <div className="sign-in-brand-row">
+            <Image alt="" height={836} priority src="/logo.png" width={824} />
+            <p className="sign-in-brand">rekad</p>
+          </div>
           <h1 id="page-title">Sign in to rekad Mail</h1>
           <p>Use your rekad email account to continue.</p>
           <form action={signInWithStalwart}>

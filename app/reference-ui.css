@@ -56,8 +56,13 @@ summary::-webkit-details-marker { display: none; }
   scrollbar-width: thin;
 }
 .sidebar-brand-row { display: flex; height: 48px; flex: none; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 24px; }
-.mail-brand { gap: 10px; margin: 0; color: var(--ink); font-size: 21px; font-weight: 800; letter-spacing: -.3px; }
-.brand-mark { width: 37px; height: 37px; border-radius: var(--radius-md); background: var(--lemon); box-shadow: var(--shadow-button); }
+.mail-brand { gap: 8px; margin: 0; color: var(--ink); font-size: 18px; font-weight: 700; letter-spacing: -.02em; }
+.brand-image { width: 38px; height: 39px; flex: none; object-fit: contain; }
+.brand-wordmark { color: var(--violet-dark); font-size: 23px; font-weight: 800; letter-spacing: -.03em; line-height: 1; }
+.brand-name { color: var(--ink); font-size: 16px; font-weight: 700; letter-spacing: -.01em; }
+.sign-in-brand-row { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+.sign-in-brand-row img { width: 64px; height: 65px; flex: none; object-fit: contain; }
+.sign-in-brand { margin: 0; color: var(--violet-dark); font-size: 32px; font-weight: 800; letter-spacing: -.03em; line-height: 1; }
 .sidebar-collapse { width: 29px; }
 .sidebar-search { margin: 0 0 24px; }
 .sidebar-search-input { display: flex; height: 44px; align-items: center; gap: 8px; border: 1px solid var(--input); border-radius: var(--radius-md); background: var(--surface); padding: 0 9px 0 12px; box-shadow: var(--shadow-button); color: var(--muted); }
@@ -278,6 +283,7 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
   .is-sidebar-collapsed .sidebar-tool-link > span, .is-sidebar-collapsed .sidebar-tools > p { display: none; }
   .is-sidebar-collapsed .mailbox-link, .is-sidebar-collapsed .sidebar-tool-link { justify-content: center; padding-right: 0; padding-left: 0; }
   .is-sidebar-collapsed .sidebar-footer { justify-content: center; }
+  .is-sidebar-collapsed .brand-wordmark { display: none; }
 }
 @media (min-width: 761px) and (max-width: 1150px) {
   .mail-shell { grid-template-columns: 225px minmax(0, 1fr); padding-right: 12px; padding-top: 12px; padding-bottom: 12px; }
@@ -299,7 +305,9 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
   .sidebar-brand-row { height: 40px; margin-bottom: 14px; }
   .sidebar-collapse { display: none; }
   .mail-brand { margin: 0; font-size: 20px; }
-  .brand-mark { width: 33px; height: 33px; }
+  .brand-image { width: 32px; height: 33px; }
+  .brand-wordmark { font-size: 20px; }
+  .brand-name { font-size: 16px; }
   .sidebar-search { margin-bottom: 10px; }
   .sidebar-search-input { height: 40px; }
   .sidebar-search-input > svg { display: block; }

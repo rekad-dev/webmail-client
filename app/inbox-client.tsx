@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type RefObject } from "react";
+import Image from "next/image";
 import { ComposeDialog } from "./compose-dialog";
 import type { ComposeFields } from "./compose-dialog";
 import { SignOutButton } from "./sign-out-button";
@@ -1796,8 +1797,16 @@ export function InboxClient({ accountName, accountEmail }: {
       <aside className="mail-sidebar" aria-label="Mail navigation">
         <div className="sidebar-brand-row">
           <a className="mail-brand" href="/" aria-label="rekad Mail home">
-            <span className="brand-mark"><MailIcon name="mail" size={24} /></span>
-            <span className="brand-name">rekad Mail</span>
+            <Image
+              alt=""
+              className="brand-image"
+              height={836}
+              priority
+              src="/logo.png"
+              width={824}
+            />
+            <span className="brand-wordmark">rekad</span>
+            <span className="brand-name">Mail</span>
           </a>
           <button className="icon-button sidebar-collapse" type="button"
             aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}

@@ -130,7 +130,7 @@ h1 {
   line-height: 1.15;
 }
 
-.status-card > p:not(.eyebrow) {
+.status-card > p:not(.eyebrow):not(.sign-in-brand) {
   color: var(--muted);
   line-height: 1.6;
 }
@@ -208,18 +208,6 @@ h1 {
   font-size: 1.05rem;
   font-weight: 700;
   text-decoration: none;
-}
-
-.brand-mark {
-  display: grid;
-  width: 30px;
-  height: 30px;
-  place-items: center;
-  border-radius: 9px 9px 9px 3px;
-  background: var(--accent);
-  color: white;
-  font-size: 1.2rem;
-  line-height: 1;
 }
 
 .mailbox-nav {
