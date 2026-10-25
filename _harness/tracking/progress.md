@@ -5,7 +5,7 @@ scope: progress
 
 # Progress
 
-## Current work: Phases 6–8 implementation in progress
+## Current work: Phase 6 complete; Phases 5, 7, and 8 in progress
 
 - The user explicitly directed continuing through Phases 6, 7, and 8. The
   implementation is present in commits `8969c27`, `ea5f6ef`, and `c6264b7`.
@@ -25,16 +25,29 @@ scope: progress
   `pnpm build`, production build, `node --check public/offline.js`,
   `node --check public/sw.js`, and `git diff --check`. Next.js's generated
   `next-env.d.ts` change was restored.
-- The user approved production deployment and the named first-account browser
-  checklist. Deployment `dpl_6nYhAKughLqXt1FRS71mUSS5jykx` is READY and aliased
-  to `https://webmail.rekad.id`. The Vercel dry run confirmed that the local
-  `reference.png` test attachment was excluded from deployment and `.vercelignore`
-  now keeps it excluded from future deployments.
-- The approved Ego TaskSpace is open at the sign-in page because it has no
-  authenticated session. No authenticated browser review or Stalwart attachment
-  upload/download has run yet. The user separately authorized `reference.png`
-  on the first dedicated test account, including cleanup of the temporary
-  draft; no email send is authorized. Resume after the user signs in.
+- The current deployment `dpl_6tcSUUPDK5stvVwAUeZ5xBDroZZT` is READY and
+  aliased to `https://webmail.rekad.id`. The Vercel dry run confirmed that
+  `reference.png` is excluded from deployment.
+- In approved Ego TaskSpace 16, the first dedicated account
+  (`mail-client@rekad.id`) loaded the Inbox. Desktop review at 1500×859 and
+  phone review at 390×844 showed no document-level horizontal overflow. The
+  search shortcut focused Search; keyboard focus entered the compose recipient
+  field and advanced to Subject.
+- The separately approved `reference.png` attachment test passed. The 833,284
+  byte image uploaded to an empty-recipient, empty-body temporary draft. The
+  authenticated download returned 200 with `no-store` and `nosniff`; the
+  downloaded SHA-256 matched the local file. The exact temporary draft was
+  moved from Drafts to Trash and verified there. No email was sent or
+  permanently deleted.
+- The offline scope route returned 200 and a valid account scope. The offline
+  page showed no saved copies. No message was opened or cached, so offline
+  `Email/changes` sync, reconnect behavior, cross-account cache isolation, and
+  sign-out cache clearing remain unverified. Notification polling returned
+  200 with no inbox changes and zero new IDs; permission remains `default` and
+  alerts are off. No permission prompt was granted. Notification delivery
+  remains unverified.
+- Phase 6 is complete based on local tests, production attachment round-trip,
+  keyboard checks, responsive review, and the clean independent UI review.
 - Phase 5 remains marked `in_progress` because its final mailbox action checks
   retained an unresolved Trash-membership observation and the first test
   account has no Archive-role mailbox. The user authorized proceeding with

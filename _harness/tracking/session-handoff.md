@@ -23,19 +23,33 @@ generated `next-env.d.ts`; that build-only diff was restored. Fresh review
 findings about `hasMoreChanges` and bidi attachment names were fixed and
 confirmed; see `phase-6-8-review-2026-10-25`.
 
-The user approved production deployment and the named browser checklist.
-Deployment `dpl_6nYhAKughLqXt1FRS71mUSS5jykx` is READY and aliased to
-`https://webmail.rekad.id`. The Vercel dry run confirmed `reference.png` was
-excluded; `.vercelignore` keeps the local test image out of future deployments.
-The approved Ego TaskSpace 16 is at the sign-in page, so authenticated browser
-review and Stalwart attachment upload/download are still pending. The user
-separately authorized uploading/downloading `reference.png` in the first
-dedicated test account and cleaning up the temporary draft. No email send is
-authorized. Offline reconnect/account-isolation/logout, notification delivery,
-and desktop/mobile visual behavior remain unverified. Do not use the admin API
-key or change Stalwart settings. Phase 5 remains `in_progress` due the recorded
-Trash-membership observation and the first account's lack of an Archive-role
-mailbox; the user authorized proceeding through Phases 6–8 with this documented.
+The current production deployment is `dpl_6tcSUUPDK5stvVwAUeZ5xBDroZZT`,
+READY at `https://webmail.rekad.id`; `reference.png` is excluded from deploys.
+In the approved Ego TaskSpace 16, the first account loaded the Inbox. Desktop
+review at 1500×859 and phone review at 390×844 found no document-level
+horizontal overflow. The search shortcut focused Search; compose focus entered
+the recipient field and moved to Subject.
+
+The separately approved `reference.png` attachment test passed using an
+empty-recipient, empty-body temporary draft. Upload succeeded; the
+authenticated download route returned 200 with `no-store` and `nosniff`, and
+the downloaded file's SHA-256 matched the local image. The exact temporary
+draft was moved from Drafts to Trash and verified there. No email was sent or
+permanently deleted.
+
+The offline scope route returned 200 with a valid scope; `/offline.html`
+reported no saved copies. No message was opened or cached. The notification
+poll route returned 200 with no Inbox changes and zero new IDs. Browser
+notification permission remains `default`, and alerts remain off; no permission
+prompt was granted. The browser was returned to the signed-in Inbox.
+
+Phase 6 is complete. Phase 5 remains `in_progress` because the earlier
+intermediate Trash-membership observation is unresolved and this account has no
+Archive-role mailbox. Phase 7 offline sync/reconnect, account isolation, and
+sign-out cache clearing remain unverified because no message was saved locally.
+Phase 8 live notification delivery remains unverified. The approved checklist
+excluded opening messages and granting notification permission. Do not send
+email, change Stalwart settings, or use the admin API key.
 
 ## Phase 5 historical context
 
@@ -351,14 +365,11 @@ access. The provider-settings audit can remain deferred.
 
 ## Current safe step
 
-Resume Ego TaskSpace 16, `rekad phase 6-8 production verification 2026-10-25`,
-after the user signs in as the first dedicated test account. The approved
-read-only checklist is the Inbox and compose UI, offline-cache controls and
-scope/sync routes, plus notification controls and polling without granting
-notification permission or opening messages. Then perform the separately
-approved `reference.png` upload/download test, create and remove only its
-temporary draft, and send no email. Keep Stalwart settings and the admin API
-key out of scope.
+The approved TaskSpace 16 checklist is complete and remains at the signed-in
+Inbox. Ask the user to authorize opening and saving one exact test message
+offline before attempting Phase 7 sync/cache-clearing checks. Ask separately
+before granting notification permission or causing a test message to arrive.
+Do not repeat the Phase 5 Trash mutation without renewed approval.
 
 The new authenticated, body-free `/api/mail/location?emailId=...` endpoint was
 deployed to `https://webmail.rekad.id` as

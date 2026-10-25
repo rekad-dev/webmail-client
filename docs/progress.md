@@ -1,6 +1,6 @@
 # Progress
 
-## Current status — Phases 5–8 in progress
+## Current status — Phase 6 complete; Phases 5, 7, and 8 in progress
 
 - The reference UI is deployed to production at
   [webmail.rekad.id](https://webmail.rekad.id). Vercel deployment
@@ -12,13 +12,20 @@
   `2f5bc16`, and `4de2c25`. Independent review found no actionable findings.
   Local verification passes: 185 tests, `pnpm typecheck`, `pnpm build`, and
   `git diff --check`.
-- The prompt's phases 0–4 are complete. Phases 5–8 remain in progress; not all
-  prompt requests are complete. Phase 5 still has an unresolved intermediate
-  Trash-membership observation, and this test account has no Archive-role
-  mailbox. Phase 6 authenticated browser and live attachment checks remain
-  pending. Phase 7 offline reconnect, account-isolation, and logout checks
-  remain pending. Phase 8 live notification behavior remains unverified.
-  EventSource and Web Push were not implemented because they are optional.
+- The prompt's phases 0–4 and 6 are complete. Phases 5, 7, and 8 remain in
+  progress; not all prompt requests are complete. Phase 5 still has an
+  unresolved intermediate Trash-membership observation, and this test account
+  has no Archive-role mailbox. Phase 7 offline reconnect, account-isolation,
+  and logout cache-clearing checks remain pending because no message was saved
+  offline. Phase 8 live notification delivery remains unverified; permission
+  was not granted. EventSource and Web Push are optional and deferred.
+- Production verification on the first dedicated account confirmed desktop
+  and phone layouts without document-level horizontal overflow, keyboard
+  search/compose focus, and `reference.png` upload/download. The exact file
+  downloaded with HTTP 200 and matching SHA-256; its empty-recipient temporary
+  draft was moved from Drafts to Trash. Offline scope and notification polling
+  returned HTTP 200; there were no saved offline copies or new Inbox IDs. No
+  message was opened or sent.
 - The latest UI deployment does not change Stalwart settings and does not use
   the admin API key.
 

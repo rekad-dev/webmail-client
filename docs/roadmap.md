@@ -1,7 +1,7 @@
 # Roadmap
 
-The work follows the product phases in `PROMPT.md`. Phases 0 through 4 are
-complete. Phases 5 through 8 are implemented in part and remain in progress
+The work follows the product phases in `PROMPT.md`. Phases 0 through 4 and 6
+are complete. Phases 5, 7, and 8 are implemented in part and remain in progress
 while the recorded verification gaps are resolved.
 
 | Phase | Scope | Priority | Status |
@@ -12,7 +12,7 @@ while the recorded verification gaps are resolved.
 | 3 | Safe email reading and HTML isolation | P0 | Complete: deployed and verified on a dedicated test message |
 | 4 | Compose and send through JMAP | P0 | Complete: JMAP submission, Sent copy, and approved recipient Inbox verified |
 | 5 | Essential mailbox actions, search, threads, and drafts | P1 | In progress: implementation and most checks are complete; Trash-membership observation remains unresolved and Archive is unavailable on the test account |
-| 6 | Attachments, responsive UX, and accessibility refinement | P1 | In progress: implemented and deployed; authenticated browser and live attachment checks remain pending |
+| 6 | Attachments, responsive UX, and accessibility refinement | P1 | Complete: production attachment upload/download, desktop/phone rendering, keyboard focus, and independent review passed |
 | 7 | Limited offline storage and synchronization | P2, optional | In progress: bounded cache and JMAP sync implemented; offline reconnect, account-isolation, and logout checks remain pending |
 | 8 | Polling, JMAP events, and optional notifications | P2, optional | In progress: polling and opt-in browser alerts implemented; live notification behavior remains unverified; EventSource and Web Push remain deferred |
 
