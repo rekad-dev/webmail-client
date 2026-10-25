@@ -5,6 +5,23 @@ scope: session-handoff
 
 # Session Handoff
 
+## Latest feature: rich-text composition and managed banners
+
+The user approved a rich-text editor for all users and an admin page for
+`core@rekad.id` header/footer banners. Admin authorization is an explicit
+allowlist of stable OAuth subject IDs (`REKAD_BANNER_ADMIN_SUBJECTS`), and
+managed banners apply to all outgoing messages. The feature is implemented in
+the working tree; the database migration is included but has not been applied.
+Production subject IDs are not configured here. Do not change Stalwart global
+settings or use its admin API. No tests, typecheck, build, browser, production
+database, mailbox, or deployment operations were run for this feature.
+
+Rich HTML is sanitized on the server and saved as JMAP HTML with a plain-text
+alternative. Compose previews current banners, and send checks the saved draft
+against the current banner version. A terminal rejected send attempt is reset
+for a safe retry; unknown/in-progress attempts retain their key. The feature
+plan is in the Traycer artifact `core-mail-banners-rich-text-plan`.
+
 ## Current status
 
 The user explicitly asked to proceed through Phases 6, 7, and 8. Their code

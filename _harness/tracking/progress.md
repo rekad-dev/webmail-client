@@ -5,6 +5,26 @@ scope: progress
 
 # Progress
 
+## Cross-phase rich-text composition and managed banners
+
+- Implemented a Tiptap rich-text editor for all users, preserving formatted
+  content in drafts and messages with a server-generated plain-text
+  alternative. Replies and forwards use the same editor.
+- Added a `core@rekad.id` banner admin page. Authorization uses an explicit
+  allowlist of stable OAuth subject IDs from
+  `REKAD_BANNER_ADMIN_SUBJECTS`; empty/unconfigured disables admin access.
+  Banners are previewed during compose and added to every outgoing message.
+- Added the application database migration and migration-runner entry, but did
+  not apply it. Configure the allowlist with the appropriate OAuth subject IDs
+  before enabling the page. Production database or deployment work was not
+  authorized and was not performed.
+- HTML is sanitized server-side; JMAP drafts retain both formats, and send
+  verifies that the saved draft carries the current banner version before
+  submission. A definitive rejected attempt gets a new idempotency key on
+  retry; unknown/in-progress attempts keep their original key.
+- No tests, typecheck, build, browser, Stalwart, production database, mailbox,
+  or deployment operations were run for this change.
+
 ## Current work: Phase 6 complete; Phases 5, 7, and 8 in progress
 
 - The user explicitly directed continuing through Phases 6, 7, and 8. The

@@ -9,6 +9,7 @@ import {
   type RefObject,
 } from "react";
 import { MailIcon } from "./mail-icons";
+import { plainTextEditorContent, RichTextEditor } from "./rich-text-editor";
 
 interface EmailAddress {
   name: string | null;
@@ -30,6 +31,12 @@ interface ComposePreflight {
   draftsMailboxId: string | null;
   sentMailboxId: string | null;
   identities: ComposeIdentity[];
+}
+
+interface ComposeBannerSettings {
+  headerHtml: string;
+  footerHtml: string;
+  version: number;
 }
 
 const LOCAL_PREVIEW_IDENTITY: ComposeIdentity = {
@@ -56,6 +63,7 @@ export interface ComposeFields {
   bcc: string;
   subject: string;
   body: string;
+  htmlBody?: string;
 }
 
 interface ReplyHeaders {
@@ -123,6 +131,7 @@ function parseLoadedDraft(value: unknown): LoadedDraft | null {
     typeof draft.id !== "string" ||
     typeof draft.subject !== "string" ||
     typeof draft.body !== "string" ||
+    draft.htmlBody !== undefined && draft.htmlBody !== null && typeof draft.htmlBody !== "string" ||
     !Array.isArray(draft.inReplyTo) ||
     !Array.isArray(draft.references) ||
     !draft.inReplyTo.every((item) => typeof item === "string") ||
@@ -168,6 +177,9 @@ function parseLoadedDraft(value: unknown): LoadedDraft | null {
     bcc: bcc.map((address) => address.email).join(", "),
     subject: draft.subject,
     body: draft.body,
+    htmlBody: typeof draft.htmlBody === "string"
+      ? draft.htmlBody
+      : plainTextEditorContent(draft.body),
     attachments,
     inReplyTo: draft.inReplyTo,
     references: draft.references,
@@ -223,6 +235,23 @@ function parseComposePreflight(value: unknown): ComposePreflight | null {
     draftsMailboxId: body.draftsMailboxId,
     sentMailboxId: body.sentMailboxId,
     identities,
+  };
+}
+
+function parseComposeBanners(value: unknown): ComposeBannerSettings | null {
+  const body = objectValue(value);
+  if (
+    !body ||
+    typeof body.headerHtml !== "string" ||
+    typeof body.footerHtml !== "string" ||
+    typeof body.version !== "number" ||
+    !Number.isSafeInteger(body.version) ||
+    body.version < 0
+  ) return null;
+  return {
+    headerHtml: body.headerHtml,
+    footerHtml: body.footerHtml,
+    version: body.version,
   };
 }
 
@@ -305,6 +334,8 @@ function sendErrorMessage(error: string | undefined): string {
       return "Stalwart rejected this message. Check its details and try again.";
     case "draft_changed":
       return "This saved draft changed on the server. Reopen it before sending.";
+    case "banner_settings_unavailable":
+      return "Managed banner settings are unavailable. Your message was not submitted; try again later.";
     default:
       return "The message could not be submitted. Check your connection and try again.";
   }
@@ -384,6 +415,7 @@ export function ComposeDialog({
   const [preflight, setPreflight] = useState<ComposePreflight | null>(
     () => localPreview ? LOCAL_PREVIEW_PREFLIGHT : null,
   );
+  const [managedBanners, setManagedBanners] = useState<ComposeBannerSettings | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(!localPreview);
   const [reloadVersion, setReloadVersion] = useState(0);
@@ -397,6 +429,7 @@ export function ComposeDialog({
     bcc: initialFields?.bcc ?? "",
     subject: initialFields?.subject ?? "",
     body: initialFields?.body ?? "",
+    htmlBody: initialFields?.htmlBody ?? plainTextEditorContent(initialFields?.body ?? ""),
   }));
   const [attachments, setAttachments] = useState<ComposeAttachment[]>([]);
   const [attachmentUploadPending, setAttachmentUploadPending] = useState(false);
@@ -470,7 +503,20 @@ export function ComposeDialog({
         if (!nextPreflight) throw new Error("mail_unavailable");
         if (controller.signal.aborted) return;
 
+        const bannerResponse = await fetch("/api/mail/banners", {
+          method: "GET",
+          credentials: "same-origin",
+          cache: "no-store",
+          signal: controller.signal,
+          headers: { accept: "application/json" },
+        });
+        const bannerBody: unknown = await bannerResponse.json();
+        const nextBanners = bannerResponse.ok ? parseComposeBanners(bannerBody) : null;
+        if (!nextBanners) throw new Error("banner_settings_unavailable");
+        if (controller.signal.aborted) return;
+
         setPreflight(nextPreflight);
+        setManagedBanners(nextBanners);
         let loadedDraft: LoadedDraft | null = null;
         if (initialDraftId) {
           const draftResponse = await fetch(
@@ -522,6 +568,7 @@ export function ComposeDialog({
           bcc: initialFields?.bcc ?? "",
           subject: initialFields?.subject ?? "",
           body: initialFields?.body ?? signature,
+          htmlBody: initialFields?.htmlBody ?? plainTextEditorContent(initialFields?.body ?? signature),
         });
         setAttachments(loadedDraft?.attachments ?? []);
         hasBodyEditsRef.current = Boolean(loadedDraft || initialFields?.body);
@@ -587,7 +634,7 @@ export function ComposeDialog({
   ): Promise<void> {
     if (localPreview) return Promise.resolve();
     const task = draftSaveQueueRef.current.then(async () => {
-      if (revision <= savedDraftRevisionRef.current) return;
+      if (revision <= savedDraftRevisionRef.current && !force) return;
       if (!force && revision < draftRevisionRef.current) return;
       setDraftSaveState("saving");
       setDraftSaveError(false);
@@ -610,6 +657,7 @@ export function ComposeDialog({
           bcc: parseAddressesField(snapshot.bcc),
           subject: snapshot.subject,
           body: snapshot.body,
+          formattedBody: snapshot.htmlBody ?? plainTextEditorContent(snapshot.body),
           attachments: attachmentsSnapshot,
           inReplyTo: replyHeaders.inReplyTo,
           references: replyHeaders.references,
@@ -635,12 +683,28 @@ export function ComposeDialog({
     });
   }
 
-  async function saveDraftNow(): Promise<void> {
+  async function saveDraftNow(refreshManagedContent = false): Promise<void> {
     if (localPreview) return;
-    const revision = draftRevisionRef.current;
-    if (revision <= savedDraftRevisionRef.current && draftIdRef.current) return;
+    let revision = draftRevisionRef.current;
+    if (revision <= savedDraftRevisionRef.current && draftIdRef.current && !refreshManagedContent) return;
+    if (refreshManagedContent && revision <= savedDraftRevisionRef.current) {
+      revision = savedDraftRevisionRef.current + 1;
+      draftRevisionRef.current = revision;
+    }
     if (!selectedIdentity) throw new Error("draft_identity_missing");
-    await queueDraftSave(fields, attachments, selectedIdentity.id, revision, true);
+    if (refreshManagedContent) {
+      const response = await fetch("/api/mail/banners", {
+        method: "GET",
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { accept: "application/json" },
+      });
+      const value: unknown = await response.json();
+      const latest = response.ok ? parseComposeBanners(value) : null;
+      if (!latest) throw new Error("banner_settings_unavailable");
+      setManagedBanners(latest);
+    }
+    await queueDraftSave(fields, attachments, selectedIdentity.id, revision, refreshManagedContent);
     if (!draftIdRef.current) throw new Error("draft_save_failed");
   }
 
@@ -730,6 +794,11 @@ export function ComposeDialog({
         : nextIdentity.textSignature
           ? `\n\n${nextIdentity.textSignature}`
           : "",
+      htmlBody: hasBodyEditsRef.current
+        ? current.htmlBody
+        : plainTextEditorContent(nextIdentity.textSignature
+          ? `\n\n${nextIdentity.textSignature}`
+          : ""),
     }));
     draftRevisionRef.current += 1;
     setDraftSaveState("idle");
@@ -863,8 +932,9 @@ export function ComposeDialog({
     setIsSending(true);
     setSendError(null);
     setFormError(null);
+    if (sendState === "rejected") setSendState(null);
     try {
-      await saveDraftNow();
+      await saveDraftNow(true);
     } catch {
       setIsSending(false);
       setFormError("This draft could not be saved. Check your connection and try again.");
@@ -908,6 +978,7 @@ export function ComposeDialog({
           bcc,
           subject: fields.subject,
           body: fields.body,
+          formattedBody: fields.htmlBody ?? plainTextEditorContent(fields.body),
           attachments,
           inReplyTo: replyHeaders.inReplyTo,
           references: replyHeaders.references,
@@ -923,6 +994,11 @@ export function ComposeDialog({
         result?.state === "unknown"
       ) {
         setSendState(result.state);
+        if (result.state === "rejected") {
+          // A definitive rejection is terminal for this key. A retry will
+          // first refresh the saved draft, then reserve a new send attempt.
+          attemptKeyRef.current = null;
+        }
         setSendError(result.state === "rejected"
           ? sendErrorMessage(result.error)
           : null);
@@ -940,6 +1016,9 @@ export function ComposeDialog({
         setSendError(sendErrorMessage(
           typeof result?.error === "string" ? result.error : "mail_unavailable",
         ));
+      } else if (response.status === 503 && result?.error === "banner_settings_unavailable") {
+        attemptKeyRef.current = null;
+        setSendError(sendErrorMessage("banner_settings_unavailable"));
       } else {
         setSendState("unknown");
         setSendError(null);
@@ -1252,20 +1331,34 @@ export function ComposeDialog({
             </div>
             <div className="compose-field compose-body-field">
               <label htmlFor="compose-body">Message</label>
-              <textarea
+              {managedBanners?.headerHtml ? (
+                <div
+                  aria-label="Managed header banner"
+                  className="managed-banner-preview"
+                  dangerouslySetInnerHTML={{ __html: managedBanners.headerHtml }}
+                  role="note"
+                />
+              ) : null}
+              <RichTextEditor
                 disabled={!canEdit}
                 id="compose-body"
-                placeholder="Write your message…"
-                maxLength={256 * 1024}
-                onChange={(event) => {
+                label="Message"
+                onChange={(htmlBody, body) => {
                   hasBodyEditsRef.current = true;
-                  updateFields({ body: event.target.value });
+                  updateFields({ body, htmlBody });
                 }}
-                rows={10}
-                value={fields.body}
+                value={fields.htmlBody ?? plainTextEditorContent(fields.body)}
               />
+              {managedBanners?.footerHtml ? (
+                <div
+                  aria-label="Managed footer banner"
+                  className="managed-banner-preview"
+                  dangerouslySetInnerHTML={{ __html: managedBanners.footerHtml }}
+                  role="note"
+                />
+              ) : null}
               <span className="compose-help">
-                Plain text only. The selected identity signature is included when configured.
+                Formatting is preserved in drafts and sent messages. Managed banners are included automatically.
               </span>
             </div>
 
@@ -1360,7 +1453,7 @@ export function ComposeDialog({
                 disabled={localPreview || !canEdit || attachmentUploadPending} onClick={() => attachmentInputRef.current?.click()} type="button" title={localPreview ? "Attachments are disabled in the local preview" : "Attach files"}>
                 <MailIcon name="paperclip" size={21} />
               </button>
-              <span className="compose-format-label">Plain text</span>
+              <span className="compose-format-label">Rich text</span>
               <span className="compose-action-spacer" />
               {(sendState === "unknown" || sendState === "in_progress") ? (
                 <button className="compose-secondary-action" disabled={isLeaving || isSending} onClick={onInspectSent} type="button">Open Sent</button>

@@ -563,6 +563,24 @@ Do not add background infrastructure just because it is technically possible.
 
 ---
 
+## Approved cross-phase feature — Managed banners and rich-text composition
+
+- Provide an accessible rich-text editor to all signed-in users for compose,
+  drafts, replies, and forwards. Preserve formatting in stored drafts and
+  submitted messages, with a plain-text alternative.
+- Add a `core@rekad.id` banner administration page for the header and footer
+  content associated with the core group. Only explicitly allowlisted OAuth
+  subject IDs may change the settings; do not infer administrator access from
+  group membership or mailbox address.
+- Include the current managed header and footer in all outgoing messages and
+  show both banners in compose previews.
+- Store settings in the application's database and sanitize banner and message
+  HTML on the server. Do not change Stalwart global settings or use its admin
+  API for user authentication or mailbox operations.
+- Keep admin access disabled until `REKAD_BANNER_ADMIN_SUBJECTS` is configured.
+
+---
+
 # 7. UI and UX Guidelines
 
 Aim for a modern, focused email application.

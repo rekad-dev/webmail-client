@@ -1,11 +1,14 @@
 import { getAuthSession, signIn } from "@/auth";
 import Image from "next/image";
 import { InboxClient } from "./inbox-client";
+import { isManagedBannerAdmin } from "@/lib/mail/managed-banner-store.mts";
 
 export default async function HomePage() {
   const session = await getAuthSession();
   const isSignedIn =
     session?.expires !== undefined && Date.parse(session.expires) > Date.now();
+  const canManageBanners = isSignedIn && typeof session?.user?.id === "string" &&
+    isManagedBannerAdmin(session.user.id);
 
   async function signInWithStalwart() {
     "use server";
@@ -14,7 +17,7 @@ export default async function HomePage() {
 
   return (
     isSignedIn ? (
-      <InboxClient accountName={session?.user?.name} accountEmail={session?.user?.email} />
+      <InboxClient accountName={session?.user?.name} accountEmail={session?.user?.email} canManageBanners={canManageBanners} />
     ) : (
       <main className="sign-in-shell">
         <section className="status-card" aria-labelledby="page-title">

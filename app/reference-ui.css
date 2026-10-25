@@ -118,6 +118,8 @@ summary::-webkit-details-marker { display: none; }
 .account-trigger > span { max-width: 155px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-menu-popover { position: absolute; z-index: 12; top: calc(100% + 9px); right: 0; width: min(320px, calc(100vw - 32px)); max-height: min(620px, calc(100vh - 112px)); max-height: min(620px, calc(100dvh - 112px)); overflow-y: auto; overscroll-behavior: contain; border: 0; border-radius: var(--radius-xl); background: var(--popover); padding: 14px; box-shadow: var(--shadow-card); scrollbar-width: thin; scrollbar-color: var(--violet) var(--violet-light); }
 .account-menu-popover > p { overflow-wrap: anywhere; margin: 0 0 12px; color: var(--muted); font-size: 12px; }
+.account-menu-settings-link { min-height: 44px; display: flex; align-items: center; border-radius: var(--radius-md); padding: 0 9px; color: var(--violet-dark); font-size: 12px; font-weight: 700; text-decoration: none; }
+.account-menu-settings-link:hover { background: var(--violet-light); }
 .account-menu-popover .sign-out-button { min-height: 44px; border-color: var(--line); border-radius: var(--radius-md); font-size: 12px; }
 .password-change-form { display: grid; gap: 8px; margin: 12px 0; border-top: 1px solid var(--line); padding: 12px 0 0; }
 .password-change-fields { display: grid; min-width: 0; gap: 8px; margin: 0; border: 0; padding: 0; }
@@ -281,6 +283,7 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
 .admin-banner-editor { display: grid; gap: 7px; }
 .admin-banner-editor > label { font-size: 13px; font-weight: 700; }
 .admin-banner-preview { min-height: 54px; border: 1px dashed var(--border); border-radius: var(--radius-md); background: var(--lemon-light); padding: 12px; }
+.admin-banner-preview .muted { color: var(--muted); font-size: 12px; }
 .admin-banner-save { min-height: 44px; justify-self: start; border: 0; border-radius: var(--radius-md); background: var(--lemon); padding: 0 18px; color: var(--lemon-dark); font-weight: 800; cursor: pointer; }
 .admin-banner-feedback { margin: 0; color: var(--success); font-size: 13px; }
 .admin-banner-feedback[role="alert"] { color: var(--danger-foreground); }

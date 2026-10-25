@@ -35,7 +35,12 @@ export function RichTextEditor({
   const [linkHref, setLinkHref] = useState("");
   const [linkError, setLinkError] = useState("");
   const editor = useEditor({
-    extensions: [StarterKit],
+    extensions: [
+      StarterKit.configure({
+        heading: { levels: [1, 2, 3] },
+        link: { openOnClick: false },
+      }),
+    ],
     content: value || "<p></p>",
     immediatelyRender: false,
     editable: !disabled,
@@ -94,13 +99,13 @@ export function RichTextEditor({
   function toolbarButton(
     name: string,
     labelText: string,
-    active: boolean,
+    active: boolean | null,
     command: () => void,
   ) {
     return (
       <button
         aria-label={labelText}
-        aria-pressed={active}
+        aria-pressed={active === null ? undefined : active}
         className="rich-text-tool"
         disabled={!editor || disabled}
         key={name}
@@ -133,9 +138,10 @@ export function RichTextEditor({
             const heading = event.target.value;
             if (heading === "paragraph") editor.chain().focus().setParagraph().run();
             else editor.chain().focus().toggleHeading({ level: Number(heading) as 1 | 2 | 3 }).run();
-            event.currentTarget.value = "paragraph";
           }}
-          value="paragraph"
+          value={editor.isActive("heading", { level: 1 }) ? "1"
+            : editor.isActive("heading", { level: 2 }) ? "2"
+              : editor.isActive("heading", { level: 3 }) ? "3" : "paragraph"}
         >
           <option value="paragraph">Paragraph</option>
           <option value="1">Heading 1</option>
@@ -146,8 +152,8 @@ export function RichTextEditor({
         {toolbarButton("ordered-list", "Numbered list", editor.isActive("orderedList"), () => editor.chain().focus().toggleOrderedList().run())}
         {toolbarButton("blockquote", "Quote", editor.isActive("blockquote"), () => editor.chain().focus().toggleBlockquote().run())}
         {toolbarButton("link", "Link", editor.isActive("link"), openLinkEditor)}
-        {toolbarButton("undo", "Undo", false, () => editor.chain().focus().undo().run())}
-        {toolbarButton("redo", "Redo", false, () => editor.chain().focus().redo().run())}
+        {toolbarButton("undo", "Undo", null, () => editor.chain().focus().undo().run())}
+        {toolbarButton("redo", "Redo", null, () => editor.chain().focus().redo().run())}
       </div>
       {linkEditorOpen ? (
         <form className="rich-text-link-form" onSubmit={saveLink}>
@@ -158,7 +164,7 @@ export function RichTextEditor({
             id={`${id}-link`}
             onChange={(event) => setLinkHref(event.target.value)}
             placeholder="https://example.com"
-            type="url"
+            type="text"
             value={linkHref}
           />
           <button className="rich-text-tool" type="submit">Apply link</button>

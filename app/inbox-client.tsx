@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import Image from "next/image";
 import { ComposeDialog } from "./compose-dialog";
 import type { ComposeFields } from "./compose-dialog";
+import { plainTextEditorContent } from "./rich-text-editor";
 import { SignOutButton } from "./sign-out-button";
 import { PasswordChangeForm } from "./password-change-form";
 import { MailIcon, type MailIconName } from "./mail-icons";
@@ -873,9 +874,10 @@ function mailActionErrorMessage(error: string): string {
   }
 }
 
-export function InboxClient({ accountName, accountEmail, localPreview = false, initialListing }: {
+export function InboxClient({ accountName, accountEmail, canManageBanners = false, localPreview = false, initialListing }: {
   accountName?: string | null;
   accountEmail?: string | null;
+  canManageBanners?: boolean;
   localPreview?: boolean;
   initialListing?: MailListing;
 }) {
@@ -1573,10 +1575,14 @@ export function InboxClient({ accountName, accountEmail, localPreview = false, i
     const quote = (detail.textBody ?? "").split("\n").map((line) => `> ${line}`).join("\n");
     const date = formatDetailDate(detail.sentAt ?? detail.receivedAt) ?? "the previous message";
     const author = detail.from[0] ? addressLabel(detail.from[0]) : "the sender";
+    const quotedHtml = detail.htmlBody
+      ? `<blockquote>${detail.htmlBody}</blockquote>`
+      : `<blockquote>${plainTextEditorContent(detail.textBody ?? "")}</blockquote>`;
     openCompose("reply", {
       to: targets.map((address) => address.email).join(", "),
       subject: replySubject,
       body: `\n\nOn ${date}, ${author} wrote:\n${quote}`,
+      htmlBody: `<p><br></p>${plainTextEditorContent(`On ${date}, ${author} wrote:`)}${quotedHtml}`,
     }, {
       inReplyTo: originalId ? [originalId] : [],
       references,
@@ -1594,9 +1600,13 @@ export function InboxClient({ accountName, accountEmail, localPreview = false, i
       `To: ${detail.to.map(addressLabel).join(", ") || "Unknown recipient"}`,
     ];
     if (detail.cc.length > 0) headerLines.push(`Cc: ${detail.cc.map(addressLabel).join(", ")}`);
+    const forwardedHtml = detail.htmlBody
+      ? `<blockquote>${detail.htmlBody}</blockquote>`
+      : `<blockquote>${plainTextEditorContent(detail.textBody ?? "")}</blockquote>`;
     openCompose("forward", {
       subject: forwardSubject,
       body: `\n\n${headerLines.join("\n")}\n\n${detail.textBody ?? ""}`,
+      htmlBody: `<p><br></p>${plainTextEditorContent(headerLines.join("\n"))}${forwardedHtml}`,
     }, { inReplyTo: [], references: [] }, trigger);
   }
 
@@ -1946,6 +1956,7 @@ export function InboxClient({ accountName, accountEmail, localPreview = false, i
                 <summary className="account-trigger"><span>{displayAccount}</span><MailIcon name="chevron-down" size={14} /></summary>
                 <div className="account-menu-popover">
                   <p>{accountEmail || "Signed in to rekad Mail"}</p>
+                  {canManageBanners ? <a className="account-menu-settings-link" href="/admin/banners">Manage core mail banners</a> : null}
                   <PasswordChangeForm />
                   <SignOutButton />
                 </div>
