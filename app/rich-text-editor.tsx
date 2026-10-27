@@ -113,7 +113,9 @@ export function RichTextEditor({
         onClick={command}
         type="button"
       >
-        {labelText}
+        {id === "compose-body" && ["bold", "italic", "underline", "strike"].includes(name)
+          ? <img src={`/figma-mail/format-${name}.svg`} alt="" />
+          : labelText}
       </button>
     );
   }

@@ -494,6 +494,7 @@ function MessageDetailView({
   backButtonRef,
   headingRef,
   onBack,
+  onClose,
   onRetry,
   onBodyFormatChange,
   mailboxes,
@@ -519,6 +520,7 @@ function MessageDetailView({
   backButtonRef: RefObject<HTMLButtonElement | null>;
   headingRef: RefObject<HTMLHeadingElement | null>;
   onBack(): void;
+  onClose(): void;
   onRetry(): void;
   onBodyFormatChange(format: BodyFormat): void;
   mailboxes: Mailbox[];
@@ -584,6 +586,13 @@ function MessageDetailView({
       {backButton}
 
       <article className="message-detail-paper">
+        <div className="reference-message-tools" aria-label="Message tools">
+          {[["Reminder", "reminder"], ["Add Task", "task-check"], ["Permalink", "message-link"], ["Snooze", "snooze"]].map(([label, icon]) => <a key={label} href="#" title={`${label} (not yet available)`} onClick={(event) => event.preventDefault()}><img src={`/figma-mail/${icon}.svg`} alt="" /><span>{label}</span></a>)}
+          <span className="reference-message-tools-spacer" />
+          <a href="#" aria-label="Comments (not yet available)" title="Comments (not yet available)" onClick={(event) => event.preventDefault()}><img src="/figma-mail/messages.svg" alt="" /></a>
+          <a href="#" aria-label="Open in new window (not yet available)" title="Open in new window (not yet available)" onClick={(event) => event.preventDefault()}><MailIcon name="expand" size={18} /></a>
+          <button type="button" aria-label="Close message" onClick={onClose}><MailIcon name="close" size={18} /></button>
+        </div>
         <header className="message-detail-header">
           <div className="message-detail-top">
             <div className="message-detail-title-group">
@@ -593,6 +602,7 @@ function MessageDetailView({
                 {detail.isStarred ? <span className="conversation-star" aria-hidden="true"> ★</span> : null}
               </h2>
             </div>
+            <details className="reference-message-actions"><summary aria-label="Message actions" title="Message actions"><MailIcon name="more" size={18} /></summary>
             <div className="message-action-bar" role="group" aria-label="Message actions">
               <div className="bulk-action-group">
                 <button
@@ -689,6 +699,7 @@ function MessageDetailView({
                 </button>
               </div>
             </div>
+            </details>
           </div>
           <div className="message-detail-sender-row">
             <span className={`message-avatar avatar-tone-${avatarTone(detail)}`} aria-hidden="true">
@@ -698,6 +709,11 @@ function MessageDetailView({
               <strong>{senderLabel(detail)}</strong>
               <span>{detail.from[0]?.email ? `<${detail.from[0].email}>` : "Unknown address"}</span>
             </div>
+            <div className="reference-sender-actions">
+              <button type="button" aria-label="Reply" title="Reply" disabled={actionPending} onClick={(event) => onReply(detail, event.currentTarget)}><MailIcon name="reply" size={20} /></button>
+              <button type="button" aria-label="Forward" title="Forward" disabled={actionPending} onClick={(event) => onForward(detail, event.currentTarget)}><MailIcon name="forward" size={20} /></button>
+              <button type="button" aria-label="Back to conversation" title="Back to conversation" onClick={onBack}><MailIcon name="chevron-down" size={20} /></button>
+            </div>
             {receivedAt || sentAt ? (
               <time className="message-detail-timestamp" dateTime={(detail.receivedAt ?? detail.sentAt) ?? undefined}>
                 {receivedAt ?? sentAt}
@@ -706,10 +722,7 @@ function MessageDetailView({
           </div>
           {actionError ? <p className="mail-alert" role="alert">{actionError}</p> : null}
           {offlineSaveError ? <p className="mail-alert" role="alert">{offlineSaveError}</p> : null}
-          {!offlineAvailable ? (
-            <p className="attachment-upload-status">Offline storage is not available in this browser.</p>
-          ) : null}
-          <dl className="message-metadata">
+          <details className="reference-message-metadata"><summary>Message details</summary>{!offlineAvailable ? <p>Offline storage is not available in this browser.</p> : null}<dl className="message-metadata">
             {detail.from.length > 0 ? (
               <div>
                 <dt>From</dt>
@@ -746,7 +759,7 @@ function MessageDetailView({
                 <dd><time dateTime={detail.receivedAt ?? undefined}>{receivedAt}</time></dd>
               </div>
             ) : null}
-          </dl>
+          </dl></details>
         </header>
 
         {readUpdateError ? (
@@ -1950,6 +1963,13 @@ export function InboxClient({
     ? listing ? "Refreshing messages…" : "Loading conversations…"
     : selectedCount > 0 ? `${selectedCount} selected` : listing ? resultRange : "";
 
+  function placeholder(label: string, icon?: string) {
+    return <a href="#" title={`${label} (not yet available)`} aria-label={`${label} (not yet available)`}
+      onClick={(event) => event.preventDefault()} className={icon ? "reference-rail-link" : "reference-nav-link"} key={label}>
+      {icon ? <img src={`/figma-mail/${icon}.svg`} alt="" /> : label}
+    </a>;
+  }
+
   function renderMailbox(mailbox: Mailbox) {
     const isSelected = mailbox.id === listing?.selectedMailboxId;
     return (
@@ -1957,7 +1977,7 @@ export function InboxClient({
         disabled={localPreview} key={mailbox.id} onClick={() => selectMailbox(mailbox.id)} type="button"
         title={localPreview ? "Mailbox navigation is disabled in the local preview" : mailbox.name}>
         <MailIcon name={mailboxIcon(mailbox.role)} />
-        <span className="mailbox-name">{mailbox.name}</span>
+        <span className="mailbox-name">{({ inbox: "Inbox", drafts: "Drafts", sent: "Sent", junk: "Spam", trash: "Trash", archive: "Archive" } as Record<string, string>)[mailbox.role ?? ""] ?? mailbox.name}</span>
         {mailbox.unreadEmails > 0 ? <span className="mailbox-unread"><span className="visually-hidden">unread: </span>{mailbox.unreadEmails.toLocaleString()}</span> : null}
       </button>
     );
@@ -1997,6 +2017,7 @@ export function InboxClient({
           </label>
         </div>
 
+          <a className="reference-theme-placeholder" href="#" title="Theme (not yet available)" aria-label="Theme (not yet available)" onClick={(event) => event.preventDefault()}><img src="/figma-mail/moon.svg" alt="" /></a>
           <div className="mail-header-account">
             <button className="icon-button refresh-button" disabled={localPreview || currentViewLoading} aria-busy={currentViewLoading}
               onClick={refresh} type="button" aria-label={refreshLabel}
@@ -2023,30 +2044,45 @@ export function InboxClient({
             )}
           </div>
       </header>
+      <nav className="reference-app-rail" aria-label="Applications">
+        <a href="#" className="reference-rail-link is-active" aria-label="Mail" onClick={(event) => event.preventDefault()}><img src="/figma-mail/mail.svg" alt="" /></a>
+        {[["Calendar", "calendar"], ["Tasks", "tasks"], ["Notes", "notes"], ["Contacts", "contacts"], ["Bookmarks", "bookmark"]].map(([label, icon]) => placeholder(label, icon))}
+      </nav>
       <aside className="mail-sidebar" aria-label="Mail navigation">
-        <div className="sidebar-rail">
-          <button className="icon-button sidebar-collapse" type="button"
-            aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
-            aria-expanded={!sidebarCollapsed} onClick={() => setSidebarCollapsed((value) => !value)}>
-            <MailIcon name="sidebar" size={19} />
-          </button>
-        </div>
         <button className="compose-launch-button sidebar-compose" disabled={!listing || isLoading}
           onClick={(event) => openCompose("new", undefined, undefined, event.currentTarget)} ref={composeButtonRef}
           type="button" aria-label={isComposeOpen ? "Restore open message" : "Compose new message"}>
-          <MailIcon name="plus" size={20} />{isComposeOpen ? "Restore Message" : "Compose"}
+          {isComposeOpen ? "Restore Message" : "Compose"}
         </button>
-        <p className="sidebar-section-label mailbox-heading">Mailboxes</p>
+        <div className="reference-sidebar-shortcuts">{placeholder("Home")}{placeholder("All Unread")}<a href="#" className="reference-create-group" title="Create a Group (not yet available)" onClick={(event) => event.preventDefault()}>+ Create a Group</a></div>
+        <p className="sidebar-section-label mailbox-heading">Home</p>
 
         <nav className="mailbox-nav" aria-label="Mailboxes">
-          {listing?.mailboxes.filter((mailbox) => mailbox.role !== null).map(renderMailbox)}
+          {["inbox", "drafts", "templates", "snoozed", "sent", "junk", "trash", "archive"].map((role) => {
+            const mailbox = listing?.mailboxes.find((item) => item.role === role);
+            if (mailbox) return renderMailbox(mailbox);
+            if (role === "templates" || role === "snoozed" || (role === "junk" && listing)) return placeholder(role === "junk" ? "Spam" : role === "templates" ? "Templates" : "Snoozed");
+            return null;
+          })}
+          {listing?.mailboxes.filter((mailbox) => mailbox.role !== null && !["inbox", "drafts", "sent", "junk", "trash", "archive"].includes(mailbox.role)).map(renderMailbox)}
           {!listing && isLoading ? <p className="sidebar-note">Loading mailboxes…</p> : null}
           {listing?.mailboxes.some((mailbox) => mailbox.role === null) ? (
             <><p className="sidebar-section-label">Folders</p>{listing.mailboxes.filter((mailbox) => mailbox.role === null).map(renderMailbox)}</>
           ) : null}
         </nav>
 
-        <div className="sidebar-tools">
+        <div className="reference-sidebar-sections">
+          <p>Tags</p>{["Open", "Negotiation", "Deal"].map((label, index) => <a href="#" key={label} title={`${label} (not yet available)`} onClick={(event) => event.preventDefault()}><span className={`reference-tag reference-tag-${index}`} />{label}</a>)}
+          <p>Views</p>{["Unread", "All Messages", "Flagged"].map((label) => placeholder(label))}
+        </div>
+        <details className="reference-mail-tools"><summary>Mail tools</summary>        <div className="sidebar-rail">
+          <button className="icon-button sidebar-collapse" type="button"
+            aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
+            aria-expanded={!sidebarCollapsed} onClick={() => setSidebarCollapsed((value) => !value)}>
+            <MailIcon name="sidebar" size={19} />
+          </button>
+        </div>
+<div className="sidebar-tools">
           {localPreview ? (
             <p className="local-preview-sidebar-note">Mailbox tools are disabled in this local preview.</p>
           ) : (
@@ -2066,6 +2102,7 @@ export function InboxClient({
             </>
           )}
         </div>
+        </details>
         <div className="sidebar-footer">
           <span className="account-avatar" aria-hidden="true">{accountInitial}</span>
           <span className="sidebar-account-copy"><strong>{displayAccount}</strong><span>{accountEmail || "Signed in to rekad Mail"}</span></span>
@@ -2083,8 +2120,8 @@ export function InboxClient({
                 disabled={Boolean(openEmailId || openThreadId || !listing?.hasMore || isLoading || actionPending)}
                 onClick={() => changePage(position + PAGE_SIZE)} type="button"><MailIcon name="chevron-right" size={17} /></button>
             </nav>
-            <div className="mail-breadcrumb"><span>rekad Mail</span><MailIcon name="chevron-right" size={14} />
-              <h1 id="mail-title" ref={mailTitleRef} tabIndex={-1}>{openEmailId ? "Reading message" : openThreadId ? "Conversation" : searchText ? "Search results" : selectedMailbox?.name ?? "Inbox"}</h1>
+            <div className="mail-breadcrumb"><span>rekad Mail</span><MailIcon name="chevron-right" size={14} /><span className="reference-heading-icon"><img src="/figma-mail/mail.svg" alt="" /></span>
+              <h1 id="mail-title" ref={mailTitleRef} tabIndex={-1}>Mails</h1>
             </div>
           </div>
           <span className="visually-hidden" role="status" aria-live="polite" aria-atomic="true">
@@ -2112,20 +2149,20 @@ export function InboxClient({
                 <span className="visually-hidden">{selectedCount} selected</span>
               </label>
               <div className="bulk-action-group" role="group" aria-label="Selected conversation actions">
-                <button className="toolbar-action" aria-label="Archive selected conversations" disabled={localPreview || selectedCount === 0 || actionPending || !archiveAvailable}
-                  onClick={() => void performSelectedMailAction("archive")} title={archiveAvailable ? "Archive selected conversations" : "This account has no Archive mailbox"} type="button"><MailIcon name="archive" size={19} /><span>Archive</span></button>
                 <label className={`toolbar-action toolbar-folder${selectedCount === 0 || actionPending ? " is-disabled" : ""}`}>
-                  <MailIcon name="folder" size={19} /><span>Folder</span>
+                  <MailIcon name="file" size={19} /><span>Move to</span>
                   <select aria-label="Move selected conversations to mailbox" value="" disabled={localPreview || selectedCount === 0 || actionPending}
                     onChange={(event) => { if (event.target.value) void performSelectedMailAction("move", event.target.value); }}>
                     <option value="">Move to folder</option>{listing?.mailboxes.map((mailbox) => <option key={mailbox.id} value={mailbox.id}>{mailbox.name}</option>)}
                   </select>
                 </label>
+                <a href="#" className="toolbar-action reference-tag-action" title="Tag as (not yet available)" onClick={(event) => event.preventDefault()}><img src="/figma-mail/bookmark.svg" alt="" /><span>Tag as</span></a>
                 <button className="toolbar-action" aria-label="Move selected conversations to Trash" disabled={localPreview || selectedCount === 0 || actionPending || !trashAvailable}
                   onClick={() => void performSelectedMailAction("trash")} title="Move selected conversations to Trash" type="button"><MailIcon name="trash" size={19} /><span>Delete</span></button>
                 <details className="selection-menu">
                   <summary className="icon-button" aria-label="More selected conversation actions"><MailIcon name="more" size={19} /></summary>
                   <div className="selection-menu-popover">
+                    <button disabled={localPreview || selectedCount === 0 || actionPending || !archiveAvailable} onClick={() => void performSelectedMailAction("archive")} type="button">Archive</button>
                     {([['mark_read', 'Mark read'], ['mark_unread', 'Mark unread'], ['star', 'Star'], ['unstar', 'Unstar']] as const).map(([action, label]) => (
                       <button key={action} disabled={selectedCount === 0 || actionPending} onClick={() => void performSelectedMailAction(action)} type="button">{label}</button>
                     ))}
@@ -2202,7 +2239,10 @@ export function InboxClient({
                   data-email-id={message.id} data-thread-id={message.threadId}
                   title={localPreview && !initialThreads?.[message.threadId] ? "Opening sample messages is disabled in the local preview" : undefined}
                   aria-label={`${message.isDraft ? "Edit saved draft" : `Open ${message.isUnread ? "unread" : "read"} conversation`}${message.isStarred ? ", starred" : ""} from ${senderLabel(message)}: ${message.subject?.trim() || "(no subject)"}`}
-                  onClick={(event) => message.isDraft ? openSavedDraft(message.id, event.currentTarget, message.subject) : openThread(message.threadId)}>
+                  onClick={(event) => {
+                    if (message.isDraft) openSavedDraft(message.id, event.currentTarget, message.subject);
+                    else { openThread(message.threadId); openMessage(message.id); }
+                  }}>
                   <span className={`message-avatar avatar-tone-${avatarTone(message)}`} aria-hidden="true">{senderInitials(message)}</span>
                   <span className="message-sender">{senderLabel(message)}{message.isStarred ? <span className="conversation-star" aria-hidden="true"> ★</span> : null}</span>
                   <span className="message-copy"><span className="message-subject">{message.isDraft ? <em>Draft: </em> : null}{message.subject?.trim() || "(no subject)"}</span><span className="message-preview">{message.preview}</span></span>
@@ -2443,6 +2483,7 @@ export function InboxClient({
             isRefreshing={manualRefreshTarget === "message"}
             mailboxName="conversation"
             onBack={closeMessage}
+            onClose={closeThread}
             onBodyFormatChange={setBodyFormat}
             onRetry={refresh}
             readUpdateError={readUpdateError}
@@ -2472,6 +2513,9 @@ export function InboxClient({
           <p className="stale-list-note">Showing the last successfully loaded page.</p>
         ) : null}
       </section>
+      <nav className="reference-utility-rail" aria-label="Other tools">
+        {[["Settings", "settings"], ["Calendar", "calendar"], ["Attachments", "clip"], ["Notes", "notes"], ["Links", "link"], ["Shortcuts", "energy"], ["Reminders", "clock"], ["Messages", "messages"]].map(([label, icon]) => placeholder(label, icon))}
+      </nav>
       {isComposeOpen ? (
         <ComposeDialog
           key={composeInstance}

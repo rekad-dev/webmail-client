@@ -988,3 +988,147 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
   .is-sidebar-collapsed .workspace-header .sidebar-search { display: flex; }
   .is-sidebar-collapsed .workspace-header .brand-name, .is-sidebar-collapsed .workspace-header .brand-wordmark { display: inline; }
 }
+
+/* Components and proportions from the Figma inbox and new-mail frames. */
+.mail-shell { font-family: var(--font-inter-tight), ui-sans-serif, system-ui, sans-serif; }
+.reference-app-rail, .reference-utility-rail { display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 0; padding: 24px 16px; background: var(--canvas); }
+.reference-app-rail { border-right: 1px solid var(--line); }
+.reference-utility-rail { border-left: 1px solid var(--line); }
+.reference-utility-rail .reference-rail-link:nth-child(4) { margin-top: 24px; }
+.reference-rail-link { display: grid; width: 36px; height: 36px; flex: none; place-items: center; border: 1px solid transparent; border-radius: 12px; color: var(--muted); text-decoration: none; }
+.reference-rail-link.is-active { border-color: var(--line); background: var(--surface); box-shadow: 0 1px 1px rgb(0 0 0 / 10%); }
+.reference-rail-link:hover, .reference-nav-link:hover, .reference-sidebar-sections a:hover { background: var(--violet-light); }
+.reference-rail-link img, .reference-message-tools img, .reference-tag-action img { display: block; flex: none; }
+.reference-sidebar-shortcuts { display: grid; gap: 4px; margin-bottom: 22px; }
+.reference-nav-link, .reference-create-group, .reference-sidebar-sections a { display: flex; min-height: 40px; align-items: center; border-radius: 12px; padding: 0 12px; color: var(--ink); font-size: 14px; text-decoration: none; }
+.reference-create-group { color: var(--violet); }
+.reference-sidebar-sections { display: grid; gap: 0; margin-top: 22px; }
+.reference-sidebar-sections p { margin: 0; padding: 8px 0; color: var(--muted); font-size: 14px; }
+.reference-sidebar-sections p:not(:first-child) { margin-top: 16px; }
+.reference-sidebar-sections a { gap: 8px; color: var(--muted); }
+.reference-tag { width: 10px; height: 10px; border-radius: 50%; background: var(--violet); }
+.reference-tag-1 { background: var(--orange); }
+.reference-tag-2 { background: var(--green); }
+.reference-mail-tools { margin-top: 20px; color: var(--muted); font-size: 13px; }
+.reference-mail-tools > summary { padding: 8px 0; cursor: pointer; }
+.reference-mail-tools .sidebar-tools { margin: 0; padding: 0; }
+.reference-mail-tools .sidebar-tools > p { margin-left: 8px; }
+.reference-message-tools { display: flex; min-height: 52px; flex-wrap: wrap; align-items: center; gap: 16px; border-bottom: 1px solid var(--line); padding: 8px 20px; }
+.reference-message-tools a, .reference-message-tools button { display: inline-flex; min-height: 32px; align-items: center; gap: 8px; border: 0; background: transparent; padding: 0; color: var(--muted); font: inherit; font-size: 14px; text-decoration: none; cursor: pointer; }
+.reference-message-tools-spacer { flex: 1; }
+.reference-message-actions { position: relative; }
+.reference-message-actions > summary { display: grid; width: 36px; height: 36px; place-items: center; cursor: pointer; }
+.reference-message-actions .message-action-bar { position: absolute; z-index: 8; top: 100%; right: 0; width: min(430px, 75vw); border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 10px; box-shadow: 0 8px 24px rgb(43 48 88 / 14%); }
+.reference-message-metadata { margin: 0 20px; font-size: 12px; }
+.reference-message-metadata > summary { padding-bottom: 12px; color: var(--muted); cursor: pointer; }
+.reference-tag-action { text-decoration: none; }
+@media (min-width: 761px) {
+  .mail-shell, .mail-shell.is-sidebar-collapsed { grid-template-columns: 68px 200px minmax(0, 1fr) 68px; }
+  .mail-shell.is-sidebar-collapsed { grid-template-columns: 68px 76px minmax(0, 1fr) 68px; }
+  .workspace-header { grid-column: 1 / -1; }
+  .reference-app-rail { grid-column: 1; grid-row: 2; }
+  .mail-sidebar { grid-column: 2; grid-row: 2; padding: 24px 16px; }
+  .reference-utility-rail { grid-column: 4; grid-row: 2; }
+  .mail-content { grid-column: 3; grid-row: 2; margin: 24px 16px 0; }
+  .sidebar-rail { display: none; }
+  .sidebar-compose { min-height: 40px; margin: 0 0 28px; border-radius: 12px; font-size: 16px; font-weight: 500; }
+  .mailbox-heading { padding: 4px 0; font-size: 14px; }
+  .mailbox-link { min-height: 40px; padding: 0 12px; font-size: 14px; }
+  .mailbox-link > svg { display: none; }
+  .mailbox-link.is-selected { color: var(--ink); font-weight: 400; }
+  .mailbox-unread { font-size: 12px; }
+  .sidebar-section-label { margin: 12px 0 4px; border: 0; padding: 4px 0; color: var(--muted); font-weight: 400; }
+  .sidebar-footer { display: none; }
+  .mail-header { min-height: 64px; height: 64px; }
+  .mail-header-navigation { flex-direction: row; }
+  .pagination { margin-left: auto; }
+  .mail-header .mail-breadcrumb h1 { font-size: 20px; font-weight: 500; }
+  .mail-workspace { grid-template-columns: minmax(300px, 420px) minmax(0, 1fr); }
+  .conversation-pane-title { font-size: 16px; font-weight: 500; }
+  .conversation-pane .message-toolbar { min-height: 52px; padding: 0 12px; }
+  .conversation-pane .result-count { display: none; }
+  .conversation-pane .toolbar-action { gap: 8px; font-size: 14px; }
+  .conversation-pane .conversation-list-item { min-height: 128px; }
+  .conversation-pane .message-row .message-subject { font-size: 16px; font-weight: 500; }
+  .conversation-pane .message-row .message-preview { font-size: 14px; }
+  .conversation-pane .message-row .message-sender, .conversation-pane .message-row .message-date { font-size: 12px; }
+  .reading-pane .message-detail { display: block; padding: 0; }
+  .reading-pane .message-detail > .detail-back { margin: 12px 20px; }
+  .reading-pane .message-detail:has(.message-detail-paper) > .detail-back { position: absolute; width: 1px; height: 1px; min-height: 0; overflow: hidden; clip-path: inset(50%); }
+  .reading-pane .message-detail:has(.message-detail-paper) > .detail-back:focus-visible { position: static; width: auto; height: auto; min-height: 40px; clip-path: none; }
+  .message-detail-paper { border: 0; border-radius: 0; padding: 0; box-shadow: none; }
+  .message-detail-header { display: block; border: 0; padding: 0; }
+  .message-detail-top { min-height: 60px; align-items: center; border-bottom: 1px solid var(--line); padding: 8px 20px; }
+  .message-detail-title-group .eyebrow { display: none; }
+  .message-detail-header h2 { color: var(--ink); font-size: 20px; font-weight: 500; letter-spacing: 0; }
+  .message-detail-sender-row { grid-template-columns: 40px minmax(0, 1fr); border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: var(--surface); padding: 16px 20px; }
+  .message-detail-sender-copy { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+  .message-detail-sender-copy strong { color: var(--ink); font-size: 14px; font-weight: 500; }
+  .message-detail-timestamp { grid-column: 2; background: transparent; padding: 0; color: var(--muted); font-size: 12px; font-weight: 400; }
+  .message-body-section { padding: 24px 20px; }
+  .message-attachments, .message-external-links { margin: 0 20px; }
+  .compose-backdrop:not(.is-minimized) { inset: 96px 84px 16px 284px; }
+  .is-sidebar-collapsed .compose-backdrop:not(.is-minimized) { left: 160px; }
+  .compose-backdrop:not(.is-minimized) .compose-header h2 { font-size: 20px; font-weight: 500; }
+  .compose-backdrop:not(.is-minimized) .compose-form { padding: 0 20px 12px; }
+  .compose-backdrop:not(.is-minimized) .compose-field { min-height: 52px; padding: 0; }
+  .compose-backdrop:not(.is-minimized) .compose-field label, .compose-backdrop:not(.is-minimized) .compose-label { color: var(--muted); font-size: 14px; }
+  .compose-backdrop:not(.is-minimized) .compose-field input, .compose-backdrop:not(.is-minimized) .compose-static-value { font-size: 14px; }
+  .compose-backdrop:not(.is-minimized) .compose-body-field { min-height: 260px; padding: 0; }
+  .compose-backdrop:not(.is-minimized) .compose-body-field > label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .compose-backdrop:not(.is-minimized) .rich-text-editor { min-height: 260px; }
+  .compose-backdrop:not(.is-minimized) .rich-text-content { order: -1; min-height: 200px; padding: 20px 0; }
+  .compose-backdrop:not(.is-minimized) .rich-text-toolbar { border-top: 1px solid var(--line); border-bottom: 0; }
+  .compose-backdrop:not(.is-minimized) .rich-text-tool { font-weight: 400; }
+  .compose-backdrop:not(.is-minimized) .rich-text-tool img { display: block; }
+}
+@media (max-width: 760px) {
+  .reference-app-rail, .reference-utility-rail { display: none; }
+  .reference-sidebar-shortcuts, .reference-sidebar-sections { display: none; }
+  .reference-mail-tools { display: none; }
+  .reference-message-tools { gap: 12px; padding: 8px 14px; }
+  .reference-message-tools a span { display: none; }
+  .reference-message-metadata { margin: 0; }
+}
+.reference-theme-placeholder { display: grid; width: 36px; height: 36px; flex: none; place-items: center; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.reference-theme-placeholder img, .reference-heading-icon img { display: block; }
+.reference-heading-icon { display: grid !important; width: 28px; height: 28px; flex: none; place-items: center; border: 1px solid var(--line); border-radius: 8px; }
+@media (min-width: 761px) {
+  .mail-header-navigation { flex-direction: row-reverse; }
+  .mail-breadcrumb > .reference-heading-icon { display: grid; }
+  .compose-backdrop:not(.is-minimized) .compose-form { position: relative; padding-bottom: 12px; }
+  .compose-backdrop:not(.is-minimized) .rich-text-toolbar { position: absolute; z-index: 2; right: 200px; bottom: 12px; left: 54px; flex-wrap: nowrap; overflow-x: auto; border: 0; background: var(--surface); }
+  .compose-backdrop:not(.is-minimized) .compose-actions { z-index: 1; min-height: 56px; border-top: 1px solid var(--line); pointer-events: none; }
+  .compose-backdrop:not(.is-minimized) .compose-actions > * { pointer-events: auto; }
+  .compose-backdrop:not(.is-minimized) .compose-attach-button { order: 0; }
+  .compose-backdrop:not(.is-minimized) .compose-action-spacer { order: 1; }
+  .compose-backdrop:not(.is-minimized) .compose-secondary-action { order: 2; }
+  .compose-backdrop:not(.is-minimized) .compose-send-button { order: 3; }
+  .compose-backdrop:not(.is-minimized) .compose-format-label { display: none; }
+}
+@media (max-width: 760px) {
+  .workspace-header .reference-theme-placeholder { display: none; }
+  .reference-mail-tools { display: block; margin: 0; }
+  .reference-mail-tools .sidebar-tools { display: block; }
+  .reading-pane .message-detail { padding: 0; }
+  .message-detail-paper { border: 0; border-radius: 0; padding: 0; box-shadow: none; }
+  .message-detail-header { display: block; border: 0; padding: 0; }
+  .message-detail-top { align-items: center; border-bottom: 1px solid var(--line); padding: 12px 14px; }
+  .message-detail-title-group .eyebrow { display: none; }
+  .message-detail-header h2 { font-size: 20px; font-weight: 500; }
+  .message-detail-sender-row { grid-template-columns: 34px minmax(0, 1fr); border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: var(--surface); padding: 14px; }
+  .message-detail-timestamp { grid-column: 2; background: transparent; padding: 0; color: var(--muted); font-weight: 400; }
+  .message-body-section { padding: 18px 14px; }
+}
+@media (min-width: 761px) {
+  .reference-mail-tools .sidebar-rail { display: flex; }
+}
+.reference-sender-actions { display: flex; grid-column: 3; grid-row: 1; align-items: center; gap: 4px; }
+.reference-sender-actions button { display: grid; width: 32px; height: 36px; place-items: center; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+@media (min-width: 761px) {
+  .message-detail-sender-row { grid-template-columns: 40px minmax(0, 1fr) auto; }
+  .compose-backdrop:not(.is-minimized) .rich-text-toolbar { right: 250px; left: 65px; }
+}
+@media (max-width: 760px) {
+  .message-detail-sender-row { grid-template-columns: 34px minmax(0, 1fr) auto; }
+}
