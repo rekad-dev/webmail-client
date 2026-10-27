@@ -2,7 +2,8 @@ export type MailIconName =
   | "mail" | "inbox" | "send" | "file" | "archive" | "trash"
   | "folder" | "search" | "chevron-left" | "chevron-right" | "chevron-down"
   | "refresh" | "plus" | "more" | "bell" | "offline" | "close"
-  | "minimize" | "expand" | "paperclip" | "star" | "sidebar";
+  | "minimize" | "expand" | "paperclip" | "star" | "sidebar"
+  | "reply" | "forward";
 
 const paths: Record<MailIconName, string> = {
   mail: "M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Zm-1 1 9 7 9-7",
@@ -27,6 +28,8 @@ const paths: Record<MailIconName, string> = {
   paperclip: "m8 12 7-7a4 4 0 0 1 6 6L10 22a6 6 0 0 1-8-8L13 3m-8 14a2 2 0 0 0 3 3l10-10",
   star: "m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8-6.2-3.2L5.8 21 7 14.2 2 9.3l6.9-1L12 2Z",
   sidebar: "M3 4h18v16H3V4Zm6 0v16M5 8h2m-2 4h2",
+  reply: "M9 17 4 12l5-5M4 12h11a5 5 0 0 1 5 5v1",
+  forward: "m15 17 5-5-5-5M20 12H9a5 5 0 0 0-5 5v1",
 };
 
 export function MailIcon({ name, size = 20, className }: {

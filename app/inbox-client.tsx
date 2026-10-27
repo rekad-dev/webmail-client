@@ -48,7 +48,7 @@ interface EmailSummary {
 
 interface ThreadMessage extends EmailSummary {}
 
-interface ThreadView {
+export interface ThreadView {
   threadId: string;
   messages: ThreadMessage[];
   truncated: boolean;
@@ -76,7 +76,7 @@ interface EmailAttachment {
   size: number | null;
 }
 
-interface EmailDetail {
+export interface EmailDetail {
   id: string;
   emailState: string;
   threadId: string;
@@ -143,7 +143,7 @@ interface ComposeRequest {
 
 type BodyFormat = "formatted" | "plain";
 
-function senderLabel(email: EmailSummary): string {
+function senderLabel(email: { from: Array<{ name: string | null; email: string }> }): string {
   const sender = email.from[0];
   if (!sender) return "Unknown sender";
   const name = sender.name?.trim();
@@ -151,13 +151,13 @@ function senderLabel(email: EmailSummary): string {
   return name || address || "Unknown sender";
 }
 
-function senderInitials(email: EmailSummary): string {
+function senderInitials(email: { from: Array<{ name: string | null; email: string }> }): string {
   const name = senderLabel(email).split("@")[0];
   return name.split(/[\s._-]+/).filter(Boolean).slice(0, 2)
     .map((part) => Array.from(part)[0]).join("").toLocaleUpperCase() || "?";
 }
 
-function avatarTone(email: EmailSummary): number {
+function avatarTone(email: { from: Array<{ name: string | null; email: string }> }): number {
   return Array.from(senderLabel(email)).reduce((sum, letter) => sum + (letter.codePointAt(0) ?? 0), 0) % 6;
 }
 
@@ -585,49 +585,124 @@ function MessageDetailView({
 
       <article className="message-detail-paper">
         <header className="message-detail-header">
-          <h2 id="message-detail-title" ref={headingRef} tabIndex={-1}>
-            {detail.subject?.trim() || "(no subject)"}
-          </h2>
-          <div className="message-action-bar" role="group" aria-label="Message actions">
-            <button
-              aria-pressed={offlineSaved}
-              disabled={!offlineAvailable || offlineSavePending}
-              onClick={() => onToggleOffline(detail)}
-              type="button"
-            >
-              {offlineSavePending
-                ? "Saving…"
-                : offlineSaved
-                  ? "Remove offline copy"
-                  : "Save offline"}
-            </button>
-            <button disabled={actionPending} onClick={() => onAction(detail.isUnread ? "mark_read" : "mark_unread")} type="button">
-              {detail.isUnread ? "Mark read" : "Mark unread"}
-            </button>
-            <button aria-pressed={detail.isStarred} disabled={actionPending} onClick={() => onAction(detail.isStarred ? "unstar" : "star")} type="button">
-              {detail.isStarred ? "Unstar" : "Star"}
-            </button>
-            <button disabled={actionPending} onClick={() => onAction("archive")} type="button">Archive</button>
-            <button disabled={actionPending} onClick={() => onAction("trash")} type="button">Trash</button>
-            <label className="message-move-control">
-              <span className="visually-hidden">Move message to mailbox</span>
-              <select
-                aria-label="Move message to mailbox"
-                defaultValue=""
-                disabled={actionPending}
-                onChange={(event) => {
-                  if (event.target.value) onMove(event.target.value);
-                  event.target.value = "";
-                }}
-              >
-                <option value="">Move to…</option>
-                {mailboxes.map((mailbox) => (
-                  <option key={mailbox.id} value={mailbox.id}>{mailbox.name}</option>
-                ))}
-              </select>
-            </label>
-            <button disabled={actionPending} onClick={(event) => onReply(detail, event.currentTarget)} type="button">Reply</button>
-            <button disabled={actionPending} onClick={(event) => onForward(detail, event.currentTarget)} type="button">Forward</button>
+          <div className="message-detail-top">
+            <div className="message-detail-title-group">
+              <p className="eyebrow">Message detail</p>
+              <h2 id="message-detail-title" ref={headingRef} tabIndex={-1}>
+                {detail.subject?.trim() || "(no subject)"}
+                {detail.isStarred ? <span className="conversation-star" aria-hidden="true"> ★</span> : null}
+              </h2>
+            </div>
+            <div className="message-action-bar" role="group" aria-label="Message actions">
+              <div className="bulk-action-group">
+                <button
+                  aria-pressed={offlineSaved}
+                  className="toolbar-action"
+                  disabled={!offlineAvailable || offlineSavePending}
+                  onClick={() => onToggleOffline(detail)}
+                  type="button"
+                >
+                  <MailIcon name="offline" size={18} />
+                  <span>
+                    {offlineSavePending
+                      ? "Saving…"
+                      : offlineSaved
+                        ? "Remove offline copy"
+                        : "Save offline"}
+                  </span>
+                </button>
+                <button
+                  className="toolbar-action"
+                  disabled={actionPending}
+                  onClick={() => onAction(detail.isUnread ? "mark_read" : "mark_unread")}
+                  type="button"
+                >
+                  <MailIcon name="mail" size={18} />
+                  <span>{detail.isUnread ? "Mark read" : "Mark unread"}</span>
+                </button>
+                <button
+                  aria-pressed={detail.isStarred}
+                  className="toolbar-action"
+                  disabled={actionPending}
+                  onClick={() => onAction(detail.isStarred ? "unstar" : "star")}
+                  type="button"
+                >
+                  <MailIcon name="star" size={18} />
+                  <span>{detail.isStarred ? "Unstar" : "Star"}</span>
+                </button>
+                <button
+                  className="toolbar-action"
+                  disabled={actionPending}
+                  onClick={() => onAction("archive")}
+                  type="button"
+                >
+                  <MailIcon name="archive" size={18} />
+                  <span>Archive</span>
+                </button>
+                <label className={`toolbar-action toolbar-folder message-move-control${actionPending ? " is-disabled" : ""}`}>
+                  <MailIcon name="folder" size={18} />
+                  <span>Move to…</span>
+                  <span className="visually-hidden">Move message to mailbox</span>
+                  <select
+                    aria-label="Move message to mailbox"
+                    defaultValue=""
+                    disabled={actionPending}
+                    onChange={(event) => {
+                      if (event.target.value) onMove(event.target.value);
+                      event.target.value = "";
+                    }}
+                  >
+                    <option value="">Move to…</option>
+                    {mailboxes.map((mailbox) => (
+                      <option key={mailbox.id} value={mailbox.id}>{mailbox.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  className="toolbar-action"
+                  disabled={actionPending}
+                  onClick={() => onAction("trash")}
+                  type="button"
+                >
+                  <MailIcon name="trash" size={18} />
+                  <span>Trash</span>
+                </button>
+              </div>
+              <div className="message-reply-actions">
+                <button
+                  className="compose-launch-button message-reply-button"
+                  disabled={actionPending}
+                  onClick={(event) => onReply(detail, event.currentTarget)}
+                  type="button"
+                >
+                  <MailIcon name="reply" size={18} />
+                  <span>Reply</span>
+                </button>
+                <button
+                  className="compose-secondary-action message-forward-button"
+                  disabled={actionPending}
+                  onClick={(event) => onForward(detail, event.currentTarget)}
+                  type="button"
+                >
+                  <MailIcon name="forward" size={18} />
+                  <span>Forward</span>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div className="message-detail-sender-row">
+            <span className={`message-avatar avatar-tone-${avatarTone(detail)}`} aria-hidden="true">
+              {senderInitials(detail)}
+            </span>
+            <div className="message-detail-sender-copy">
+              <strong>{senderLabel(detail)}</strong>
+              <span>{detail.from[0]?.email ? `<${detail.from[0].email}>` : "Unknown address"}</span>
+            </div>
+            {receivedAt || sentAt ? (
+              <time className="message-detail-timestamp" dateTime={(detail.receivedAt ?? detail.sentAt) ?? undefined}>
+                {receivedAt ?? sentAt}
+              </time>
+            ) : null}
           </div>
           {actionError ? <p className="mail-alert" role="alert">{actionError}</p> : null}
           {offlineSaveError ? <p className="mail-alert" role="alert">{offlineSaveError}</p> : null}
@@ -741,11 +816,16 @@ function MessageDetailView({
             <ul>
               {detail.attachments.map((attachment) => (
                 <li key={`${attachment.attachmentIndex}-${attachment.name ?? "attachment"}`}>
-                  <span className="attachment-name" dir="auto">
-                    {attachment.name || "Unnamed attachment"}
+                  <span className="compose-file-icon" aria-hidden="true">
+                    <MailIcon name="file" size={16} />
                   </span>
-                  <span className="attachment-details">
-                    {attachment.type || "Type unavailable"} · {formatFileSize(attachment.size)}
+                  <span className="compose-attachment-info">
+                    <span className="attachment-name" dir="auto">
+                      {attachment.name || "Unnamed attachment"}
+                    </span>
+                    <span className="attachment-details">
+                      {attachment.type || "Type unavailable"} · {formatFileSize(attachment.size)}
+                    </span>
                   </span>
                   {attachment.size !== null && attachment.size > MAX_ATTACHMENT_DOWNLOAD_BYTES ? (
                     <span className="attachment-over-limit">Over 4 MiB</span>
@@ -874,12 +954,22 @@ function mailActionErrorMessage(error: string): string {
   }
 }
 
-export function InboxClient({ accountName, accountEmail, canManageBanners = false, localPreview = false, initialListing }: {
+export function InboxClient({
+  accountName,
+  accountEmail,
+  canManageBanners = false,
+  localPreview = false,
+  initialListing,
+  initialThreads,
+  initialDetails,
+}: {
   accountName?: string | null;
   accountEmail?: string | null;
   canManageBanners?: boolean;
   localPreview?: boolean;
   initialListing?: MailListing;
+  initialThreads?: Record<string, ThreadView>;
+  initialDetails?: Record<string, EmailDetail>;
 }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [selectedThreadIds, setSelectedThreadIds] = useState<Set<string>>(() => new Set());
@@ -1648,7 +1738,21 @@ export function InboxClient({ accountName, accountEmail, canManageBanners = fals
   }
 
   function openMessage(emailId: string) {
-    if (localPreview) return;
+    if (localPreview) {
+      const sampleDetail = initialDetails?.[emailId];
+      if (!sampleDetail) return;
+      setManualRefreshTarget(null);
+      restoreMessageFocus.current = true;
+      setActionError(null);
+      setOfflineSaveError(null);
+      lastOpenedMessageIdRef.current = emailId;
+      setDetailLoading(false);
+      setDetailError(null);
+      setReadUpdateError(false);
+      setEmailDetail(sampleDetail);
+      setOpenEmailId(emailId);
+      return;
+    }
     setManualRefreshTarget(null);
     restoreMessageFocus.current = true;
     setActionError(null);
@@ -1661,7 +1765,22 @@ export function InboxClient({ accountName, accountEmail, canManageBanners = fals
   }
 
   function openThread(threadId: string) {
-    if (localPreview) return;
+    if (localPreview) {
+      const sampleThread = initialThreads?.[threadId];
+      if (!sampleThread) return;
+      setManualRefreshTarget(null);
+      restoreMessageFocus.current = false;
+      restoreThreadFocus.current = true;
+      lastOpenedThreadIdRef.current = threadId;
+      setOpenEmailId(null);
+      setActionError(null);
+      setEmailDetail(null);
+      setOpenThreadId(threadId);
+      setThreadLoading(false);
+      setThreadView(sampleThread);
+      setThreadError(null);
+      return;
+    }
     setManualRefreshTarget(null);
     restoreMessageFocus.current = false;
     restoreThreadFocus.current = true;
@@ -2070,9 +2189,9 @@ export function InboxClient({ accountName, accountEmail, canManageBanners = fals
                       return next;
                     })} />
                 </label>
-                <button type="button" className={`message-row${message.isUnread ? " is-unread" : ""}`} disabled={localPreview || actionPending}
+                <button type="button" className={`message-row${message.isUnread ? " is-unread" : ""}`} disabled={actionPending || (localPreview && !initialThreads?.[message.threadId])}
                   data-email-id={message.id} data-thread-id={message.threadId}
-                  title={localPreview ? "Opening sample messages is disabled in the local preview" : undefined}
+                  title={localPreview && !initialThreads?.[message.threadId] ? "Opening sample messages is disabled in the local preview" : undefined}
                   aria-label={`${message.isDraft ? "Edit saved draft" : `Open ${message.isUnread ? "unread" : "read"} conversation`}${message.isStarred ? ", starred" : ""} from ${senderLabel(message)}: ${message.subject?.trim() || "(no subject)"}`}
                   onClick={(event) => message.isDraft ? openSavedDraft(message.id, event.currentTarget, message.subject) : openThread(message.threadId)}>
                   <span className={`message-avatar avatar-tone-${avatarTone(message)}`} aria-hidden="true">{senderInitials(message)}</span>
@@ -2123,37 +2242,70 @@ export function InboxClient({ accountName, accountEmail, canManageBanners = fals
             {threadView && !threadLoading ? (
               <>
                 <header className="thread-header">
-                  <div>
-                    <p className="eyebrow">Conversation · {threadView.messages.length}{threadView.truncated ? "+" : ""} messages</p>
+                  <div className="thread-title-group">
+                    <p className="eyebrow">Conversation · {threadView.messages.length}{threadView.truncated ? "+" : ""} {threadView.messages.length === 1 ? "message" : "messages"}</p>
                     <h2>{threadView.messages[threadView.messages.length - 1]?.subject?.trim() || "(no subject)"}</h2>
                   </div>
                   <div className="thread-actions" role="group" aria-label="Conversation actions">
-                    <button disabled={actionPending || threadView.truncated} onClick={() => void performMailAction(threadView.messages.some((message) => message.isUnread) ? "mark_read" : "mark_unread", { threadId: openThreadId })} type="button">
-                      {threadView.messages.some((message) => message.isUnread) ? "Mark all read" : "Mark all unread"}
-                    </button>
-                    <button disabled={actionPending || threadView.truncated} onClick={() => void performMailAction(threadView.messages.some((message) => message.isStarred) ? "unstar" : "star", { threadId: openThreadId })} type="button">
-                      {threadView.messages.some((message) => message.isStarred) ? "Unstar all" : "Star all"}
-                    </button>
-                    <label>
-                      <span className="visually-hidden">Move conversation to mailbox</span>
-                      <select
-                        aria-label="Move conversation to mailbox"
-                        defaultValue=""
-                        disabled={actionPending || threadView.truncated}
-                        onChange={(event) => {
-                          const destinationId = event.target.value;
-                          if (destinationId) void performMailAction("move", { threadId: openThreadId }, destinationId);
-                          event.target.value = "";
-                        }}
+                    <div className="bulk-action-group">
+                      <button
+                        className="toolbar-action"
+                        disabled={localPreview || actionPending || threadView.truncated}
+                        onClick={() => void performMailAction(threadView.messages.some((message) => message.isUnread) ? "mark_read" : "mark_unread", { threadId: openThreadId })}
+                        type="button"
                       >
-                        <option value="">Move to…</option>
-                        {(listing?.mailboxes ?? []).map((mailbox) => <option key={mailbox.id} value={mailbox.id}>{mailbox.name}</option>)}
-                      </select>
-                    </label>
-                    <button disabled={actionPending || threadView.truncated} onClick={() => void performMailAction("archive", { threadId: openThreadId })} type="button">Archive</button>
-                    <button disabled={actionPending || threadView.truncated} onClick={() => void performMailAction("trash", { threadId: openThreadId })} type="button">Trash</button>
+                        <MailIcon name="mail" size={18} />
+                        <span>{threadView.messages.some((message) => message.isUnread) ? "Mark all read" : "Mark all unread"}</span>
+                      </button>
+                      <button
+                        className="toolbar-action"
+                        disabled={localPreview || actionPending || threadView.truncated}
+                        onClick={() => void performMailAction(threadView.messages.some((message) => message.isStarred) ? "unstar" : "star", { threadId: openThreadId })}
+                        type="button"
+                      >
+                        <MailIcon name="star" size={18} />
+                        <span>{threadView.messages.some((message) => message.isStarred) ? "Unstar all" : "Star all"}</span>
+                      </button>
+                      <label className={`toolbar-action toolbar-folder${localPreview || actionPending || threadView.truncated ? " is-disabled" : ""}`}>
+                        <MailIcon name="folder" size={18} />
+                        <span>Move to…</span>
+                        <span className="visually-hidden">Move conversation to mailbox</span>
+                        <select
+                          aria-label="Move conversation to mailbox"
+                          defaultValue=""
+                          disabled={localPreview || actionPending || threadView.truncated}
+                          onChange={(event) => {
+                            const destinationId = event.target.value;
+                            if (destinationId) void performMailAction("move", { threadId: openThreadId }, destinationId);
+                            event.target.value = "";
+                          }}
+                        >
+                          <option value="">Move to…</option>
+                          {(listing?.mailboxes ?? []).map((mailbox) => <option key={mailbox.id} value={mailbox.id}>{mailbox.name}</option>)}
+                        </select>
+                      </label>
+                      <button
+                        className="toolbar-action"
+                        disabled={localPreview || actionPending || threadView.truncated}
+                        onClick={() => void performMailAction("archive", { threadId: openThreadId })}
+                        type="button"
+                      >
+                        <MailIcon name="archive" size={18} />
+                        <span>Archive</span>
+                      </button>
+                      <button
+                        className="toolbar-action"
+                        disabled={localPreview || actionPending || threadView.truncated}
+                        onClick={() => void performMailAction("trash", { threadId: openThreadId })}
+                        type="button"
+                      >
+                        <MailIcon name="trash" size={18} />
+                        <span>Trash</span>
+                      </button>
+                    </div>
                     {threadView.messages.some((message) => !message.isDraft) ? (
                       <button
+                        className="compose-launch-button thread-reply-button"
                         disabled={actionPending}
                         onClick={() => {
                           const latestMessage = [...threadView.messages]
@@ -2163,7 +2315,8 @@ export function InboxClient({ accountName, accountEmail, canManageBanners = fals
                         }}
                         type="button"
                       >
-                        Reply
+                        <MailIcon name="reply" size={18} />
+                        <span>Reply</span>
                       </button>
                     ) : null}
                   </div>
@@ -2183,36 +2336,78 @@ export function InboxClient({ accountName, accountEmail, canManageBanners = fals
                           : openMessage(message.id)}
                         type="button"
                       >
-                        <span className="message-state-dot" aria-hidden="true" />
+                        <span className={`message-avatar avatar-tone-${avatarTone(message)}`} aria-hidden="true">
+                          {senderInitials(message)}
+                        </span>
                         <span className="message-copy">
-                          <span className="message-sender">{senderLabel(message)}</span>
-                          <span className="message-subject">{message.subject?.trim() || "(no subject)"}{message.isStarred ? " ★" : ""}</span>
+                          <span className="message-sender">
+                            {senderLabel(message)}
+                            {message.isStarred ? <span className="conversation-star" aria-hidden="true"> ★</span> : null}
+                          </span>
+                          <span className="message-subject">{message.subject?.trim() || "(no subject)"}</span>
                           <span className="message-preview">{message.preview}</span>
                         </span>
                         <time className="message-date" dateTime={message.receivedAt ?? undefined}>{formatDate(message.receivedAt)}</time>
                       </button>
                       {!message.isDraft ? (
                         <div className="thread-message-actions" role="group" aria-label={`Actions for message from ${senderLabel(message)}`}>
-                          <button disabled={actionPending} onClick={() => void performMailAction(message.isUnread ? "mark_read" : "mark_unread", { emailId: message.id })} type="button">{message.isUnread ? "Mark read" : "Mark unread"}</button>
-                          <button aria-pressed={message.isStarred} disabled={actionPending} onClick={() => void performMailAction(message.isStarred ? "unstar" : "star", { emailId: message.id })} type="button">{message.isStarred ? "Unstar" : "Star"}</button>
-                          <label>
-                            <span className="visually-hidden">Move this message to mailbox</span>
-                            <select
-                              aria-label="Move this message to mailbox"
-                              defaultValue=""
-                              disabled={actionPending}
-                              onChange={(event) => {
-                                const destinationId = event.target.value;
-                                if (destinationId) void performMailAction("move", { emailId: message.id }, destinationId);
-                                event.target.value = "";
-                              }}
+                          <div className="bulk-action-group">
+                            <button
+                              className="toolbar-action"
+                              disabled={localPreview || actionPending}
+                              onClick={() => void performMailAction(message.isUnread ? "mark_read" : "mark_unread", { emailId: message.id })}
+                              type="button"
                             >
-                              <option value="">Move to…</option>
-                              {(listing?.mailboxes ?? []).map((mailbox) => <option key={mailbox.id} value={mailbox.id}>{mailbox.name}</option>)}
-                            </select>
-                          </label>
-                          <button disabled={actionPending} onClick={() => void performMailAction("archive", { emailId: message.id })} type="button">Archive</button>
-                          <button disabled={actionPending} onClick={() => void performMailAction("trash", { emailId: message.id })} type="button">Trash</button>
+                              <MailIcon name="mail" size={16} />
+                              <span>{message.isUnread ? "Mark read" : "Mark unread"}</span>
+                            </button>
+                            <button
+                              aria-pressed={message.isStarred}
+                              className="toolbar-action"
+                              disabled={localPreview || actionPending}
+                              onClick={() => void performMailAction(message.isStarred ? "unstar" : "star", { emailId: message.id })}
+                              type="button"
+                            >
+                              <MailIcon name="star" size={16} />
+                              <span>{message.isStarred ? "Unstar" : "Star"}</span>
+                            </button>
+                            <label className={`toolbar-action toolbar-folder${localPreview || actionPending ? " is-disabled" : ""}`}>
+                              <MailIcon name="folder" size={16} />
+                              <span>Move to…</span>
+                              <span className="visually-hidden">Move this message to mailbox</span>
+                              <select
+                                aria-label="Move this message to mailbox"
+                                defaultValue=""
+                                disabled={localPreview || actionPending}
+                                onChange={(event) => {
+                                  const destinationId = event.target.value;
+                                  if (destinationId) void performMailAction("move", { emailId: message.id }, destinationId);
+                                  event.target.value = "";
+                                }}
+                              >
+                                <option value="">Move to…</option>
+                                {(listing?.mailboxes ?? []).map((mailbox) => <option key={mailbox.id} value={mailbox.id}>{mailbox.name}</option>)}
+                              </select>
+                            </label>
+                            <button
+                              className="toolbar-action"
+                              disabled={localPreview || actionPending}
+                              onClick={() => void performMailAction("archive", { emailId: message.id })}
+                              type="button"
+                            >
+                              <MailIcon name="archive" size={16} />
+                              <span>Archive</span>
+                            </button>
+                            <button
+                              className="toolbar-action"
+                              disabled={localPreview || actionPending}
+                              onClick={() => void performMailAction("trash", { emailId: message.id })}
+                              type="button"
+                            >
+                              <MailIcon name="trash" size={16} />
+                              <span>Trash</span>
+                            </button>
+                          </div>
                         </div>
                       ) : null}
                     </li>

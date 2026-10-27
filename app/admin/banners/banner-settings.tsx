@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { RichTextEditor } from "../../rich-text-editor";
 
@@ -109,11 +110,21 @@ export function BannerSettings() {
   return (
     <main className="admin-banner-shell">
       <header className="admin-banner-header">
-        <div>
-          <p className="eyebrow">core@rekad.id</p>
-          <h1>Outgoing banners</h1>
+        <div className="admin-banner-brand-group">
+          <a className="mail-brand sign-in-brand-link" href="/">
+            <Image className="brand-image" src="/logo.png" alt="rekad logo" width={38} height={39} priority />
+            <span className="brand-wordmark">rekad</span>
+            <span className="brand-name">Mail</span>
+          </a>
+          <div className="admin-banner-heading">
+            <p className="eyebrow">core@rekad.id</p>
+            <h1>Outgoing banners</h1>
+          </div>
         </div>
-        <a href="/">Back to inbox</a>
+        <a className="admin-banner-back" href="/">
+          <span aria-hidden="true">←</span>
+          Back to inbox
+        </a>
       </header>
       <section aria-busy={loading || saving} className="admin-banner-card">
         <p>

@@ -1,7 +1,11 @@
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { InboxClient } from "../inbox-client";
-import { localPreviewListing } from "./sample-data";
+import {
+  localPreviewDetails,
+  localPreviewListing,
+  localPreviewThreads,
+} from "./sample-data";
 
 function isLoopbackHost(host: string | null): boolean {
   if (!host) return false;
@@ -21,7 +25,9 @@ export default async function LocalPreviewPage() {
     <InboxClient
       accountEmail="preview@example.invalid"
       accountName="Local preview"
+      initialDetails={localPreviewDetails}
       initialListing={localPreviewListing}
+      initialThreads={localPreviewThreads}
       localPreview
     />
   );
