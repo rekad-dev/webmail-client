@@ -1965,8 +1965,7 @@ export function InboxClient({
 
   return (
     <main className={`mail-shell${sidebarCollapsed ? " is-sidebar-collapsed" : ""}`}>
-      <aside className="mail-sidebar" aria-label="Mail navigation">
-        <div className="sidebar-brand-row">
+      <header className="workspace-header">
           <a className="mail-brand" href="/" aria-label="rekad Mail home">
             <Image
               alt=""
@@ -1979,13 +1978,6 @@ export function InboxClient({
             <span className="brand-wordmark">rekad</span>
             <span className="brand-name">Mail</span>
           </a>
-          <button className="icon-button sidebar-collapse" type="button"
-            aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
-            aria-expanded={!sidebarCollapsed} onClick={() => setSidebarCollapsed((value) => !value)}>
-            <MailIcon name="sidebar" size={19} />
-          </button>
-        </div>
-
         <div className="sidebar-search">
           <div className="sidebar-search-input">
             <label className="visually-hidden" htmlFor="mail-search">Search mail</label>
@@ -2004,6 +1996,47 @@ export function InboxClient({
             </select>
           </label>
         </div>
+
+          <div className="mail-header-account">
+            <button className="icon-button refresh-button" disabled={localPreview || currentViewLoading} aria-busy={currentViewLoading}
+              onClick={refresh} type="button" aria-label={refreshLabel}
+              title={refreshLabel}><MailIcon name="refresh" size={18} /></button>
+            <button className="icon-button header-notification" disabled={localPreview || !notificationsSupported || !notificationsReady}
+              aria-label={notificationsEnabled ? "Turn off new mail alerts" : "Enable new mail alerts"}
+              aria-pressed={notificationsEnabled} onClick={() => void toggleNewMailNotifications()} type="button"
+              title={!notificationsSupported ? "Browser notifications are unavailable" : notificationsEnabled ? "New mail alerts are enabled" : "Enable new mail alerts"}>
+              <MailIcon name="bell" size={18} />
+            </button>
+            <span className="header-divider" />
+            {localPreview ? (
+              <span className="local-preview-account-label">Local preview</span>
+            ) : (
+              <details className="account-menu">
+                <summary className="account-trigger"><span>{displayAccount}</span><MailIcon name="chevron-down" size={14} /></summary>
+                <div className="account-menu-popover">
+                  <p>{accountEmail || "Signed in to rekad Mail"}</p>
+                  {canManageBanners ? <a className="account-menu-settings-link" href="/admin/banners">Manage core mail banners</a> : null}
+                  <PasswordChangeForm />
+                  <SignOutButton />
+                </div>
+              </details>
+            )}
+          </div>
+      </header>
+      <aside className="mail-sidebar" aria-label="Mail navigation">
+        <div className="sidebar-rail">
+          <button className="icon-button sidebar-collapse" type="button"
+            aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
+            aria-expanded={!sidebarCollapsed} onClick={() => setSidebarCollapsed((value) => !value)}>
+            <MailIcon name="sidebar" size={19} />
+          </button>
+        </div>
+        <button className="compose-launch-button sidebar-compose" disabled={!listing || isLoading}
+          onClick={(event) => openCompose("new", undefined, undefined, event.currentTarget)} ref={composeButtonRef}
+          type="button" aria-label={isComposeOpen ? "Restore open message" : "Compose new message"}>
+          <MailIcon name="plus" size={20} />{isComposeOpen ? "Restore Message" : "Compose"}
+        </button>
+        <p className="sidebar-section-label mailbox-heading">Mailboxes</p>
 
         <nav className="mailbox-nav" aria-label="Mailboxes">
           {listing?.mailboxes.filter((mailbox) => mailbox.role !== null).map(renderMailbox)}
@@ -2057,31 +2090,7 @@ export function InboxClient({
           <span className="visually-hidden" role="status" aria-live="polite" aria-atomic="true">
             {!openEmailId && !openThreadId ? listStatus : ""}
           </span>
-          <div className="mail-header-account">
-            <button className="icon-button refresh-button" disabled={localPreview || currentViewLoading} aria-busy={currentViewLoading}
-              onClick={refresh} type="button" aria-label={refreshLabel}
-              title={refreshLabel}><MailIcon name="refresh" size={18} /></button>
-            <button className="icon-button header-notification" disabled={localPreview || !notificationsSupported || !notificationsReady}
-              aria-label={notificationsEnabled ? "Turn off new mail alerts" : "Enable new mail alerts"}
-              aria-pressed={notificationsEnabled} onClick={() => void toggleNewMailNotifications()} type="button"
-              title={!notificationsSupported ? "Browser notifications are unavailable" : notificationsEnabled ? "New mail alerts are enabled" : "Enable new mail alerts"}>
-              <MailIcon name="bell" size={18} />
-            </button>
-            <span className="header-divider" />
-            {localPreview ? (
-              <span className="local-preview-account-label">Local preview</span>
-            ) : (
-              <details className="account-menu">
-                <summary className="account-trigger"><span>{displayAccount}</span><MailIcon name="chevron-down" size={14} /></summary>
-                <div className="account-menu-popover">
-                  <p>{accountEmail || "Signed in to rekad Mail"}</p>
-                  {canManageBanners ? <a className="account-menu-settings-link" href="/admin/banners">Manage core mail banners</a> : null}
-                  <PasswordChangeForm />
-                  <SignOutButton />
-                </div>
-              </details>
-            )}
-          </div>
+
         </header>
 
         {localPreview ? (
@@ -2090,7 +2099,10 @@ export function InboxClient({
           </p>
         ) : null}
 
-        {!openEmailId && !openThreadId ? (
+        <div className={`mail-workspace${openThreadId || openEmailId ? " has-open-message" : ""}`}>
+        <section className="conversation-pane" aria-label="Message list">
+          <h2 className="conversation-pane-title">{searchText ? "Search results" : selectedMailbox?.name ?? "Inbox"}</h2>
+        {listing ? (
           <div className="message-toolbar" aria-label="Message list controls">
             <div className="bulk-toolbar">
               <label className="page-select" title="Select conversations on this page">
@@ -2100,7 +2112,7 @@ export function InboxClient({
                 <span className="visually-hidden">{selectedCount} selected</span>
               </label>
               <div className="bulk-action-group" role="group" aria-label="Selected conversation actions">
-                <button className="toolbar-action" disabled={localPreview || selectedCount === 0 || actionPending || !archiveAvailable}
+                <button className="toolbar-action" aria-label="Archive selected conversations" disabled={localPreview || selectedCount === 0 || actionPending || !archiveAvailable}
                   onClick={() => void performSelectedMailAction("archive")} title={archiveAvailable ? "Archive selected conversations" : "This account has no Archive mailbox"} type="button"><MailIcon name="archive" size={19} /><span>Archive</span></button>
                 <label className={`toolbar-action toolbar-folder${selectedCount === 0 || actionPending ? " is-disabled" : ""}`}>
                   <MailIcon name="folder" size={19} /><span>Folder</span>
@@ -2109,7 +2121,7 @@ export function InboxClient({
                     <option value="">Move to folder</option>{listing?.mailboxes.map((mailbox) => <option key={mailbox.id} value={mailbox.id}>{mailbox.name}</option>)}
                   </select>
                 </label>
-                <button className="toolbar-action" disabled={localPreview || selectedCount === 0 || actionPending || !trashAvailable}
+                <button className="toolbar-action" aria-label="Move selected conversations to Trash" disabled={localPreview || selectedCount === 0 || actionPending || !trashAvailable}
                   onClick={() => void performSelectedMailAction("trash")} title="Move selected conversations to Trash" type="button"><MailIcon name="trash" size={19} /><span>Delete</span></button>
                 <details className="selection-menu">
                   <summary className="icon-button" aria-label="More selected conversation actions"><MailIcon name="more" size={19} /></summary>
@@ -2123,9 +2135,6 @@ export function InboxClient({
             </div>
             <div className="message-toolbar-actions">
               <p className="result-count">{listStatus}</p>
-              <button className="compose-launch-button" disabled={!listing || isLoading}
-                onClick={(event) => openCompose("new", undefined, undefined, event.currentTarget)} ref={composeButtonRef}
-                type="button" aria-label={isComposeOpen ? "Restore open message" : "Compose new message"}><MailIcon name="plus" size={20} />{isComposeOpen ? "Restore Message" : "Write Message"}</button>
             </div>
           </div>
         ) : null}
@@ -2175,10 +2184,10 @@ export function InboxClient({
           </div>
         ) : null}
 
-        {!openEmailId && !openThreadId && listing && listing.messages.length > 0 ? (
+        {listing && listing.messages.length > 0 ? (
           <ol className={`message-list${isLoading ? " is-loading" : ""}`} aria-label="Conversations">
             {listing.messages.map((message) => (
-              <li className={`conversation-list-item${selectedThreadIds.has(message.threadId) ? " is-selected" : ""}`} key={message.threadId}>
+              <li className={`conversation-list-item${selectedThreadIds.has(message.threadId) ? " is-selected" : ""}${openThreadId === message.threadId ? " is-open" : ""}`} key={message.threadId}>
                 <label className="conversation-select">
                   <input aria-label={`Select conversation from ${senderLabel(message)}: ${message.subject?.trim() || "(no subject)"}`}
                     checked={selectedThreadIds.has(message.threadId)} disabled={localPreview || message.isDraft || actionPending || isLoading}
@@ -2196,7 +2205,7 @@ export function InboxClient({
                   onClick={(event) => message.isDraft ? openSavedDraft(message.id, event.currentTarget, message.subject) : openThread(message.threadId)}>
                   <span className={`message-avatar avatar-tone-${avatarTone(message)}`} aria-hidden="true">{senderInitials(message)}</span>
                   <span className="message-sender">{senderLabel(message)}{message.isStarred ? <span className="conversation-star" aria-hidden="true"> ★</span> : null}</span>
-                  <span className="message-copy"><span className="message-subject">{message.isDraft ? <em>Draft: </em> : null}{message.subject?.trim() || "(no subject)"}</span><span className="message-preview"> — {message.preview}</span></span>
+                  <span className="message-copy"><span className="message-subject">{message.isDraft ? <em>Draft: </em> : null}{message.subject?.trim() || "(no subject)"}</span><span className="message-preview">{message.preview}</span></span>
                   <time className="message-date" dateTime={message.receivedAt ?? undefined}>{formatDate(message.receivedAt)}</time>
                 </button>
                 {!localPreview && !message.isDraft ? (
@@ -2220,6 +2229,11 @@ export function InboxClient({
           </ol>
         ) : null}
 
+        </section>
+        <section className="reading-pane" aria-label="Reading pane">
+        {!openThreadId && !openEmailId ? (
+          <div className="reading-placeholder"><MailIcon name="mail" size={24} /><h2>Select a conversation</h2><p>Choose a message from the list to read it here.</p></div>
+        ) : null}
         {openThreadId && !openEmailId ? (
           <section className="thread-view" aria-label="Conversation">
             <button className="detail-back" onClick={closeThread} ref={threadBackButtonRef} type="button">
@@ -2446,6 +2460,9 @@ export function InboxClient({
             onToggleOffline={(detail) => void toggleOfflineCopy(detail)}
           />
         ) : null}
+
+        </section>
+        </div>
 
         {!openEmailId && !openThreadId && actionError ? (
           <p className="mail-alert" role="alert">{actionError}</p>
