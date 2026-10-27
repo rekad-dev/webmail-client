@@ -878,6 +878,10 @@ function MessageDetailView({
             </ul>
           </section>
         ) : null}
+        <div className="reference-share-bar" aria-label="Share message">
+          <a href="#" title="Share message (not yet available)" onClick={(event) => event.preventDefault()}>@mention a user or group to share this email</a>
+          {[["Copy", "share-copy"], ["Create task", "share-task"], ["Add reaction", "share-emoji"]].map(([label, icon]) => <a href="#" key={label} title={`${label} (not yet available)`} aria-label={`${label} (not yet available)`} onClick={(event) => event.preventDefault()}><img src={`/figma-mail/${icon}.svg`} alt="" /></a>)}
+        </div>
       </article>
     </section>
   );

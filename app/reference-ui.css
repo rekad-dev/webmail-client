@@ -1132,3 +1132,8 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
 @media (max-width: 760px) {
   .message-detail-sender-row { grid-template-columns: 34px minmax(0, 1fr) auto; }
 }
+.reference-share-bar { display: flex; align-items: center; gap: 8px; margin: 16px 20px; border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; }
+.reference-share-bar a { display: inline-flex; align-items: center; color: var(--muted); font-size: 14px; text-decoration: none; }
+.reference-share-bar a:first-child { min-width: 0; flex: 1; }
+.reference-share-bar img { display: block; }
+@media (max-width: 760px) { .reference-share-bar { margin: 12px 14px; } }
