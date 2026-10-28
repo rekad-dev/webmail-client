@@ -5,6 +5,14 @@ scope: session-handoff
 
 # Session Handoff
 
+## 2026-10-29 account switcher UI (deployed)
+
+Commit `7aa1fb0` is deployed as `dpl_BqTxek1N3q5K39x5CFyt93SW5btE`,
+Ready and aliased to `https://webmail.rekad.id`. Vercel's build passed;
+anonymous checks returned 200 for the home page and 401 for linked accounts.
+The prior local verification passed 254 tests, typecheck and build. The new
+popover and authenticated switching have not yet been checked in a browser.
+
 ## 2026-10-29 inbox refinements and search (deployed)
 
 Production deployment `dpl_7CcVHGKGpsKBuY64GndtwmGn3fgK` is Ready and
