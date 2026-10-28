@@ -69,7 +69,11 @@ export function SignInView({ signInAction }: { signInAction: () => Promise<void>
           </h1>
           <p className="signin-lead">Sign in with your rekad.id account.</p>
           <form action={signInAction}>
-            <Button className="signin-button" size="lg" type="submit">
+            <Button
+              className="w-full border border-[#e0b53a] bg-linear-to-b from-[#fadb62] to-[#f0c63f] font-extrabold tracking-wider text-[#14204f] uppercase hover:from-[#fbe27e] hover:to-[#f3cd4d]"
+              size="lg"
+              type="submit"
+            >
               Sign in
             </Button>
           </form>

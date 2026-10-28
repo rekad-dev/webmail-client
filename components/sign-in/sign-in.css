@@ -22,16 +22,6 @@
 .signin-wordmark { color: #f4f6fb; font-size: var(--text-2xl); font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
 .signin-product { color: #c9d0e0; font-size: var(--text-lg); font-weight: 700; }
 .signin-lead { margin: 0; text-align: center; color: #d5dbea; font-size: var(--text-base); }
-.signin-button {
-  width: 100%;
-  border: 1px solid #e0b53a;
-  background: linear-gradient(#fadb62, #f0c63f);
-  color: #14204f;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-.signin-button:hover:not(:disabled) { background: linear-gradient(#fbe27e, #f3cd4d); }
 .signin-note { margin: 0; text-align: center; color: #b8c1d6; font-size: var(--text-xs); line-height: 1.5; }
 .signin-rule { width: 100%; margin: 0; border: 0; border-top: 1px solid #3c4a63; }
 .signin-safety { display: grid; gap: 14px; }
