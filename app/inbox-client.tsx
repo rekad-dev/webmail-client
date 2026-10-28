@@ -995,6 +995,14 @@ export function InboxClient({
         : `${firstResult}–${lastResult} of ${listing.total} conversations`
     : "";
 
+  const pageRange = listing
+    ? listing.messages.length === 0
+      ? "0"
+      : listing.total === null
+        ? `${firstResult}–${lastResult}`
+        : `${firstResult}–${lastResult} of ${listing.total.toLocaleString()}`
+    : "";
+
   function refresh() {
     if (localPreview) return;
     setManualRefreshTarget(openEmailId ? "message" : openThreadId ? "thread" : "list");
@@ -1560,7 +1568,7 @@ export function InboxClient({
             onSelectAll={(checked) => setSelectedThreadIds(checked ? new Set(selectableMessages.map((message) => message.threadId)) : new Set())}
             selectableCount={selectableMessages.length}
             selectedCount={selectedCount}
-            statusText={resultRange}
+            statusText={pageRange}
             canPrevious={!localPreview && !openEmailId && !openThreadId && position > 0 && !isLoading && !actionPending}
             canNext={!localPreview && !openEmailId && !openThreadId && Boolean(listing.hasMore) && !isLoading && !actionPending}
             onPrevious={() => changePage(Math.max(0, position - PAGE_SIZE))}
