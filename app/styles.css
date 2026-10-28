@@ -13,6 +13,29 @@
 @import "./globals.css" layer(legacy);
 @import "./reference-ui.css" layer(legacy);
 
+/*
+ * The parts of Tailwind's preflight the utility classes rely on. Both rules sit
+ * in the base layer, so the legacy rules still win wherever they set a value.
+ */
+@layer base {
+  *,
+  ::before,
+  ::after,
+  ::backdrop {
+    border: 0 solid var(--border);
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    border-radius: 0;
+    background-color: transparent;
+    color: inherit;
+    font: inherit;
+  }
+}
+
 @custom-variant dark (&:is(.dark *));
 
 /* One type scale for the whole interface; Tailwind's text-* utilities use it too. */

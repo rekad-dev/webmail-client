@@ -51,6 +51,7 @@ function Button({
 
   return (
     <Comp
+      type={asChild ? undefined : (props.type ?? "button")}
       data-slot="button"
       data-variant={variant}
       data-size={size}

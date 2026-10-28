@@ -4,6 +4,8 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { OptionSelect } from "@/components/mail/option-select";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 interface RichTextEditorProps {
   id: string;
@@ -104,20 +106,21 @@ export function RichTextEditor({
     command: () => void,
   ) {
     return (
-      <button
+      <Button
         aria-label={labelText}
         aria-pressed={active === null ? undefined : active}
-        className="rich-text-tool"
+        className="rich-text-tool aria-pressed:bg-accent aria-pressed:text-accent-foreground"
         disabled={!editor || disabled}
         key={name}
         onMouseDown={(event) => event.preventDefault()}
         onClick={command}
-        type="button"
+        size="sm"
+        variant="ghost"
       >
         {id === "compose-body" && ["bold", "italic", "underline", "strike"].includes(name)
           ? <img src={`/figma-mail/format-${name}.svg`} alt="" />
           : labelText}
-      </button>
+      </Button>
     );
   }
 
@@ -134,6 +137,7 @@ export function RichTextEditor({
         {toolbarButton("strike", "Strikethrough", editor.isActive("strike"), () => editor.chain().focus().toggleStrike().run())}
         <label className="rich-text-heading-label" htmlFor={`${id}-heading`}>Heading</label>
         <OptionSelect
+          className="w-40 shrink-0"
           label="Text style"
           disabled={disabled}
           id={`${id}-heading`}
@@ -161,7 +165,7 @@ export function RichTextEditor({
       {linkEditorOpen ? (
         <form className="rich-text-link-form" onSubmit={saveLink}>
           <label htmlFor={`${id}-link`}>Link address</label>
-          <input
+          <Input
             autoComplete="url"
             autoFocus
             id={`${id}-link`}
@@ -170,12 +174,12 @@ export function RichTextEditor({
             type="text"
             value={linkHref}
           />
-          <button className="rich-text-tool" type="submit">Apply link</button>
-          <button className="rich-text-tool" onClick={() => {
+          <Button size="sm" type="submit">Apply link</Button>
+          <Button onClick={() => {
             editor.chain().focus().extendMarkRange("link").unsetLink().run();
             setLinkEditorOpen(false);
-          }} type="button">Remove link</button>
-          <button className="rich-text-tool" onClick={() => setLinkEditorOpen(false)} type="button">Cancel</button>
+          }} size="sm" variant="outline">Remove link</Button>
+          <Button onClick={() => setLinkEditorOpen(false)} size="sm" variant="outline">Cancel</Button>
           {linkError ? <span role="alert">{linkError}</span> : null}
         </form>
       ) : null}

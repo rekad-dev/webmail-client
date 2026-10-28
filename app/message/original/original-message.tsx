@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 import {
   decodeHeaderValue,
   firstHeader,
@@ -115,7 +116,7 @@ export function OriginalMessage({ emailId }: { emailId: string | null }) {
         <div className="mail-alert" role="alert">
           <p>{state.message}</p>
           {emailId ? (
-            <button className="inline-retry" onClick={() => setAttempt((value) => value + 1)} type="button">Try again</button>
+            <Button onClick={() => setAttempt((value) => value + 1)} size="sm" variant="outline">Try again</Button>
           ) : null}
         </div>
       ) : null}
@@ -140,22 +141,20 @@ export function OriginalMessage({ emailId }: { emailId: string | null }) {
           </dl>
 
           <div className="original-actions">
-            <button
-              className="compose-secondary-action"
+            <Button
+              variant="outline"
               disabled={state.message.truncated}
               onClick={() => downloadOriginal(state.message.text)}
-              type="button"
             >
               Download original
-            </button>
-            <button
-              className="compose-secondary-action"
+            </Button>
+            <Button
+              variant="outline"
               disabled={state.message.truncated}
               onClick={() => void copyOriginal(state.message.text)}
-              type="button"
             >
               Copy to clipboard
-            </button>
+            </Button>
             <span className="original-copy-status" role="status">
               {copyStatus === "copied" ? "Copied" : copyStatus === "failed" ? "Copy failed" : ""}
             </span>

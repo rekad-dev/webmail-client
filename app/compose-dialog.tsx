@@ -10,6 +10,8 @@ import {
 } from "react";
 import { MailIcon } from "./mail-icons";
 import { OptionSelect } from "@/components/mail/option-select";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { plainTextEditorContent, RichTextEditor } from "./rich-text-editor";
 
 interface EmailAddress {
@@ -1088,19 +1090,19 @@ export function ComposeDialog({
             <h2 id="compose-title" ref={titleRef} tabIndex={-1}>{composeHeading}</h2>
           </div>
           <div className="compose-window-controls">
-            <button className="icon-button" disabled={isLeaving} aria-label={isMinimized ? "Restore compose" : "Minimize compose"}
+            <Button size="icon" variant="ghost" disabled={isLeaving} aria-label={isMinimized ? "Restore compose" : "Minimize compose"}
               aria-expanded={!isMinimized} aria-controls="compose-content"
               onClick={() => { onMinimizedChange(!isMinimized); setIsExpanded(false); }} type="button">
               <MailIcon name="minimize" size={19} />
-            </button>
-            <button className="icon-button compose-expand" disabled={isLeaving} aria-label={isExpanded ? "Exit expanded compose" : "Expand compose"}
+            </Button>
+            <Button className="compose-expand" size="icon" variant="ghost" disabled={isLeaving} aria-label={isExpanded ? "Exit expanded compose" : "Expand compose"}
               aria-pressed={isExpanded} onClick={() => { onMinimizedChange(false); setIsExpanded((value) => !value); }} type="button">
               <MailIcon name="expand" size={19} />
-            </button>
-            <button aria-label="Close compose" className="icon-button compose-close"
+            </Button>
+            <Button aria-label="Close compose" className="compose-close" size="icon" variant="ghost"
               disabled={isSending || isLeaving || attachmentUploadPending} onClick={() => void closeCompose()} type="button">
               <MailIcon name="close" size={20} />
-            </button>
+            </Button>
           </div>
         </header>
         <div className="compose-content" id="compose-content" hidden={isMinimized}>
@@ -1124,13 +1126,13 @@ export function ComposeDialog({
             ) : null}
             {sendState === "unknown" || sendState === "in_progress" ? <p>Check the current send status before switching.</p> : null}
             <div>
-              <button className="compose-switch-confirm" type="button"
+              <Button className="compose-switch-confirm" type="button"
                 aria-describedby={switchNeedsIdentity ? "compose-switch-identity-requirement" : undefined}
                 disabled={switchNeedsIdentity || isLoading || Boolean(loadError) || isLeaving || isSending || attachmentUploadPending || sendState === "unknown" || sendState === "in_progress"}
                 onClick={() => void leaveCompose(onConfirmSwitch, true)}>
                 {isLeaving ? "Saving current draft…" : currentMessageSubmitted ? "Open requested action" : "Save & switch"}
-              </button>
-              <button className="compose-switch-cancel" disabled={isLeaving} onClick={onCancelSwitch} type="button">{currentMessageSubmitted ? "Keep this window" : "Keep current draft"}</button>
+              </Button>
+              <Button className="compose-switch-cancel" variant="outline" disabled={isLeaving} onClick={onCancelSwitch} type="button">{currentMessageSubmitted ? "Keep this window" : "Keep current draft"}</Button>
             </div>
           </section>
         ) : null}
@@ -1145,13 +1147,13 @@ export function ComposeDialog({
         {loadError ? (
           <div className="compose-feedback compose-feedback-error" role="alert">
             <p>{preflightErrorMessage(loadError)}</p>
-            <button
-              className="inline-retry"
+            <Button
+              size="sm" variant="outline"
               onClick={() => setReloadVersion((version) => version + 1)}
               type="button"
             >
               Try again
-            </button>
+            </Button>
           </div>
         ) : null}
 
@@ -1174,7 +1176,8 @@ export function ComposeDialog({
                 {selectedIdentity.isWildcard ? (
                   <>
                     <label htmlFor="compose-from">From address</label>
-                    <input
+                    <Input
+                      className="h-11 text-sm shadow-none in-[.compose-backdrop:not(.is-minimized)]:border-0 in-[.compose-backdrop:not(.is-minimized)]:focus-visible:ring-0"
                       autoComplete="off"
                       autoCapitalize="none"
                       disabled={!canEdit}
@@ -1209,7 +1212,8 @@ export function ComposeDialog({
                 {selectedIdentity?.isWildcard ? (
                   <>
                     <label htmlFor="compose-from">From address</label>
-                    <input
+                    <Input
+                      className="h-11 text-sm shadow-none in-[.compose-backdrop:not(.is-minimized)]:border-0 in-[.compose-backdrop:not(.is-minimized)]:focus-visible:ring-0"
                       autoComplete="off"
                       disabled={!canEdit}
                       id="compose-from"
@@ -1241,7 +1245,8 @@ export function ComposeDialog({
 
             <div className="compose-field compose-address-field">
               <label htmlFor="compose-to">To</label>
-              <input
+              <Input
+                className="h-11 text-sm shadow-none in-[.compose-backdrop:not(.is-minimized)]:border-0 in-[.compose-backdrop:not(.is-minimized)]:focus-visible:ring-0"
                 autoComplete="off"
                 autoCapitalize="none"
                 disabled={!canEdit}
@@ -1258,7 +1263,8 @@ export function ComposeDialog({
             </div>
             {showCc || fields.cc ? <div className="compose-field compose-address-field">
               <label htmlFor="compose-cc">Cc</label>
-              <input
+              <Input
+                className="h-11 text-sm shadow-none in-[.compose-backdrop:not(.is-minimized)]:border-0 in-[.compose-backdrop:not(.is-minimized)]:focus-visible:ring-0"
                 autoComplete="off"
                 autoCapitalize="none"
                 disabled={!canEdit}
@@ -1272,7 +1278,8 @@ export function ComposeDialog({
             </div> : null}
             {showBcc || fields.bcc ? <div className="compose-field compose-address-field">
               <label htmlFor="compose-bcc">Bcc</label>
-              <input
+              <Input
+                className="h-11 text-sm shadow-none in-[.compose-backdrop:not(.is-minimized)]:border-0 in-[.compose-backdrop:not(.is-minimized)]:focus-visible:ring-0"
                 autoComplete="off"
                 autoCapitalize="none"
                 disabled={!canEdit}
@@ -1286,7 +1293,8 @@ export function ComposeDialog({
             </div> : null}
             <div className="compose-field compose-subject-field">
               <label htmlFor="compose-subject">Subject</label>
-              <input
+              <Input
+                className="h-11 text-sm shadow-none in-[.compose-backdrop:not(.is-minimized)]:border-0 in-[.compose-backdrop:not(.is-minimized)]:focus-visible:ring-0"
                 autoComplete="off"
                 disabled={!canEdit}
                 id="compose-subject"
@@ -1297,8 +1305,8 @@ export function ComposeDialog({
                 value={fields.subject}
               />
               <div className="compose-recipient-toggles">
-                <button aria-expanded={showCc || Boolean(fields.cc)} disabled={!canEdit || Boolean(fields.cc)} onClick={() => setShowCc((value) => !value)} type="button">Cc</button>
-                <button aria-expanded={showBcc || Boolean(fields.bcc)} disabled={!canEdit || Boolean(fields.bcc)} onClick={() => setShowBcc((value) => !value)} type="button">Bcc</button>
+                <Button size="sm" variant="outline" aria-expanded={showCc || Boolean(fields.cc)} disabled={!canEdit || Boolean(fields.cc)} onClick={() => setShowCc((value) => !value)} type="button">Cc</Button>
+                <Button size="sm" variant="outline" aria-expanded={showBcc || Boolean(fields.bcc)} disabled={!canEdit || Boolean(fields.bcc)} onClick={() => setShowBcc((value) => !value)} type="button">Bcc</Button>
               </div>
             </div>
             <div className="compose-field compose-body-field">
@@ -1349,14 +1357,14 @@ export function ComposeDialog({
             {attachmentUploadError ? (
               <div className="attachment-upload-error" role="alert">
                 <p>{attachmentErrorMessage(attachmentUploadError)}</p>
-                <button
-                  className="compose-secondary-action"
+                <Button
+                  className="compose-secondary-action" variant="outline"
                   disabled={attachmentUploadPending || !canEdit}
                   onClick={() => attachmentInputRef.current?.click()}
                   type="button"
                 >
                   Choose files to retry
-                </button>
+                </Button>
               </div>
             ) : null}
             {attachments.length > 0 ? (
@@ -1365,15 +1373,15 @@ export function ComposeDialog({
                   <li key={`${attachment.blobId}-${attachment.name}-${index}`}>
                     <span className="compose-file-icon"><MailIcon name="file" size={25} /></span>
                     <span className="compose-attachment-info"><span className="compose-attachment-name" dir="auto">{attachment.name}</span><span className="compose-attachment-size">{attachmentSizeLabel(attachment.size)}</span></span>
-                    <button
+                    <Button
                       aria-label={`Remove ${attachment.name}`}
-                      className="compose-attachment-remove"
+                      className="compose-attachment-remove" size="icon-sm" variant="ghost"
                       disabled={!canEdit || attachmentUploadPending}
                       onClick={() => removeAttachment(attachment.blobId, attachment.name)}
                       type="button"
                     >
                       <MailIcon name="close" size={15} />
-                    </button>
+                    </Button>
                   </li>
                 ))}
               </ul>
@@ -1419,26 +1427,26 @@ export function ComposeDialog({
             </p>
 
             <footer className="compose-actions">
-              <button className="compose-send-button" disabled={localPreview || isSending || isLeaving || (!canSend && !canCheckStatus)} title={localPreview ? "Sending is disabled in the local preview" : undefined} type="submit">
+              <Button className="compose-send-button" size="lg" disabled={localPreview || isSending || isLeaving || (!canSend && !canCheckStatus)} title={localPreview ? "Sending is disabled in the local preview" : undefined} type="submit">
                 {isSending ? "Sending…" : sendState === "unknown" || sendState === "in_progress" ? "Check status" : "Send"}
                 <MailIcon name="send" size={17} />
-              </button>
-              <button className="icon-button compose-attach-button" aria-label="Attach files" aria-describedby="compose-attachments-help"
+              </Button>
+              <Button className="compose-attach-button" size="icon" variant="ghost" aria-label="Attach files" aria-describedby="compose-attachments-help"
                 disabled={localPreview || !canEdit || attachmentUploadPending} onClick={() => attachmentInputRef.current?.click()} type="button" title={localPreview ? "Attachments are disabled in the local preview" : "Attach files"}>
                 <MailIcon name="paperclip" size={21} />
-              </button>
+              </Button>
               <span className="compose-format-label">Rich text</span>
               <span className="compose-action-spacer" />
               {(sendState === "unknown" || sendState === "in_progress") ? (
-                <button className="compose-secondary-action" disabled={isLeaving || isSending} onClick={onInspectSent} type="button">Open Sent</button>
+                <Button className="compose-secondary-action" variant="outline" disabled={isLeaving || isSending} onClick={onInspectSent} type="button">Open Sent</Button>
               ) : (
-                <button className="compose-secondary-action" disabled={isSending || isLeaving || attachmentUploadPending} onClick={() => void closeCompose()} type="button">
+                <Button className="compose-secondary-action" variant="outline" disabled={isSending || isLeaving || attachmentUploadPending} onClick={() => void closeCompose()} type="button">
                   {isLeaving
                     ? localPreview ? "Closing…" : "Saving…"
                     : localPreview || sendState === "submitted" || sendState === "submitted_sent_update_pending"
                       ? "Close composer"
                       : "Save & close"}
-                </button>
+                </Button>
               )}
             </footer>
           </form>
