@@ -5,6 +5,7 @@ declare module "html-to-text" {
       decodeEntities?: boolean;
       wordwrap?: number | false | null;
       preserveNewlines?: boolean;
+      selectors?: Array<{ selector: string; format?: string }>;
       limits?: {
         maxInputLength?: number;
         maxDepth?: number;

@@ -424,11 +424,8 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
 .rich-text-link-form label { font-size: var(--text-xs); }
 .rich-text-link-form input { min-width: 150px; min-height: 40px; flex: 1; border: 1px solid var(--input); border-radius: var(--radius-sm); padding: 0 8px; }
 .rich-text-link-form [role="alert"] { width: 100%; color: var(--danger-foreground); font-size: var(--text-xs); }
-.managed-banner-preview { flex: none; border: 1px solid var(--warning-border); border-radius: var(--radius-md); background: #fffdf6; padding: 10px 13px; color: var(--ink); font-size: var(--text-xs); line-height: 1.5; }
+.managed-banner-preview { display: block; flex: none; width: 100%; max-width: 600px; height: auto; border: 1px solid var(--line); border-radius: var(--radius-md); }
 .managed-banner-preview + .rich-text-editor { margin-top: 8px; }
-.managed-banner-preview p:first-child { margin-top: 0; }
-.managed-banner-preview p:last-child { margin-bottom: 0; }
-.managed-banner-preview[hidden] { display: none; }
 .compose-body-field > .compose-help { margin-top: 5px; color: var(--muted); font-size: var(--text-xs); line-height: 1.5; }
 .admin-banner-shell { width: min(100%, 980px); margin: 0 auto; padding: 28px 22px 48px; }
 .admin-banner-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; border: 1px solid var(--line); border-radius: var(--radius-xl); background: var(--surface); padding: 18px 22px; box-shadow: var(--shadow-card); }

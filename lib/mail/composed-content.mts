@@ -1,6 +1,8 @@
 import { convert } from "html-to-text";
 import sanitizeHtml from "sanitize-html";
 
+import { getFixedMailBanners } from "./fixed-mail-banners.mts";
+
 export const MAX_COMPOSED_HTML_BYTES = 256 * 1024;
 
 export interface ManagedMailBanners {
@@ -59,6 +61,7 @@ export function composedHtmlToText(value: string): string {
     decodeEntities: true,
     wordwrap: false,
     preserveNewlines: true,
+    selectors: [{ selector: "img", format: "skip" }],
     limits: {
       maxInputLength: MAX_COMPOSED_HTML_BYTES,
       maxDepth: 40,
@@ -93,17 +96,16 @@ function wrapBanner(
   return `<!--rekad-banner-${placement}-start-->${html}<!--/rekad-banner-${placement}-->`;
 }
 
+/** Banner markup must come from fixed-mail-banners.mts; it is not sanitized here. */
 export function buildManagedMessageHtml(
   userHtml: string,
   banners: ManagedMailBanners,
 ): string {
-  const header = sanitizeHtmlValue(banners.headerHtml);
-  const footer = sanitizeHtmlValue(banners.footerHtml);
   return [
     versionMarker(banners.version),
-    wrapBanner("header", header),
+    wrapBanner("header", banners.headerHtml),
     userHtml,
-    wrapBanner("footer", footer),
+    wrapBanner("footer", banners.footerHtml),
   ].join("");
 }
 
@@ -122,15 +124,12 @@ export function managedBannerVersion(value: string): number | null {
   return Number.isSafeInteger(version) && version >= 0 ? version : null;
 }
 
+/** Re-sanitizes message content and rebuilds the banners from the fixed markup, ignoring any stored banner HTML. */
 export function sanitizeStoredManagedMessageHtml(value: string): string {
   const version = managedBannerVersion(value);
   if (version === null) return sanitizeComposedHtml(value);
-  const header = /<!--rekad-banner-header-start-->([\s\S]*?)<!--\/rekad-banner-header-->/.exec(value)?.[1] ?? "";
-  const footer = /<!--rekad-banner-footer-start-->([\s\S]*?)<!--\/rekad-banner-footer-->/.exec(value)?.[1] ?? "";
-  const userHtml = stripManagedBannerHtml(value);
-  return buildManagedMessageHtml(userHtml, {
-    headerHtml: sanitizeHtmlValue(header),
-    footerHtml: sanitizeHtmlValue(footer),
+  return buildManagedMessageHtml(stripManagedBannerHtml(value), {
+    ...getFixedMailBanners(),
     version,
   });
 }

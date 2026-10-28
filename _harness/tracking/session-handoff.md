@@ -5,6 +5,19 @@ scope: session-handoff
 
 # Session Handoff
 
+## 2026-10-28 fixed email header and footer (local, not deployed)
+
+Banner customization is disabled: the admin page, `/api/admin/banners`, the
+allowlist (`REKAD_BANNER_ADMIN_SUBJECTS`), and the settings store were removed.
+`lib/mail/fixed-mail-banners.mts` holds the markup (version 1): a grey page with
+a 600 px card, `public/mail-header.png` at the top of the card, the message, and
+a centered grey footer (copyright with the current year, www.rekad.id and
+Instagram links). The footer's Instagram URL is inferred from the header image
+(`rekad.id`), and no postal address or social icons are included. The image is
+referenced by its public URL, so recipients' clients may block it until they
+allow images. `app_managed_mail_banners` remains in the database, unused.
+The header image only reaches recipients after this is deployed.
+
 ## 2026-10-28 shadcn/ui, type scale, link confirmation (deployed)
 
 Deployed as `dpl_G76bj74NQNAVjcrWTt2PiNgdsMsp` at `https://webmail.rekad.id`

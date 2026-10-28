@@ -565,6 +565,11 @@ Do not add background infrastructure just because it is technically possible.
 
 ## Approved cross-phase feature — Managed banners and rich-text composition
 
+> Update 2026-10-28: banner customization is disabled by the user's decision.
+> The administration page, allowlist, and stored settings are retired; every
+> outgoing message instead gets a fixed header image and footer defined in
+> `lib/mail/fixed-mail-banners.mts`. The rich-text requirements below still apply.
+
 - Provide an accessible rich-text editor to all signed-in users for compose,
   drafts, replies, and forwards. Preserve formatting in stored drafts and
   submitted messages, with a plain-text alternative.

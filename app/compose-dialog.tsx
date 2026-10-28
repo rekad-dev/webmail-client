@@ -1311,14 +1311,13 @@ export function ComposeDialog({
             </div>
             <div className="compose-field compose-body-field">
               <label htmlFor="compose-body">Message</label>
-              {managedBanners?.headerHtml ? (
-                <div
-                  aria-label="Managed header banner"
-                  className="managed-banner-preview"
-                  dangerouslySetInnerHTML={{ __html: managedBanners.headerHtml }}
-                  role="note"
-                />
-              ) : null}
+              <img
+                alt="rekad header, added to every message"
+                className="managed-banner-preview"
+                height={150}
+                src="/mail-header.png"
+                width={600}
+              />
               <RichTextEditor
                 disabled={!canEdit}
                 id="compose-body"
@@ -1329,16 +1328,8 @@ export function ComposeDialog({
                 }}
                 value={fields.htmlBody ?? plainTextEditorContent(fields.body)}
               />
-              {managedBanners?.footerHtml ? (
-                <div
-                  aria-label="Managed footer banner"
-                  className="managed-banner-preview"
-                  dangerouslySetInnerHTML={{ __html: managedBanners.footerHtml }}
-                  role="note"
-                />
-              ) : null}
               <span className="compose-help">
-                Formatting is preserved in drafts and sent messages. Managed banners are included automatically.
+                Formatting is preserved in drafts and sent messages. The rekad header and footer are added automatically.
               </span>
             </div>
 

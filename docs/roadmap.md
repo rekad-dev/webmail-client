@@ -15,7 +15,7 @@ while the recorded verification gaps are resolved.
 | 6 | Attachments, responsive UX, and accessibility refinement | P1 | Complete: production attachment upload/download, desktop/phone rendering, keyboard focus, and independent review passed |
 | 7 | Limited offline storage and synchronization | P2, optional | In progress: bounded cache and JMAP sync implemented; offline reconnect, account-isolation, and logout checks remain pending |
 | 8 | Polling, JMAP events, and optional notifications | P2, optional | In progress: polling and opt-in browser alerts implemented; live notification behavior remains unverified; EventSource and Web Push remain deferred |
-| Cross-phase | Rich-text composition and managed `core@rekad.id` banners | P1 | Implementation committed; production migration applied; deployment waits for the authorized OAuth subject allowlist |
+| Cross-phase | Rich-text composition and fixed rekad header/footer | P1 | Banner customization is disabled; every message gets a fixed header image and footer (see handoff) |
 
 Phase 4 is the first usable MVP boundary. Phase 1 reused the existing `webmail`
 client and exact callback
@@ -34,14 +34,13 @@ in the Traycer artifact `phase-5-mailbox-actions-search-threads-drafts-plan`.
 No Stalwart client or server-wide setting changed.
 
 The approved cross-phase compose feature adds a Tiptap rich-text editor for all
-users and a server-sanitized plain-text alternative. A server-backed admin
-page lets OAuth-subject allowlisted administrators update the managed
-`core@rekad.id` header and footer; those banners appear in compose previews and
-are applied to every outgoing message. The migration is applied to the
-confirmed production application database. A read-only check confirmed the
-singleton row at version 0 with empty banners. Production admin subject IDs
-have not been configured, so the feature has not been deployed. No Stalwart
-settings or production mailbox data were changed.
+users and a server-sanitized plain-text alternative. Banner customization was
+disabled on 2026-10-28: the admin page, its API, and the stored settings are no
+longer used. Every outgoing message gets the fixed header image
+(`public/mail-header.png`, served from `https://webmail.rekad.id`) above the
+message and a fixed footer below it, both defined in
+`lib/mail/fixed-mail-banners.mts`. The unused `app_managed_mail_banners` table
+is left in place.
 
 The latest reference UI is deployed as `dpl_6tcSUUPDK5stvVwAUeZ5xBDroZZT`
 and aliased to `https://webmail.rekad.id`. The anonymous home page shows the

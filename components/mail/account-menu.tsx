@@ -9,11 +9,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 export function AccountMenu({
   displayAccount,
   accountEmail,
-  canManageBanners,
 }: {
   displayAccount: string;
   accountEmail?: string | null;
-  canManageBanners: boolean;
 }) {
   return (
     <Popover>
@@ -25,11 +23,6 @@ export function AccountMenu({
       </PopoverTrigger>
       <PopoverContent align="end" className="grid max-h-[80vh] w-80 gap-3 overflow-y-auto p-4">
         <p className="text-sm break-all text-muted-foreground">{accountEmail || "Signed in to rekad Mail"}</p>
-        {canManageBanners ? (
-          <a className="text-sm font-semibold text-accent-foreground underline underline-offset-4" href="/admin/banners">
-            Manage core mail banners
-          </a>
-        ) : null}
         <PasswordChangeForm />
         <SignOutButton />
       </PopoverContent>

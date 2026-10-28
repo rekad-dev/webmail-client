@@ -430,7 +430,6 @@ function mailActionErrorMessage(error: string): string {
 export function InboxClient({
   accountName,
   accountEmail,
-  canManageBanners = false,
   localPreview = false,
   initialListing,
   initialThreads,
@@ -438,7 +437,6 @@ export function InboxClient({
 }: {
   accountName?: string | null;
   accountEmail?: string | null;
-  canManageBanners?: boolean;
   localPreview?: boolean;
   initialListing?: MailListing;
   initialThreads?: Record<string, ThreadView>;
@@ -1454,7 +1452,7 @@ export function InboxClient({
             {localPreview ? (
               <span className="local-preview-account-label">Local preview</span>
             ) : (
-              <AccountMenu accountEmail={accountEmail} canManageBanners={canManageBanners} displayAccount={displayAccount} />
+              <AccountMenu accountEmail={accountEmail} displayAccount={displayAccount} />
             )}
           </div>
       </header>
