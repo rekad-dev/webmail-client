@@ -1079,3 +1079,38 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
 }
 
 .shared-account-nav { padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--line, rgba(0,0,0,.08)); }
+
+/* Search is aligned with the message area and opens above the inbox. */
+.workspace-header { position: relative; z-index: 10; }
+.workspace-header .sidebar-search { position: relative; display: block; min-width: 0; flex: 0 1 640px; }
+.workspace-header .sidebar-search-input { width: 100%; height: 48px; gap: 12px; padding: 0 12px 0 16px; border-radius: 12px; }
+.workspace-header .sidebar-search-input input { font-size: var(--text-sm); }
+.workspace-header .sidebar-search-input input::-webkit-search-cancel-button { display: none; }
+.workspace-header .mail-header-account { margin-left: auto; }
+.search-clear { display: grid; width: 40px; height: 40px; flex: none; place-items: center; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
+.search-clear:hover { background: var(--violet-light); }
+.search-panel { position: absolute; top: calc(100% + 4px); left: 0; z-index: 20; width: 100%; max-height: min(65vh, 480px); overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: 0 12px 32px rgb(0 0 0 / 16%); }
+.search-filters { display: flex; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid var(--line); padding: 12px; }
+.search-filters button { min-height: 36px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 0 12px; color: var(--ink); font: inherit; font-size: var(--text-xs); cursor: pointer; }
+.search-filters button[aria-pressed="true"] { border-color: var(--violet); background: var(--violet-light); color: var(--violet-dark); }
+.search-filters button:disabled { opacity: .5; cursor: not-allowed; }
+.search-suggestions p, .search-empty { margin: 0; padding: 18px; color: var(--muted); font-size: var(--text-sm); }
+.search-suggestion, .search-all, .search-history button { display: flex; width: 100%; min-height: 48px; align-items: center; gap: 14px; border: 0; background: transparent; padding: 10px 16px; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.search-suggestion:hover, .search-all:hover, .search-history button:hover { background: var(--violet-light); }
+.search-suggestion > svg, .search-all > svg, .search-history svg { flex: none; color: var(--muted); }
+.search-suggestion > span, .search-all > span, .search-history span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-suggestion strong, .search-suggestion small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-suggestion strong { font-size: var(--text-sm); font-weight: 500; }
+.search-suggestion small, .search-suggestion time, .search-all small { color: var(--muted); font-size: var(--text-xs); }
+.search-suggestion time { flex: none; }
+.search-all { border-top: 1px solid var(--line); }
+.search-panel button:focus-visible, .search-clear:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+@media (min-width: 761px) {
+  .workspace-header .mail-brand { flex: 0 0 200px; margin-right: 0; }
+  .is-sidebar-collapsed .workspace-header .mail-brand { flex-basis: 76px; }
+}
+@media (max-width: 760px) {
+  .workspace-header .sidebar-search { order: 3; width: 100%; flex: 1 0 100%; }
+  .workspace-header .sidebar-search-input { height: 44px; }
+  .search-suggestion time { max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}

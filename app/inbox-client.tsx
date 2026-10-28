@@ -15,7 +15,7 @@ import { ConversationList } from "@/components/mail/conversation-list";
 import { ConversationThread } from "@/components/mail/conversation-thread";
 import { MailboxNav } from "@/components/mail/mailbox-nav";
 import { SharedAccountNav } from "@/components/mail/shared-account-nav";
-import { MailSearch } from "@/components/mail/mail-search";
+import { MailSearch, type SearchFilters } from "@/components/mail/mail-search";
 import { useSessionGuard } from "@/components/mail/use-session-guard";
 import {
   applyOfflineSyncPage,
@@ -472,6 +472,7 @@ export function InboxClient({
   );
   const [searchInput, setSearchInput] = useState("");
   const [searchText, setSearchText] = useState("");
+  const [searchFilters, setSearchFilters] = useState<SearchFilters>({ hasAttachment: false, recent: false, fromMe: false });
   const [position, setPosition] = useState(0);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [manualRefreshTarget, setManualRefreshTarget] = useState<"list" | "thread" | "message" | null>(null);
@@ -755,6 +756,9 @@ export function InboxClient({
     if (searchText) {
       params.set("q", searchText);
     }
+    if (searchFilters.hasAttachment) params.set("hasAttachment", "1");
+    if (searchFilters.recent) params.set("recent", "1");
+    if (searchFilters.fromMe && accountEmail) params.set("from", accountEmail);
 
     async function loadMail() {
       setIsLoading(true);
@@ -804,7 +808,7 @@ export function InboxClient({
 
     void loadMail();
     return () => controller.abort();
-  }, [localPreview, mailboxId, position, refreshVersion, searchText, favorites, sharedAccountId]);
+  }, [localPreview, mailboxId, position, refreshVersion, searchText, favorites, sharedAccountId, searchFilters, accountEmail]);
 
   useEffect(() => {
     if (localPreview) return;
@@ -1095,6 +1099,7 @@ export function InboxClient({
     setMailboxId(null);
     setSearchInput("");
     setSearchText("");
+    setSearchFilters({ hasAttachment: false, recent: false, fromMe: false });
     setError(null);
     setActionError(null);
     setPosition(0);
@@ -1547,7 +1552,21 @@ export function InboxClient({
           </a>
         <MailSearch
           inputRef={searchInputRef}
-          onChange={setSearchInput}
+          onChange={(value) => { setSearchInput(value); if (value.trim()) setFavorites(false); }}
+          filters={searchFilters}
+          onFiltersChange={(filters) => { setPosition(0); setFavorites(false); setSearchFilters(filters); }}
+          messages={listing?.messages ?? []}
+          loading={isLoading || searchInput.trim() !== searchText}
+          error={Boolean(error)}
+          canFilter={!localPreview}
+          canFromMe={Boolean(accountEmail)}
+          accountKey={`${accountEmail ?? "preview"}:${sharedAccountId ?? "personal"}`}
+          canOpen={(message) => !localPreview || Boolean(initialDetails?.[message.id])}
+          onOpen={(message) => {
+            if (localPreview && !initialDetails?.[message.id]) return;
+            if (message.isDraft) openSavedDraft(message.id, undefined, message.subject);
+            else { openThread(message.threadId); openMessage(message.id); }
+          }}
           value={searchInput}
         />
 
@@ -1640,7 +1659,7 @@ export function InboxClient({
 
         <div className={`mail-workspace${openThreadId || openEmailId ? " has-open-message" : ""}`}>
         <section className="conversation-pane" aria-label="Message list">
-          <h2 className="conversation-pane-title">{searchText ? "Search results" : favorites ? "Favorites" : selectedMailbox?.name ?? "Inbox"}</h2>
+          <h2 className="conversation-pane-title">{searchText || searchFilters.hasAttachment || searchFilters.recent || searchFilters.fromMe ? "Search results" : favorites ? "Favorites" : selectedMailbox?.name ?? "Inbox"}</h2>
         {listing ? (
           <BulkToolbar
             actionPending={actionPending}
@@ -1696,9 +1715,9 @@ export function InboxClient({
                 <path d="M2.5 3.5h27v17h-27zM3 4l13 10L29 4" />
               </svg>
             </span>
-            <h2>{searchText ? "No conversations found" : position === 0 ? favorites ? "No favorites yet" : "This mailbox is empty" : "No conversations on this page"}</h2>
+            <h2>{searchText || searchFilters.hasAttachment || searchFilters.recent || searchFilters.fromMe ? "No conversations found" : position === 0 ? favorites ? "No favorites yet" : "This mailbox is empty" : "No conversations on this page"}</h2>
             <p>
-              {searchText
+              {searchText || searchFilters.hasAttachment || searchFilters.recent || searchFilters.fromMe
                 ? "Try another search."
                 : position === 0
                 ? favorites ? "Star a message to find it here." : "New messages will appear here."
