@@ -60,7 +60,7 @@ export function SignOutButton({ menuItem = false, disabled = false, onPendingCha
     <div className="auth-actions">
       <Button
         aria-busy={isPending}
-        className={menuItem ? "sign-out-button account-sign-out" : "sign-out-button"}
+        className={menuItem ? "sign-out-button account-sign-out justify-start border-0 bg-transparent shadow-none" : "sign-out-button"}
         disabled={disabled || isPending}
         onClick={() => void handleSignOut()}
         variant={menuItem ? "ghost" : "outline"}

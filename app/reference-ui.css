@@ -1140,8 +1140,10 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
   padding: 8px;
   box-shadow: 0 12px 32px rgb(0 0 0 / 14%);
 }
-.account-switcher-identity, .account-switcher-row { display: flex; width: 100%; min-width: 0; align-items: center; gap: 10px; border-radius: 8px; padding: 10px; text-align: left; }
-.account-switcher-avatar { width: 42px; height: 42px; flex: none; border-radius: 8px; }
+.account-switcher-identity, .account-switcher-row { display: flex; width: 100%; min-width: 0; align-items: center; gap: 10px; border-radius: 8px; padding: 8px; text-align: left; }
+.account-switcher-identity { min-height: 48px; }
+.account-switcher-profile-icon { flex: none; color: var(--muted); }
+.account-switcher-avatar { flex: none; }
 .account-switcher-details { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 2px; line-height: 1.35; }
 .account-switcher-details strong, .account-switcher-details > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-switcher-details strong { color: var(--ink); font-size: var(--text-sm); font-weight: 600; }
@@ -1150,13 +1152,13 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
 .account-switcher .account-sign-out, .account-switcher-add { display: flex; width: 100%; min-height: 44px; justify-content: flex-start; gap: 10px; border: 0; background: transparent; padding: 0 10px; color: var(--ink); font-size: var(--text-sm); font-weight: 500; box-shadow: none; }
 .account-switcher .account-sign-out:hover:not(:disabled), .account-switcher-add:hover:not(:disabled) { background: var(--violet-light); }
 .account-switcher-section { border-top: 1px solid var(--line); padding-top: 12px; }
-.account-switcher-heading { margin: 0 10px 8px; color: var(--muted); font-size: var(--text-xs); font-weight: 600; }
+.account-switcher-heading { margin: 0 8px 6px; color: var(--muted); font-size: 0.75rem; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; }
 .account-switcher-status { margin: 8px 10px; color: var(--muted); font-size: var(--text-xs); line-height: 1.4; }
 .account-switcher-list { display: grid; gap: 3px; margin: 0; padding: 0; list-style: none; }
-.account-switcher-row { height: auto; min-height: 62px; justify-content: flex-start; white-space: normal; }
-.account-switcher-row.is-current { background: var(--violet-light); }
+.account-switcher-row { height: auto; min-height: 56px; justify-content: flex-start; white-space: normal; }
+.account-switcher-row.is-current { background: #f7f7f7; }
 .account-switcher-indicator { width: 18px; height: 18px; flex: none; border: 1px solid var(--border); border-radius: 50%; }
-.account-switcher-row.is-current .account-switcher-indicator { border: 6px solid var(--violet-dark); background: var(--surface); }
+.account-switcher-row.is-current .account-switcher-indicator { border: 6px solid var(--ink); background: var(--surface); }
 .account-switcher-add { margin-top: 3px; }
 .account-switcher-sign-out-all { width: 100%; min-height: 44px; margin-top: 8px; background: var(--violet-light); color: var(--ink); font-size: var(--text-sm); font-weight: 600; }
 .account-switcher .sign-out-error { margin: 8px 10px; }

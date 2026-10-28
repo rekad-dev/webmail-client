@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { LogOut } from "lucide-react";
+import { LogOut, UserRound } from "lucide-react";
 import { signIn } from "next-auth/react";
 
 import { MailIcon } from "@/app/mail-icons";
@@ -131,16 +131,16 @@ export function AccountMenu({
   return (
     <Popover onOpenChange={(open) => { if (open) void loadAccounts(); }}>
       <PopoverTrigger asChild>
-        <Button aria-label={`Account menu for ${displayAccount}`} className="account-trigger" size="icon" variant="ghost">
-          <ProfileAvatar className="account-trigger-avatar" name={displayAccount} version={pictureVersion} />
+        <Button aria-label={`Account menu for ${displayAccount}`} className="account-trigger p-1" size="icon" variant="ghost">
+          <ProfileAvatar className="account-trigger-avatar size-9 rounded-md" fallbackClassName="rounded-md" name={displayAccount} version={pictureVersion} />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" sideOffset={8} aria-label="Account menu" className="account-switcher">
+      <PopoverContent align="end" sideOffset={8} aria-label="Account menu" className="account-switcher w-[min(320px,calc(100vw-24px))] rounded-xl p-2">
         <div className="account-switcher-identity">
-          <ProfileAvatar className="account-switcher-avatar" name={displayAccount} version={pictureVersion} />
+          <UserRound className="account-switcher-profile-icon" aria-hidden="true" size={18} />
           <div className="account-switcher-details">
-            <strong>{displayAccount}</strong>
-            {accountEmail && accountEmail !== displayAccount ? <span>{accountEmail}</span> : null}
+            <strong>Signed in</strong>
+            <span>{accountEmail || displayAccount}</span>
           </div>
         </div>
         <div className="account-switcher-top-actions">
@@ -155,14 +155,14 @@ export function AccountMenu({
               <li key={account.handle}>
                 {account.active ? (
                   <div aria-current="true" className="account-switcher-row is-current">
-                    <ProfileAvatar className="account-switcher-avatar" name={displayAccount} version={pictureVersion} />
+                    <ProfileAvatar className="account-switcher-avatar size-10 rounded-md" fallbackClassName="rounded-md" name={displayAccount} version={pictureVersion} />
                     <span className="account-switcher-details"><strong>{displayAccount}</strong>{accountEmail && accountEmail !== displayAccount ? <span>{accountEmail}</span> : null}</span>
                     <span className="account-switcher-indicator" aria-hidden="true" />
                     <span className="visually-hidden">Current account</span>
                   </div>
                 ) : (
-                  <Button aria-label={`Switch to ${account.label}`} className="account-switcher-row" disabled={pending || loadingAccounts} onClick={() => void switchTo(account.handle)} variant="ghost">
-                    <ProfileAvatar className="account-switcher-avatar" name={account.label} version={null} />
+                  <Button aria-label={`Switch to ${account.label}`} className="account-switcher-row h-auto justify-start px-2" disabled={pending || loadingAccounts} onClick={() => void switchTo(account.handle)} variant="ghost">
+                    <ProfileAvatar className="account-switcher-avatar size-10 rounded-md" fallbackClassName="rounded-md" name={account.label} version={null} />
                     <span className="account-switcher-details"><strong>{account.label}</strong></span>
                     <span className="account-switcher-indicator" aria-hidden="true" />
                   </Button>
@@ -171,13 +171,13 @@ export function AccountMenu({
             ))}
           </ul>
           {canAdd ? (
-            <Button className="account-switcher-add" disabled={pending || loadingAccounts} onClick={() => void addAccount()} variant="ghost">
+            <Button className="account-switcher-add justify-start px-2" disabled={pending || loadingAccounts} onClick={() => void addAccount()} variant="ghost">
               <MailIcon name="plus" size={18} /> Add account
             </Button>
           ) : null}
         </div>
         {accounts.length > 1 ? (
-          <Button className="account-switcher-sign-out-all" disabled={pending} onClick={() => void signOutEverywhere()} variant="ghost">
+          <Button className="account-switcher-sign-out-all w-full bg-[#f7f7f7]" disabled={pending} onClick={() => void signOutEverywhere()} variant="ghost">
             <LogOut aria-hidden="true" size={18} /> Sign out of all accounts
           </Button>
         ) : null}
