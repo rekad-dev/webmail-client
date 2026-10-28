@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import { CustomSelect } from "./custom-select";
 
 interface RichTextEditorProps {
   id: string;
@@ -132,24 +133,24 @@ export function RichTextEditor({
         {toolbarButton("underline", "Underline", editor.isActive("underline"), () => editor.chain().focus().toggleUnderline().run())}
         {toolbarButton("strike", "Strikethrough", editor.isActive("strike"), () => editor.chain().focus().toggleStrike().run())}
         <label className="rich-text-heading-label" htmlFor={`${id}-heading`}>Heading</label>
-        <select
-          aria-label="Text style"
+        <CustomSelect
+          label="Text style"
           disabled={disabled}
           id={`${id}-heading`}
-          onChange={(event) => {
-            const heading = event.target.value;
-            if (heading === "paragraph") editor.chain().focus().setParagraph().run();
-            else editor.chain().focus().toggleHeading({ level: Number(heading) as 1 | 2 | 3 }).run();
+          onChange={(heading) => {
+            if (heading === "paragraph") editor.chain().setParagraph().run();
+            else editor.chain().toggleHeading({ level: Number(heading) as 1 | 2 | 3 }).run();
           }}
+          options={[
+            { value: "paragraph", label: "Paragraph" },
+            { value: "1", label: "Heading 1" },
+            { value: "2", label: "Heading 2" },
+            { value: "3", label: "Heading 3" },
+          ]}
           value={editor.isActive("heading", { level: 1 }) ? "1"
             : editor.isActive("heading", { level: 2 }) ? "2"
               : editor.isActive("heading", { level: 3 }) ? "3" : "paragraph"}
-        >
-          <option value="paragraph">Paragraph</option>
-          <option value="1">Heading 1</option>
-          <option value="2">Heading 2</option>
-          <option value="3">Heading 3</option>
-        </select>
+        />
         {toolbarButton("bullet-list", "Bulleted list", editor.isActive("bulletList"), () => editor.chain().focus().toggleBulletList().run())}
         {toolbarButton("ordered-list", "Numbered list", editor.isActive("orderedList"), () => editor.chain().focus().toggleOrderedList().run())}
         {toolbarButton("blockquote", "Quote", editor.isActive("blockquote"), () => editor.chain().focus().toggleBlockquote().run())}

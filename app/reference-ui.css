@@ -1069,11 +1069,12 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
   .compose-backdrop:not(.is-minimized) .compose-field { min-height: 52px; padding: 0; }
   .compose-backdrop:not(.is-minimized) .compose-field label, .compose-backdrop:not(.is-minimized) .compose-label { color: var(--muted); font-size: 14px; }
   .compose-backdrop:not(.is-minimized) .compose-field input, .compose-backdrop:not(.is-minimized) .compose-static-value { font-size: 14px; }
-  .compose-backdrop:not(.is-minimized) .compose-body-field { min-height: 260px; padding: 0; }
+  .compose-backdrop:not(.is-minimized) .compose-body-field { min-height: 220px; flex-basis: 220px; padding: 0; }
   .compose-backdrop:not(.is-minimized) .compose-body-field > label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-  .compose-backdrop:not(.is-minimized) .rich-text-editor { min-height: 260px; }
-  .compose-backdrop:not(.is-minimized) .rich-text-content { order: -1; min-height: 200px; padding: 20px 0; }
-  .compose-backdrop:not(.is-minimized) .rich-text-toolbar { border-top: 1px solid var(--line); border-bottom: 0; }
+  .compose-backdrop:not(.is-minimized) .rich-text-editor { min-height: 180px; }
+  .compose-backdrop:not(.is-minimized) .rich-text-content { min-height: 120px; padding: 12px 0; }
+  .compose-backdrop:not(.is-minimized) .rich-text-content .tiptap { min-height: 96px; }
+  .compose-backdrop:not(.is-minimized) .rich-text-toolbar { border-top: 0; border-bottom: 1px solid var(--line); }
   .compose-backdrop:not(.is-minimized) .rich-text-tool { font-weight: 400; }
   .compose-backdrop:not(.is-minimized) .rich-text-tool img { display: block; }
 }
@@ -1092,9 +1093,8 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
   .mail-header-navigation { flex-direction: row-reverse; }
   .mail-breadcrumb > .reference-heading-icon { display: grid; }
   .compose-backdrop:not(.is-minimized) .compose-form { position: relative; padding-bottom: 12px; }
-  .compose-backdrop:not(.is-minimized) .rich-text-toolbar { position: absolute; z-index: 2; right: 200px; bottom: 12px; left: 54px; flex-wrap: nowrap; overflow-x: auto; border: 0; background: var(--surface); }
-  .compose-backdrop:not(.is-minimized) .compose-actions { z-index: 1; min-height: 56px; border-top: 1px solid var(--line); pointer-events: none; }
-  .compose-backdrop:not(.is-minimized) .compose-actions > * { pointer-events: auto; }
+  .compose-backdrop:not(.is-minimized) .rich-text-toolbar { position: static; flex-wrap: wrap; overflow: visible; background: var(--surface); }
+  .compose-backdrop:not(.is-minimized) .compose-actions { position: static; min-height: 56px; border-top: 1px solid var(--line); }
   .compose-backdrop:not(.is-minimized) .compose-attach-button { order: 0; }
   .compose-backdrop:not(.is-minimized) .compose-action-spacer { order: 1; }
   .compose-backdrop:not(.is-minimized) .compose-secondary-action { order: 2; }
@@ -1149,12 +1149,12 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
   }
 
   .compose-backdrop:not(.is-minimized) .compose-dialog {
-    animation: compose-arrive 260ms cubic-bezier(.16, 1, .3, 1) both;
+    animation: compose-arrive 260ms cubic-bezier(.16, 1, .3, 1);
   }
 
   @keyframes compose-arrive {
-    from { opacity: .75; transform: translateY(14px); }
-    to { opacity: 1; transform: translateY(0); }
+    from { opacity: .75; }
+    to { opacity: 1; }
   }
 }
 

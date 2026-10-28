@@ -9,6 +9,7 @@ import {
   type RefObject,
 } from "react";
 import { MailIcon } from "./mail-icons";
+import { CustomSelect } from "./custom-select";
 import { plainTextEditorContent, RichTextEditor } from "./rich-text-editor";
 
 interface EmailAddress {
@@ -457,7 +458,7 @@ export function ComposeDialog({
   const draftSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const dialogRef = useRef<HTMLElement | null>(null);
   const titleRef = useRef<HTMLHeadingElement | null>(null);
-  const identitySelectRef = useRef<HTMLSelectElement | null>(null);
+  const identitySelectRef = useRef<HTMLButtonElement | null>(null);
   const toFieldRef = useRef<HTMLInputElement | null>(null);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   const switchPromptRef = useRef<HTMLParagraphElement | null>(null);
@@ -596,8 +597,8 @@ export function ComposeDialog({
       titleRef.current?.focus();
       return;
     }
-    if (toFieldRef.current) toFieldRef.current.focus();
-    else identitySelectRef.current?.focus();
+    if (!identityId && identitySelectRef.current) identitySelectRef.current.focus();
+    else toFieldRef.current?.focus();
   }, [isLoading, loadError, preflight, isMinimized, pendingRequestLabel]);
 
   useEffect(() => {
@@ -716,8 +717,8 @@ export function ComposeDialog({
     if (isLeaving || isSending || attachmentUploadPending) return;
     if (preserveUnsaved && (isLoading || loadError || sendState === "unknown" || sendState === "in_progress")) return;
     const hasUnsavedChanges = draftRevisionRef.current > savedDraftRevisionRef.current;
-    if (preserveUnsaved && hasUnsavedChanges && !selectedIdentity) {
-      setFormError("Choose a sender identity so this draft can be saved before switching.");
+    if (hasUnsavedChanges && !selectedIdentity) {
+      setFormError("Choose a sender identity so this draft can be saved before closing or switching.");
       return;
     }
     setIsLeaving(true);
@@ -787,8 +788,7 @@ export function ComposeDialog({
     if (!nextIdentity) return;
     setFields((current) => ({
       ...current,
-      fromEmail: "",
-      bcc: "",
+      fromEmail: selectedIdentity ? "" : current.fromEmail,
       body: hasBodyEditsRef.current
         ? current.body
         : nextIdentity.textSignature
@@ -803,7 +803,6 @@ export function ComposeDialog({
     draftRevisionRef.current += 1;
     setDraftSaveState("idle");
     setDraftSaveError(false);
-    window.setTimeout(() => toFieldRef.current?.focus(), 0);
   }
 
   function markAttachmentsChanged(): void {
@@ -1057,8 +1056,6 @@ export function ComposeDialog({
   }
 
   const currentMessageSubmitted = sendState === "submitted" || sendState === "submitted_sent_update_pending";
-  const requiresIdentity = !isLoading && !loadError && preflight &&
-    preflight.identities.length > 1 && !selectedIdentity;
   const switchNeedsIdentity = Boolean(pendingRequestLabel) && !currentMessageSubmitted &&
     !selectedIdentity && draftRevisionRef.current > savedDraftRevisionRef.current;
   const preflightUnavailable = !isLoading && !loadError && preflight &&
@@ -1120,7 +1117,7 @@ export function ComposeDialog({
             </p>
             {switchNeedsIdentity ? (
               <p id="compose-switch-identity-requirement">
-                {requiresIdentity
+                {preflight && preflight.identities.length > 0 && !preflightUnavailable
                   ? "Choose a sender in the From field below before saving and switching."
                   : "This draft needs an available sender identity before it can be saved and switched."}
               </p>
@@ -1170,29 +1167,9 @@ export function ComposeDialog({
           </div>
         ) : null}
 
-        {requiresIdentity ? (
-          <div className="compose-field compose-identity-prompt">
-            <label htmlFor="compose-identity">From</label>
-            <select
-              autoComplete="off"
-              id="compose-identity"
-              onChange={(event) => selectIdentity(event.target.value)}
-              ref={identitySelectRef}
-              value={identityId}
-            >
-              <option value="">Choose a sender identity</option>
-              {preflight.identities.map((identity) => (
-                <option key={identity.id} value={identity.id}>
-                  {identityLabel(identity)}
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : null}
-
-        {selectedIdentity && preflight && !preflightUnavailable ? (
+        {preflight && !isLoading && !loadError && !preflightUnavailable ? (
           <form className="compose-form" onSubmit={submit}>
-            {preflight.identities.length === 1 ? (
+            {preflight.identities.length === 1 && selectedIdentity ? (
               <div className="compose-field compose-sender-field">
                 {selectedIdentity.isWildcard ? (
                   <>
@@ -1216,25 +1193,20 @@ export function ComposeDialog({
                 )}
               </div>
             ) : null}
-            {preflight.identities.length > 1 ? (
+            {preflight.identities.length > 1 || !selectedIdentity ? (
               <div className="compose-field compose-sender-field">
                 <label htmlFor="compose-identity">From</label>
-                <select
-                  autoComplete="off"
+                <CustomSelect
+                  label="From"
                   disabled={!canEdit}
                   id="compose-identity"
-                  onChange={(event) => selectIdentity(event.target.value)}
-                  ref={identitySelectRef}
+                  onChange={selectIdentity}
+                  options={preflight.identities.map((identity) => ({ value: identity.id, label: identityLabel(identity) }))}
+                  placeholder="Choose a sender identity"
+                  triggerRef={identitySelectRef}
                   value={identityId}
-                >
-                  <option value="">Choose a sender identity</option>
-                  {preflight.identities.map((identity) => (
-                    <option key={identity.id} value={identity.id}>
-                      {identityLabel(identity)}
-                    </option>
-                  ))}
-                </select>
-                {selectedIdentity.isWildcard ? (
+                />
+                {selectedIdentity?.isWildcard ? (
                   <>
                     <label htmlFor="compose-from">From address</label>
                     <input
@@ -1250,12 +1222,12 @@ export function ComposeDialog({
                 ) : null}
               </div>
             ) : null}
-            {selectedIdentity.replyTo.length > 0 ? (
+            {selectedIdentity && selectedIdentity.replyTo.length > 0 ? (
               <p className="compose-default-note">
                 Replies go to {selectedIdentity.replyTo.map(addressLabel).join(", ")}.
               </p>
             ) : null}
-            {selectedIdentity.bcc.length > 0 ? (
+            {selectedIdentity && selectedIdentity.bcc.length > 0 ? (
               <div className="compose-default-bcc">
                 <span className="compose-label">Always Bcc</span>
                 <ul>
@@ -1431,6 +1403,8 @@ export function ComposeDialog({
             <p className={`draft-save-status${draftSaveError ? " is-error" : ""}`} role="status" aria-live="polite">
               {localPreview
                 ? "Drafts are disabled in this local preview."
+                : !selectedIdentity
+                  ? "Choose a sender identity to save this draft."
                 : draftSaveState === "saving"
                 ? "Saving draft…"
                 : draftSaveState === "saved"
@@ -1468,7 +1442,7 @@ export function ComposeDialog({
               )}
             </footer>
           </form>
-        ) : !isLoading && !loadError && !preflightUnavailable && !requiresIdentity ? (
+        ) : !isLoading && !loadError && !preflightUnavailable ? (
           <div className="compose-state" role="status">
             <p>Choose a sender identity to continue.</p>
           </div>

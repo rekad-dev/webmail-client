@@ -35,6 +35,10 @@ export function CustomSelect({ id, label, value, options, placeholder = "Choose 
   }, []);
 
   useEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
+
+  useEffect(() => {
     if (!open) return;
     function dismiss(event: PointerEvent) {
       if (!buttonRef.current?.contains(event.target as Node) && !listRef.current?.contains(event.target as Node)) setOpen(false);
@@ -78,7 +82,7 @@ export function CustomSelect({ id, label, value, options, placeholder = "Choose 
 
   function choose(index: number) {
     const option = options[index];
-    if (option) onChange(option.value);
+    if (option && option.value !== value) onChange(option.value);
     setOpen(false);
   }
 
@@ -99,11 +103,16 @@ export function CustomSelect({ id, label, value, options, placeholder = "Choose 
       return;
     }
     if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      event.preventDefault();
       const next = (typeahead.current + event.key).toLocaleLowerCase();
       typeahead.current = next;
       if (typeaheadTimer.current) clearTimeout(typeaheadTimer.current);
       typeaheadTimer.current = setTimeout(() => { typeahead.current = ""; }, 700);
-      const match = options.findIndex((option) => option.label.toLocaleLowerCase().startsWith(next));
+      const repeated = next.length > 1 && [...next].every((letter) => letter === next[0]);
+      const term = repeated ? next[0] : next;
+      const start = repeated && open ? (active + 1) % options.length : 0;
+      const offset = options.findIndex((_, index) => options[(start + index) % options.length].label.toLocaleLowerCase().startsWith(term));
+      const match = offset < 0 ? -1 : (start + offset) % options.length;
       if (match >= 0) { if (!open) show(match); else setActive(match); }
     }
   }
@@ -129,9 +138,9 @@ export function CustomSelect({ id, label, value, options, placeholder = "Choose 
         <MailIcon name="chevron-down" size={16} />
       </button>
       {open && portalTarget ? createPortal(
-        <div className="custom-select-list" id={listId} ref={listRef} role="listbox" style={{ top: position.top, left: position.left, width: position.width, maxHeight: position.maxHeight }}>
+        <div aria-label={label ?? "Options"} className="custom-select-list" id={listId} ref={listRef} role="listbox" style={{ top: position.top, left: position.left, width: position.width, maxHeight: position.maxHeight }}>
           {options.map((option, index) => (
-            <div aria-selected={index === selectedIndex} className={`custom-select-option${index === active ? " is-active" : ""}`} data-option-index={index} id={`${listId}-option-${index}`} key={option.value} onMouseMove={() => setActive(index)} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(index)} role="option">
+            <div aria-selected={index === active} className={`custom-select-option${index === active ? " is-active" : ""}`} data-option-index={index} id={`${listId}-option-${index}`} key={option.value} onMouseMove={() => setActive(index)} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(index)} role="option">
               {option.label}
             </div>
           ))}
