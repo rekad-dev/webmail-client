@@ -1,3 +1,4 @@
+import { mailAccountOption, sharedAccountErrorResponse } from "./mail-account-param.mts";
 import {
   JmapAccountMismatchError,
   JmapAttachmentTooLargeError,
@@ -94,6 +95,7 @@ export function createMailAttachmentDownloadHandler(
       const attachment = await dependencies.downloadAttachment({
         accessToken: session.accessToken,
         expectedAccountId: session.accountId,
+        ...mailAccountOption(request),
         ...input,
         ...dependencies.getJmapSettings(),
       });
@@ -109,6 +111,8 @@ export function createMailAttachmentDownloadHandler(
         headers,
       });
     } catch (error) {
+      const sharedAccountResponse = sharedAccountErrorResponse(error);
+      if (sharedAccountResponse) return sharedAccountResponse;
       if (error instanceof JmapAccountMismatchError) {
         try {
           await dependencies.revokeSession(sessionId);

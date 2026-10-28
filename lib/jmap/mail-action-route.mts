@@ -1,3 +1,4 @@
+import { mailAccountOption, sharedAccountErrorResponse } from "./mail-account-param.mts";
 import {
   JmapAccountMismatchError,
   JmapEmailNotFoundError,
@@ -66,6 +67,8 @@ async function mapFailure(
   sessionId: string,
   dependencies: MailActionRouteDependencies,
 ): Promise<Response> {
+  const sharedAccountResponse = sharedAccountErrorResponse(error);
+  if (sharedAccountResponse) return sharedAccountResponse;
   if (error instanceof JmapAccountMismatchError) {
     try {
       await dependencies.revokeSession(sessionId);
@@ -103,7 +106,7 @@ export function createMailActionPostHandler(
       return jsonResponse({ error: "invalid_request" }, 400);
     }
 
-    let input: JmapMailActionInput;
+    let input: JmapMailActionInput & { mailAccountId?: string };
     try {
       input = await parseMailActionRequest(request);
     } catch (error) {
@@ -120,10 +123,12 @@ export function createMailActionPostHandler(
     if (authenticated instanceof Response) return authenticated;
     const { sessionId, session } = authenticated;
     try {
+      const { mailAccountId, ...actionInput } = input;
       await dependencies.updateMail({
         accessToken: session.accessToken,
         expectedAccountId: session.accountId,
-        input,
+        ...(mailAccountId ? { mailAccountId } : {}),
+        input: actionInput,
         ...dependencies.getJmapSettings(),
       });
       return jsonResponse({ ok: true }, 200);

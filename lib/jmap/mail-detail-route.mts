@@ -1,3 +1,4 @@
+import { mailAccountOption, sharedAccountErrorResponse } from "./mail-account-param.mts";
 import {
   JmapAccountMismatchError,
   JmapEmailNotFoundError,
@@ -81,6 +82,8 @@ async function handleFailure(
   sessionId: string,
   dependencies: MailDetailRouteDependencies,
 ): Promise<Response> {
+  const sharedAccountResponse = sharedAccountErrorResponse(error);
+  if (sharedAccountResponse) return sharedAccountResponse;
   if (error instanceof JmapAccountMismatchError) {
     try {
       await dependencies.revokeSession(sessionId);
@@ -114,6 +117,7 @@ export function createMailDetailHandlers(
       const detail = await dependencies.getEmailDetail({
         accessToken: session.accessToken,
         expectedAccountId: session.accountId,
+        ...mailAccountOption(request),
         emailId,
         ...dependencies.getJmapSettings(),
       });
@@ -143,6 +147,7 @@ export function createMailDetailHandlers(
       await dependencies.markEmailRead({
         accessToken: session.accessToken,
         expectedAccountId: session.accountId,
+        ...mailAccountOption(request),
         emailId,
         ...dependencies.getJmapSettings(),
       });

@@ -1,3 +1,4 @@
+import { authorizedMailAccounts, requireAuthorizedMailAccount, type AuthorizedMailAccount } from "./account-scope.mts";
 import { isIP } from "node:net";
 import { createHash } from "node:crypto";
 import { FIXED_INLINE_IMAGES } from "../mail/fixed-mail-images.mts";
@@ -98,6 +99,9 @@ const EMAIL_SUMMARY_PROPERTIES = [
 ] as const;
 
 interface JmapAccount {
+  name?: string;
+  isPersonal?: boolean;
+  isReadOnly?: boolean;
   accountCapabilities?: Record<string, unknown>;
 }
 
@@ -398,6 +402,20 @@ export class JmapPasswordChangeOutcomeUnknownError extends JmapPocError {
   constructor() {
     super("The mail server did not confirm the password change result.");
     this.name = "JmapPasswordChangeOutcomeUnknownError";
+  }
+}
+
+export class JmapSharedAccountUnavailableError extends JmapPocError {
+  constructor() {
+    super("The shared mail account is not available to this session.");
+    this.name = "JmapSharedAccountUnavailableError";
+  }
+}
+
+export class JmapSharedAccountReadOnlyError extends JmapPocError {
+  constructor() {
+    super("The shared mail account is read-only.");
+    this.name = "JmapSharedAccountReadOnlyError";
   }
 }
 
@@ -2473,6 +2491,9 @@ interface JmapApiContext {
   uploadUrl: URL;
   downloadUrl: URL;
   accountId: string;
+  /** The OAuth session's own account; accountId differs only for a shared account. */
+  primaryAccountId: string;
+  readOnly: boolean;
   capabilities: Record<string, unknown>;
   accountCapabilities: Record<string, unknown>;
   authorization: string;
@@ -2485,7 +2506,12 @@ async function createJmapApiContext({
   allowInsecureHttp,
   authorization,
   fetchImpl,
+  mailAccountId,
+  expectedAccountId,
 }: {
+  /** A shared account to operate on; needs expectedAccountId and is re-checked against this fresh session. */
+  mailAccountId?: string;
+  expectedAccountId?: string;
   sessionUrl: string;
   trustedOrigins: string[];
   allowInsecureHttp: boolean;
@@ -2518,7 +2544,19 @@ async function createJmapApiContext({
     allowInsecureHttp,
   );
 
-  const accountId = getPrimaryMailAccountId(session);
+  const primaryAccountId = getPrimaryMailAccountId(session);
+  let accountId = primaryAccountId;
+  let readOnly = false;
+  if (mailAccountId !== undefined && mailAccountId !== primaryAccountId) {
+    if (expectedAccountId !== primaryAccountId) throw new JmapAccountMismatchError();
+    try {
+      const shared = requireAuthorizedMailAccount(session, primaryAccountId, mailAccountId);
+      accountId = shared.id;
+      readOnly = shared.isReadOnly;
+    } catch {
+      throw new JmapSharedAccountUnavailableError();
+    }
+  }
   const account = session.accounts?.[accountId];
   if (!account) {
     throw new JmapPocError(
@@ -2531,6 +2569,8 @@ async function createJmapApiContext({
     uploadUrl: endpoints.uploadUrl,
     downloadUrl: endpoints.downloadUrl,
     accountId,
+    primaryAccountId,
+    readOnly,
     capabilities: session.capabilities ?? {},
     accountCapabilities: account.accountCapabilities ?? {},
     authorization,
@@ -2875,7 +2915,7 @@ export async function runJmapOAuthComposePreflight({
     authorization: makeOAuthAuthorization(accessToken),
     fetchImpl,
   });
-  if (context.accountId !== expectedAccountId) {
+  if (context.primaryAccountId !== expectedAccountId) {
     throw new JmapAccountMismatchError();
   }
 
@@ -3121,6 +3161,7 @@ function emailCreateDraftRequest(
 async function createOAuthJmapContext({
   accessToken,
   expectedAccountId,
+  mailAccountId,
   sessionUrl,
   trustedOrigins,
   allowInsecureHttp,
@@ -3128,19 +3169,22 @@ async function createOAuthJmapContext({
 }: {
   accessToken: string;
   expectedAccountId: string;
+  mailAccountId?: string;
   sessionUrl: string;
   trustedOrigins: string[];
   allowInsecureHttp: boolean;
   fetchImpl: typeof fetch;
 }): Promise<JmapApiContext> {
   const context = await createJmapApiContext({
+    mailAccountId,
+    expectedAccountId,
     sessionUrl,
     trustedOrigins,
     allowInsecureHttp,
     authorization: makeOAuthAuthorization(accessToken),
     fetchImpl,
   });
-  if (context.accountId !== expectedAccountId) {
+  if (context.primaryAccountId !== expectedAccountId) {
     throw new JmapAccountMismatchError();
   }
   return context;
@@ -3511,6 +3555,7 @@ export async function runJmapOAuthUploadAttachment({
 export async function runJmapOAuthDownloadAttachment({
   accessToken,
   expectedAccountId,
+  mailAccountId,
   emailId,
   attachmentIndex,
   sessionUrl = "https://mail.rekad.id/.well-known/jmap",
@@ -3520,6 +3565,7 @@ export async function runJmapOAuthDownloadAttachment({
 }: {
   accessToken: string;
   expectedAccountId: string;
+  mailAccountId?: string;
   emailId: string;
   attachmentIndex: number;
   sessionUrl?: string;
@@ -3539,6 +3585,7 @@ export async function runJmapOAuthDownloadAttachment({
   const context = await createOAuthJmapContext({
     accessToken,
     expectedAccountId,
+    mailAccountId,
     sessionUrl,
     trustedOrigins,
     allowInsecureHttp,
@@ -3664,6 +3711,7 @@ const MAX_RAW_MESSAGE_DISPLAY_BYTES = 1024 * 1024;
 export async function runJmapOAuthRawMessage({
   accessToken,
   expectedAccountId,
+  mailAccountId,
   emailId,
   sessionUrl = "https://mail.rekad.id/.well-known/jmap",
   trustedOrigins = ["https://mail.rekad.id"],
@@ -3672,6 +3720,7 @@ export async function runJmapOAuthRawMessage({
 }: {
   accessToken: string;
   expectedAccountId: string;
+  mailAccountId?: string;
   emailId: string;
   sessionUrl?: string;
   trustedOrigins?: string[];
@@ -3683,6 +3732,7 @@ export async function runJmapOAuthRawMessage({
   const context = await createOAuthJmapContext({
     accessToken,
     expectedAccountId,
+    mailAccountId,
     sessionUrl,
     trustedOrigins,
     allowInsecureHttp,
@@ -4798,9 +4848,45 @@ export async function runJmapOAuthDestroyDraft({
   }
 }
 
+/** Lists the primary account and any group accounts the session advertises. */
+export async function runJmapOAuthMailAccounts({
+  accessToken,
+  expectedAccountId,
+  sessionUrl = "https://mail.rekad.id/.well-known/jmap",
+  trustedOrigins = ["https://mail.rekad.id"],
+  allowInsecureHttp = false,
+  fetchImpl = fetch,
+}: {
+  accessToken: string;
+  expectedAccountId: string;
+  sessionUrl?: string;
+  trustedOrigins?: string[];
+  allowInsecureHttp?: boolean;
+  fetchImpl?: typeof fetch;
+}): Promise<AuthorizedMailAccount[]> {
+  const parsedSessionUrl = parseUrl(sessionUrl, undefined, allowInsecureHttp);
+  const allowedOrigins = parseTrustedOrigins(trustedOrigins, parsedSessionUrl, allowInsecureHttp);
+  const { session } = await fetchSession({
+    sessionUrl: parsedSessionUrl,
+    trustedOrigins: allowedOrigins,
+    allowInsecureHttp,
+    authorization: makeOAuthAuthorization(accessToken),
+    fetchImpl,
+  });
+  if (getPrimaryMailAccountId(session) !== expectedAccountId) {
+    throw new JmapAccountMismatchError();
+  }
+  try {
+    return authorizedMailAccounts(session, expectedAccountId);
+  } catch {
+    throw new JmapAccountMismatchError();
+  }
+}
+
 export async function runJmapOAuthMailboxListing({
   accessToken,
   expectedAccountId,
+  mailAccountId,
   mailboxId,
   position = 0,
   searchText,
@@ -4813,6 +4899,7 @@ export async function runJmapOAuthMailboxListing({
 }: {
   accessToken: string;
   expectedAccountId: string;
+  mailAccountId?: string;
   mailboxId?: string;
   position?: number;
   searchText?: string;
@@ -4825,13 +4912,15 @@ export async function runJmapOAuthMailboxListing({
 }): Promise<JmapMailboxListing> {
   validateMailboxListingPosition(position);
   const context = await createJmapApiContext({
+    mailAccountId,
+    expectedAccountId,
     sessionUrl,
     trustedOrigins,
     allowInsecureHttp,
     authorization: makeOAuthAuthorization(accessToken),
     fetchImpl,
   });
-  if (context.accountId !== expectedAccountId) {
+  if (context.primaryAccountId !== expectedAccountId) {
     throw new JmapAccountMismatchError();
   }
 
@@ -4966,6 +5055,7 @@ function parseThreadMessages(
 export async function runJmapOAuthThreadView({
   accessToken,
   expectedAccountId,
+  mailAccountId,
   threadId,
   sessionUrl = "https://mail.rekad.id/.well-known/jmap",
   trustedOrigins = ["https://mail.rekad.id"],
@@ -4974,6 +5064,7 @@ export async function runJmapOAuthThreadView({
 }: {
   accessToken: string;
   expectedAccountId: string;
+  mailAccountId?: string;
   threadId: string;
   sessionUrl?: string;
   trustedOrigins?: string[];
@@ -4982,13 +5073,15 @@ export async function runJmapOAuthThreadView({
 }): Promise<JmapThreadView> {
   validateEmailId(threadId);
   const context = await createJmapApiContext({
+    mailAccountId,
+    expectedAccountId,
     sessionUrl,
     trustedOrigins,
     allowInsecureHttp,
     authorization: makeOAuthAuthorization(accessToken),
     fetchImpl,
   });
-  if (context.accountId !== expectedAccountId) {
+  if (context.primaryAccountId !== expectedAccountId) {
     throw new JmapAccountMismatchError();
   }
   const allIds = await fetchThreadEmailIds(context, threadId);
@@ -5244,7 +5337,7 @@ export async function runJmapOAuthThreadSubjects({
     authorization: makeOAuthAuthorization(accessToken),
     fetchImpl,
   });
-  if (context.accountId !== expectedAccountId) {
+  if (context.primaryAccountId !== expectedAccountId) {
     throw new JmapAccountMismatchError();
   }
 
@@ -5399,7 +5492,7 @@ export async function runJmapOAuthThreadSubjectCandidates({
     authorization: makeOAuthAuthorization(accessToken),
     fetchImpl: operationFetchImpl,
   });
-  if (context.accountId !== expectedAccountId) {
+  if (context.primaryAccountId !== expectedAccountId) {
     throw new JmapAccountMismatchError();
   }
 
@@ -5724,7 +5817,7 @@ export async function runJmapOAuthSubjectMatchMetadata({
     authorization: makeOAuthAuthorization(accessToken),
     fetchImpl: operationFetchImpl,
   });
-  if (context.accountId !== expectedAccountId) {
+  if (context.primaryAccountId !== expectedAccountId) {
     throw new JmapAccountMismatchError();
   }
 
@@ -5941,6 +6034,7 @@ function verifyEmailActionUpdate(responseJson: unknown, emailIds: string[]): voi
 export async function runJmapOAuthMailAction({
   accessToken,
   expectedAccountId,
+  mailAccountId,
   input,
   sessionUrl = "https://mail.rekad.id/.well-known/jmap",
   trustedOrigins = ["https://mail.rekad.id"],
@@ -5949,6 +6043,7 @@ export async function runJmapOAuthMailAction({
 }: {
   accessToken: string;
   expectedAccountId: string;
+  mailAccountId?: string;
   input: JmapMailActionInput;
   sessionUrl?: string;
   trustedOrigins?: string[];
@@ -5956,15 +6051,18 @@ export async function runJmapOAuthMailAction({
   fetchImpl?: typeof fetch;
 }): Promise<void> {
   const context = await createJmapApiContext({
+    mailAccountId,
+    expectedAccountId,
     sessionUrl,
     trustedOrigins,
     allowInsecureHttp,
     authorization: makeOAuthAuthorization(accessToken),
     fetchImpl,
   });
-  if (context.accountId !== expectedAccountId) {
+  if (context.primaryAccountId !== expectedAccountId) {
     throw new JmapAccountMismatchError();
   }
+  if (context.readOnly) throw new JmapSharedAccountReadOnlyError();
 
   const inputId = input.emailId ?? input.threadId;
   if (!inputId) throw new JmapPocError("A mail action target is required.");
@@ -6128,6 +6226,7 @@ async function fetchMailboxMembershipRoles(
 export async function runJmapOAuthEmailMailboxMembership({
   accessToken,
   expectedAccountId,
+  mailAccountId,
   emailId,
   sessionUrl = "https://mail.rekad.id/.well-known/jmap",
   trustedOrigins = ["https://mail.rekad.id"],
@@ -6136,6 +6235,7 @@ export async function runJmapOAuthEmailMailboxMembership({
 }: {
   accessToken: string;
   expectedAccountId: string;
+  mailAccountId?: string;
   emailId: string;
   sessionUrl?: string;
   trustedOrigins?: string[];
@@ -6148,13 +6248,15 @@ export async function runJmapOAuthEmailMailboxMembership({
     EMAIL_MEMBERSHIP_OPERATION_TIMEOUT_MS,
   );
   const context = await createJmapApiContext({
+    mailAccountId,
+    expectedAccountId,
     sessionUrl,
     trustedOrigins,
     allowInsecureHttp,
     authorization: makeOAuthAuthorization(accessToken),
     fetchImpl: operationFetchImpl,
   });
-  if (context.accountId !== expectedAccountId) {
+  if (context.primaryAccountId !== expectedAccountId) {
     throw new JmapAccountMismatchError();
   }
 
@@ -6190,6 +6292,7 @@ function validateEmailId(emailId: string): void {
 export async function runJmapOAuthEmailDetail({
   accessToken,
   expectedAccountId,
+  mailAccountId,
   emailId,
   sessionUrl = "https://mail.rekad.id/.well-known/jmap",
   trustedOrigins = ["https://mail.rekad.id"],
@@ -6198,6 +6301,7 @@ export async function runJmapOAuthEmailDetail({
 }: {
   accessToken: string;
   expectedAccountId: string;
+  mailAccountId?: string;
   emailId: string;
   sessionUrl?: string;
   trustedOrigins?: string[];
@@ -6206,13 +6310,15 @@ export async function runJmapOAuthEmailDetail({
 }): Promise<JmapEmailDetail> {
   validateEmailId(emailId);
   const context = await createJmapApiContext({
+    mailAccountId,
+    expectedAccountId,
     sessionUrl,
     trustedOrigins,
     allowInsecureHttp,
     authorization: makeOAuthAuthorization(accessToken),
     fetchImpl,
   });
-  if (context.accountId !== expectedAccountId) {
+  if (context.primaryAccountId !== expectedAccountId) {
     throw new JmapAccountMismatchError();
   }
 
@@ -6230,6 +6336,7 @@ export async function runJmapOAuthEmailDetail({
 export async function runJmapOAuthMarkEmailRead({
   accessToken,
   expectedAccountId,
+  mailAccountId,
   emailId,
   sessionUrl = "https://mail.rekad.id/.well-known/jmap",
   trustedOrigins = ["https://mail.rekad.id"],
@@ -6238,6 +6345,7 @@ export async function runJmapOAuthMarkEmailRead({
 }: {
   accessToken: string;
   expectedAccountId: string;
+  mailAccountId?: string;
   emailId: string;
   sessionUrl?: string;
   trustedOrigins?: string[];
@@ -6246,15 +6354,18 @@ export async function runJmapOAuthMarkEmailRead({
 }): Promise<void> {
   validateEmailId(emailId);
   const context = await createJmapApiContext({
+    mailAccountId,
+    expectedAccountId,
     sessionUrl,
     trustedOrigins,
     allowInsecureHttp,
     authorization: makeOAuthAuthorization(accessToken),
     fetchImpl,
   });
-  if (context.accountId !== expectedAccountId) {
+  if (context.primaryAccountId !== expectedAccountId) {
     throw new JmapAccountMismatchError();
   }
+  if (context.readOnly) throw new JmapSharedAccountReadOnlyError();
 
   const responseJson = await postJmapApi({
     apiUrl: context.apiUrl,

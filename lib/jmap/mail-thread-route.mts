@@ -1,3 +1,4 @@
+import { mailAccountOption, sharedAccountErrorResponse } from "./mail-account-param.mts";
 import {
   JmapAccountMismatchError,
   JmapEmailNotFoundError,
@@ -70,11 +71,14 @@ export function createMailThreadGetHandler(
       const thread = await dependencies.getThread({
         accessToken: session.accessToken,
         expectedAccountId: session.accountId,
+        ...mailAccountOption(request),
         threadId,
         ...dependencies.getJmapSettings(),
       });
       return jsonResponse(thread, 200);
     } catch (error) {
+      const sharedAccountResponse = sharedAccountErrorResponse(error);
+      if (sharedAccountResponse) return sharedAccountResponse;
       if (error instanceof JmapAccountMismatchError && sessionId) {
         try {
           await dependencies.revokeSession(sessionId);

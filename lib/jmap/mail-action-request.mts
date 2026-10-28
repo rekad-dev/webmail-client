@@ -72,7 +72,7 @@ async function readBody(request: Request): Promise<unknown> {
 
 export async function parseMailActionRequest(
   request: Request,
-): Promise<JmapMailActionInput> {
+): Promise<JmapMailActionInput & { mailAccountId?: string }> {
   const body = recordValue(await readBody(request));
   if (!body) throw new InvalidMailActionRequest();
   const allowedKeys = new Set([
@@ -81,6 +81,7 @@ export async function parseMailActionRequest(
     "threadId",
     "sourceMailboxId",
     "destinationMailboxId",
+    "accountId",
   ]);
   if (Object.keys(body).some((key) => !allowedKeys.has(key))) {
     throw new InvalidMailActionRequest();
@@ -118,6 +119,9 @@ export async function parseMailActionRequest(
   if (body.action !== "move" && Object.hasOwn(body, "sourceMailboxId")) {
     throw new InvalidMailActionRequest();
   }
+  if (Object.hasOwn(body, "accountId") && !validId(body.accountId)) {
+    throw new InvalidMailActionRequest();
+  }
 
   return {
     action: body.action as JmapMailActionInput["action"],
@@ -129,5 +133,6 @@ export async function parseMailActionRequest(
     ...(typeof body.destinationMailboxId === "string"
       ? { destinationMailboxId: body.destinationMailboxId }
       : {}),
+    ...(typeof body.accountId === "string" ? { mailAccountId: body.accountId } : {}),
   };
 }

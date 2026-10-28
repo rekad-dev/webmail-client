@@ -1,3 +1,4 @@
+import { mailAccountOption, sharedAccountErrorResponse } from "./mail-account-param.mts";
 import {
   JmapAccountMismatchError,
   JmapMailboxNotFoundError,
@@ -67,11 +68,14 @@ export function createMailGetHandler(dependencies: MailRouteDependencies) {
       const listing = await dependencies.listMail({
         accessToken: session.accessToken,
         expectedAccountId: session.accountId,
+        ...mailAccountOption(request),
         ...listingRequest,
         ...dependencies.getJmapSettings(),
       });
       return jsonResponse(listing, 200);
     } catch (error) {
+      const sharedAccountResponse = sharedAccountErrorResponse(error);
+      if (sharedAccountResponse) return sharedAccountResponse;
       if (error instanceof JmapAccountMismatchError) {
         if (!sessionId) {
           return jsonResponse({ error: "sign_in_required" }, 401);
