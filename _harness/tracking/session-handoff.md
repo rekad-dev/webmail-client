@@ -5,6 +5,21 @@ scope: session-handoff
 
 # Session Handoff
 
+## 2026-10-28 profile pictures (deployed)
+
+Deployed with commit `cb3fdb4` after the user approved running the additive
+migration `0004-profile-pictures.sql` on the production application database
+(verified: table `app_profile_pictures` exists with 0 rows). People add, replace,
+or remove their own picture in the account menu. The browser crops it to a
+256x256 WebP/PNG; `/api/profile/picture` (GET/PUT/DELETE, own picture only, keyed
+by OAuth subject) validates the file signature, 256 KiB size and 32-512 px
+dimensions, and serves it with nosniff and a sandbox CSP. It shows in the
+header account button and the sidebar footer. Not built: showing a person's
+picture to other users (for example next to their messages); that needs a
+decision about visibility. Not verified live: an upload while signed in. The
+custom login page is deferred by the user. The live accessibility audit still
+needs a fresh test-account sign-in.
+
 ## 2026-10-28 offline copies archived, internal-tool sign-in (deployed)
 
 Deployed as `dpl_` at `https://webmail.rekad.id` (aliased; commits up to
