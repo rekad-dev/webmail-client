@@ -8,6 +8,8 @@ import { plainTextEditorContent } from "./rich-text-editor";
 import { SignOutButton } from "./sign-out-button";
 import { PasswordChangeForm } from "./password-change-form";
 import { MailIcon, type MailIconName } from "./mail-icons";
+import { MessageActionsMenu } from "./message-actions-menu";
+import { MessageHtmlFrame } from "./message-html-frame";
 import {
   applyOfflineSyncPage,
   clearOtherOfflineAccounts,
@@ -141,7 +143,6 @@ interface ComposeRequest {
   label: string;
 }
 
-type BodyFormat = "formatted" | "plain";
 
 function senderLabel(email: { from: Array<{ name: string | null; email: string }> }): string {
   const sender = email.from[0];
@@ -241,12 +242,6 @@ function formatFileSize(size: number | null): string {
     unit += 1;
   }
   return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value)} ${units[unit]}`;
-}
-
-function isolatedHtmlDocument(html: string): string {
-  const policy =
-    "default-src 'none'; script-src 'none'; img-src 'none'; style-src 'none'; font-src 'none'; media-src 'none'; connect-src 'none'; object-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'";
-  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${policy}"></head><body>${html}</body></html>`;
 }
 
 async function readEmailDetail(response: Response): Promise<EmailDetail> {
@@ -489,14 +484,13 @@ function MessageDetailView({
   isRefreshing,
   error,
   readUpdateError,
-  bodyFormat,
   mailboxName,
   backButtonRef,
   headingRef,
   onBack,
   onClose,
   onRetry,
-  onBodyFormatChange,
+  allowOriginal,
   mailboxes,
   actionPending,
   actionError,
@@ -515,14 +509,13 @@ function MessageDetailView({
   isRefreshing: boolean;
   error: string | null;
   readUpdateError: boolean;
-  bodyFormat: BodyFormat;
   mailboxName: string;
   backButtonRef: RefObject<HTMLButtonElement | null>;
   headingRef: RefObject<HTMLHeadingElement | null>;
   onBack(): void;
   onClose(): void;
   onRetry(): void;
-  onBodyFormatChange(format: BodyFormat): void;
+  allowOriginal: boolean;
   mailboxes: Mailbox[];
   actionPending: boolean;
   actionError: string | null;
@@ -536,6 +529,8 @@ function MessageDetailView({
   onForward(detail: EmailDetail, trigger: HTMLButtonElement): void;
   onToggleOffline(detail: EmailDetail): void;
 }) {
+  const detailsPanelId = useId();
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const backButton = (
     <button
       className="detail-back"
@@ -576,10 +571,13 @@ function MessageDetailView({
 
   if (!detail) return null;
 
-  const formattedHtml = Boolean(detail.htmlBody) &&
-    (bodyFormat === "formatted" || !detail.textBody);
   const receivedAt = formatDetailDate(detail.receivedAt);
   const sentAt = formatDetailDate(detail.sentAt);
+  const displayDate = receivedAt ?? sentAt;
+  const recipients = [...detail.to, ...detail.cc];
+  const recipientSummary = recipients.length > 0
+    ? `to ${recipients.slice(0, 2).map((address) => address.name?.trim() || address.email).join(", ")}${recipients.length > 2 ? ` +${recipients.length - 2}` : ""}`
+    : "Message details";
 
   return (
     <section className="message-detail" aria-labelledby="message-detail-title">
@@ -589,110 +587,10 @@ function MessageDetailView({
         <header className="message-detail-header">
           <div className="message-detail-top">
             <div className="message-detail-title-group">
-              <p className="eyebrow">Message detail</p>
               <h2 id="message-detail-title" ref={headingRef} tabIndex={-1}>
                 {detail.subject?.trim() || "(no subject)"}
-                {detail.isStarred ? <span className="conversation-star" aria-hidden="true"> ★</span> : null}
               </h2>
             </div>
-            <details className="reference-message-actions"><summary aria-label="Message actions" title="Message actions"><MailIcon name="more" size={18} /></summary>
-            <div className="message-action-bar" role="group" aria-label="Message actions">
-              <div className="bulk-action-group">
-                <button
-                  aria-pressed={offlineSaved}
-                  className="toolbar-action"
-                  disabled={!offlineAvailable || offlineSavePending}
-                  onClick={() => onToggleOffline(detail)}
-                  type="button"
-                >
-                  <MailIcon name="offline" size={18} />
-                  <span>
-                    {offlineSavePending
-                      ? "Saving…"
-                      : offlineSaved
-                        ? "Remove offline copy"
-                        : "Save offline"}
-                  </span>
-                </button>
-                <button
-                  className="toolbar-action"
-                  disabled={actionPending}
-                  onClick={() => onAction(detail.isUnread ? "mark_read" : "mark_unread")}
-                  type="button"
-                >
-                  <MailIcon name="mail" size={18} />
-                  <span>{detail.isUnread ? "Mark read" : "Mark unread"}</span>
-                </button>
-                <button
-                  aria-pressed={detail.isStarred}
-                  className="toolbar-action"
-                  disabled={actionPending}
-                  onClick={() => onAction(detail.isStarred ? "unstar" : "star")}
-                  type="button"
-                >
-                  <MailIcon name="star" size={18} />
-                  <span>{detail.isStarred ? "Unstar" : "Star"}</span>
-                </button>
-                <button
-                  className="toolbar-action"
-                  disabled={actionPending}
-                  onClick={() => onAction("archive")}
-                  type="button"
-                >
-                  <MailIcon name="archive" size={18} />
-                  <span>Archive</span>
-                </button>
-                <label className={`toolbar-action toolbar-folder message-move-control${actionPending ? " is-disabled" : ""}`}>
-                  <MailIcon name="folder" size={18} />
-                  <span>Move to…</span>
-                  <span className="visually-hidden">Move message to mailbox</span>
-                  <select
-                    aria-label="Move message to mailbox"
-                    defaultValue=""
-                    disabled={actionPending}
-                    onChange={(event) => {
-                      if (event.target.value) onMove(event.target.value);
-                      event.target.value = "";
-                    }}
-                  >
-                    <option value="">Move to…</option>
-                    {mailboxes.map((mailbox) => (
-                      <option key={mailbox.id} value={mailbox.id}>{mailbox.name}</option>
-                    ))}
-                  </select>
-                </label>
-                <button
-                  className="toolbar-action"
-                  disabled={actionPending}
-                  onClick={() => onAction("trash")}
-                  type="button"
-                >
-                  <MailIcon name="trash" size={18} />
-                  <span>Trash</span>
-                </button>
-              </div>
-              <div className="message-reply-actions">
-                <button
-                  className="compose-launch-button message-reply-button"
-                  disabled={actionPending}
-                  onClick={(event) => onReply(detail, event.currentTarget)}
-                  type="button"
-                >
-                  <MailIcon name="reply" size={18} />
-                  <span>Reply</span>
-                </button>
-                <button
-                  className="compose-secondary-action message-forward-button"
-                  disabled={actionPending}
-                  onClick={(event) => onForward(detail, event.currentTarget)}
-                  type="button"
-                >
-                  <MailIcon name="forward" size={18} />
-                  <span>Forward</span>
-                </button>
-              </div>
-            </div>
-            </details>
             <button className="icon-button" type="button" aria-label="Close message" onClick={onClose}><MailIcon name="close" size={18} /></button>
           </div>
           <div className="message-detail-sender-row">
@@ -700,59 +598,96 @@ function MessageDetailView({
               {senderInitials(detail)}
             </span>
             <div className="message-detail-sender-copy">
-              <strong>{senderLabel(detail)}</strong>
-              <span>{detail.from[0]?.email ? `<${detail.from[0].email}>` : "Unknown address"}</span>
+              <div className="message-detail-sender-line">
+                <strong dir="auto">{senderLabel(detail)}</strong>
+                <span>{detail.from[0]?.email ? `<${detail.from[0].email}>` : "Unknown address"}</span>
+              </div>
+              <button
+                aria-controls={detailsPanelId}
+                aria-expanded={detailsOpen}
+                className="message-details-toggle"
+                onClick={() => setDetailsOpen((value) => !value)}
+                type="button"
+              >
+                <span>{recipientSummary}</span>
+                <MailIcon name="chevron-down" size={14} />
+              </button>
+              {detailsOpen ? (
+                <dl className="message-metadata" id={detailsPanelId}>
+                  {detail.from.length > 0 ? (
+                    <div><dt>From</dt><dd dir="auto">{detail.from.map(addressLabel).join(", ")}</dd></div>
+                  ) : null}
+                  {detail.replyTo.length > 0 ? (
+                    <div><dt>Reply-to</dt><dd dir="auto">{detail.replyTo.map(addressLabel).join(", ")}</dd></div>
+                  ) : null}
+                  {detail.to.length > 0 ? (
+                    <div><dt>To</dt><dd dir="auto">{detail.to.map(addressLabel).join(", ")}</dd></div>
+                  ) : null}
+                  {detail.cc.length > 0 ? (
+                    <div><dt>Cc</dt><dd dir="auto">{detail.cc.map(addressLabel).join(", ")}</dd></div>
+                  ) : null}
+                  {detail.bcc.length > 0 ? (
+                    <div><dt>Bcc</dt><dd dir="auto">{detail.bcc.map(addressLabel).join(", ")}</dd></div>
+                  ) : null}
+                  {sentAt ? (
+                    <div><dt>Sent</dt><dd><time dateTime={detail.sentAt ?? undefined}>{sentAt}</time></dd></div>
+                  ) : null}
+                  {receivedAt ? (
+                    <div><dt>Received</dt><dd><time dateTime={detail.receivedAt ?? undefined}>{receivedAt}</time></dd></div>
+                  ) : null}
+                </dl>
+              ) : null}
             </div>
-            <div className="reference-sender-actions">
-              <button type="button" aria-label="Reply" title="Reply" disabled={actionPending} onClick={(event) => onReply(detail, event.currentTarget)}><MailIcon name="reply" size={20} /></button>
-              <button type="button" aria-label="Forward" title="Forward" disabled={actionPending} onClick={(event) => onForward(detail, event.currentTarget)}><MailIcon name="forward" size={20} /></button>
+            <div className="message-detail-tools">
+              {displayDate ? (
+                <time className="message-detail-timestamp" dateTime={(detail.receivedAt ?? detail.sentAt) ?? undefined}>
+                  {displayDate}
+                </time>
+              ) : null}
+              <button
+                aria-label={detail.isStarred ? "Remove star" : "Add star"}
+                aria-pressed={detail.isStarred}
+                className={`icon-button message-star-button${detail.isStarred ? " is-starred" : ""}`}
+                disabled={actionPending}
+                onClick={() => onAction(detail.isStarred ? "unstar" : "star")}
+                title={detail.isStarred ? "Remove star" : "Add star"}
+                type="button"
+              >
+                <MailIcon name="star" size={18} />
+              </button>
+              <button
+                aria-label="Reply"
+                className="icon-button"
+                disabled={actionPending}
+                onClick={(event) => onReply(detail, event.currentTarget)}
+                title="Reply"
+                type="button"
+              >
+                <MailIcon name="reply" size={18} />
+              </button>
+              <MessageActionsMenu
+                actionPending={actionPending}
+                currentMailboxIds={detail.mailboxIds}
+                isStarred={detail.isStarred}
+                isUnread={detail.isUnread}
+                mailboxes={mailboxes}
+                offlineAvailable={offlineAvailable}
+                offlineSavePending={offlineSavePending}
+                offlineSaved={offlineSaved}
+                onArchive={() => onAction("archive")}
+                onForward={(trigger) => onForward(detail, trigger)}
+                onMove={onMove}
+                onReply={(trigger) => onReply(detail, trigger)}
+                onToggleOffline={() => onToggleOffline(detail)}
+                onToggleRead={() => onAction(detail.isUnread ? "mark_read" : "mark_unread")}
+                onToggleStar={() => onAction(detail.isStarred ? "unstar" : "star")}
+                onTrash={() => onAction("trash")}
+                originalHref={allowOriginal ? `/message/original?emailId=${encodeURIComponent(detail.id)}` : null}
+              />
             </div>
-            {receivedAt || sentAt ? (
-              <time className="message-detail-timestamp" dateTime={(detail.receivedAt ?? detail.sentAt) ?? undefined}>
-                {receivedAt ?? sentAt}
-              </time>
-            ) : null}
           </div>
           {actionError ? <p className="mail-alert" role="alert">{actionError}</p> : null}
           {offlineSaveError ? <p className="mail-alert" role="alert">{offlineSaveError}</p> : null}
-          <details className="reference-message-metadata"><summary>Message details</summary>{!offlineAvailable ? <p>Offline storage is not available in this browser.</p> : null}<dl className="message-metadata">
-            {detail.from.length > 0 ? (
-              <div>
-                <dt>From</dt>
-                <dd>{detail.from.map(addressLabel).join(", ")}</dd>
-              </div>
-            ) : null}
-            {detail.to.length > 0 ? (
-              <div>
-                <dt>To</dt>
-                <dd>{detail.to.map(addressLabel).join(", ")}</dd>
-              </div>
-            ) : null}
-            {detail.cc.length > 0 ? (
-              <div>
-                <dt>Cc</dt>
-                <dd>{detail.cc.map(addressLabel).join(", ")}</dd>
-              </div>
-            ) : null}
-            {detail.bcc.length > 0 ? (
-              <div>
-                <dt>Bcc</dt>
-                <dd>{detail.bcc.map(addressLabel).join(", ")}</dd>
-              </div>
-            ) : null}
-            {sentAt ? (
-              <div>
-                <dt>Sent</dt>
-                <dd><time dateTime={detail.sentAt ?? undefined}>{sentAt}</time></dd>
-              </div>
-            ) : null}
-            {receivedAt ? (
-              <div>
-                <dt>Received</dt>
-                <dd><time dateTime={detail.receivedAt ?? undefined}>{receivedAt}</time></dd>
-              </div>
-            ) : null}
-          </dl></details>
         </header>
 
         {readUpdateError ? (
@@ -763,40 +698,12 @@ function MessageDetailView({
         ) : null}
 
         <section className="message-body-section" aria-label="Message body">
-          {detail.htmlBody && detail.textBody ? (
-            <div className="body-format-controls" role="group" aria-label="Message format">
-              <button
-                aria-pressed={bodyFormat === "formatted"}
-                className={bodyFormat === "formatted" ? "is-selected" : ""}
-                onClick={() => onBodyFormatChange("formatted")}
-                type="button"
-              >
-                Formatted
-              </button>
-              <button
-                aria-pressed={bodyFormat === "plain"}
-                className={bodyFormat === "plain" ? "is-selected" : ""}
-                onClick={() => onBodyFormatChange("plain")}
-                type="button"
-              >
-                Plain text
-              </button>
-            </div>
-          ) : null}
-
-          {formattedHtml && detail.htmlBody ? (
+          {detail.htmlBody ? (
             <>
+              <MessageHtmlFrame html={detail.htmlBody} />
               <p className="message-safety-note">
-                Images and styling are blocked. Links from the message appear
-                separately below.
+                Images, styling, and links in this message are blocked.
               </p>
-              <iframe
-                className="message-html-frame"
-                referrerPolicy="no-referrer"
-                sandbox=""
-                srcDoc={isolatedHtmlDocument(detail.htmlBody)}
-                title="Isolated HTML message content"
-              />
             </>
           ) : detail.textBody ? (
             <pre className="message-plain-body">{detail.textBody}</pre>
@@ -848,27 +755,6 @@ function MessageDetailView({
               ))}
             </ul>
             <p>Files download as attachments. Downloads are limited to 4 MiB per file.</p>
-          </section>
-        ) : null}
-
-        {detail.externalLinks.length > 0 ? (
-          <section className="message-external-links" aria-labelledby="external-links-heading">
-            <h3 id="external-links-heading">Links in this message</h3>
-            <p>Review the destination before opening a link.</p>
-            <ul>
-              {detail.externalLinks.map((href) => (
-                <li key={href}>
-                  <a
-                    href={href}
-                    rel="noopener noreferrer"
-                    referrerPolicy="no-referrer"
-                    target="_blank"
-                  >
-                    {href}
-                  </a>
-                </li>
-              ))}
-            </ul>
           </section>
         ) : null}
       </article>
@@ -1021,7 +907,6 @@ export function InboxClient({
   const [notificationStatus, setNotificationStatus] = useState<string | null>(null);
   const offlineSyncPending = useRef(false);
   const notificationPollRef = useRef<(() => void) | null>(null);
-  const [bodyFormat, setBodyFormat] = useState<BodyFormat>("formatted");
   const [readUpdateError, setReadUpdateError] = useState(false);
   const [isComposeOpen, setIsComposeOpen] = useState(false);
   const [isComposeMinimized, setIsComposeMinimized] = useState(false);
@@ -1353,7 +1238,6 @@ export function InboxClient({
       setDetailError(null);
       setReadUpdateError(false);
       setEmailDetail(null);
-      setBodyFormat("formatted");
 
       try {
         const query = new URLSearchParams({ emailId });
@@ -2448,7 +2332,8 @@ export function InboxClient({
 
         {openEmailId ? (
           <MessageDetailView
-            bodyFormat={bodyFormat}
+            key={openEmailId}
+            allowOriginal={!localPreview}
             backButtonRef={detailBackButtonRef}
             headingRef={detailHeadingRef}
             detail={emailDetail}
@@ -2458,7 +2343,6 @@ export function InboxClient({
             mailboxName="conversation"
             onBack={closeMessage}
             onClose={closeThread}
-            onBodyFormatChange={setBodyFormat}
             onRetry={refresh}
             readUpdateError={readUpdateError}
             mailboxes={listing?.mailboxes ?? []}

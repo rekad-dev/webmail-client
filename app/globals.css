@@ -1161,35 +1161,6 @@ h1 {
   border-bottom: 1px solid var(--line);
 }
 
-.body-format-controls {
-  display: flex;
-  width: fit-content;
-  gap: 3px;
-  margin-bottom: 16px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--violet-light);
-  padding: 3px;
-}
-
-.body-format-controls button {
-  min-height: 44px;
-  padding: 0 11px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 0.84rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.body-format-controls button.is-selected {
-  background: white;
-  color: var(--violet-dark);
-  box-shadow: 0 1px 3px rgb(25 35 45 / 12%);
-}
-
 .message-safety-note {
   margin: 0 0 11px;
   color: var(--muted);
@@ -1223,18 +1194,12 @@ h1 {
   font-size: 0.9rem;
 }
 
-.message-attachments,
-.message-external-links {
+.message-attachments {
   padding: 19px clamp(18px, 3vw, 30px);
   border-bottom: 1px solid var(--line);
 }
 
-.message-external-links {
-  border-bottom: 0;
-}
-
-.message-attachments h3,
-.message-external-links h3 {
+.message-attachments h3 {
   margin: 0;
   color: var(--ink);
   font-size: 0.95rem;
@@ -1246,8 +1211,7 @@ h1 {
   font-weight: 400;
 }
 
-.message-attachments ul,
-.message-external-links ul {
+.message-attachments ul {
   display: grid;
   gap: 8px;
   margin: 13px 0 0;
@@ -1297,25 +1261,11 @@ h1 {
   white-space: nowrap;
 }
 
-.message-attachments > p,
-.message-external-links > p {
+.message-attachments > p {
   margin: 9px 0 0;
   color: var(--muted);
   font-size: 0.82rem;
   line-height: 1.45;
-}
-
-.message-external-links li {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  font-size: 0.86rem;
-  line-height: 1.45;
-}
-
-.message-external-links a {
-  color: var(--violet-dark);
-  text-decoration: underline;
-  text-underline-offset: 2px;
 }
 
 .message-detail-state {
