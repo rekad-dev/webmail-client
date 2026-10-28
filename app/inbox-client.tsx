@@ -586,10 +586,6 @@ function MessageDetailView({
       {backButton}
 
       <article className="message-detail-paper">
-        <div className="reference-message-tools" aria-label="Message tools">
-          <span className="reference-message-tools-spacer" />
-          <button type="button" aria-label="Close message" onClick={onClose}><MailIcon name="close" size={18} /></button>
-        </div>
         <header className="message-detail-header">
           <div className="message-detail-top">
             <div className="message-detail-title-group">
@@ -697,6 +693,7 @@ function MessageDetailView({
               </div>
             </div>
             </details>
+            <button className="icon-button" type="button" aria-label="Close message" onClick={onClose}><MailIcon name="close" size={18} /></button>
           </div>
           <div className="message-detail-sender-row">
             <span className={`message-avatar avatar-tone-${avatarTone(detail)}`} aria-hidden="true">

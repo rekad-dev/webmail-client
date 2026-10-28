@@ -1160,6 +1160,9 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
 /* Keep the inbox compact and reserve the reading pane for an opened message. */
 .mail-workspace:not(.has-open-message) { grid-template-columns: minmax(0, 1fr); }
 .mail-workspace:not(.has-open-message) .reading-pane { display: none; }
+.message-detail-top { flex-wrap: nowrap; gap: 8px; }
+.message-detail-title-group { flex: 1 1 0; overflow-wrap: anywhere; }
+.reference-message-actions { flex: none; }
 .conversation-pane .conversation-list-item {
   height: 6rem;
   min-height: 6rem;
