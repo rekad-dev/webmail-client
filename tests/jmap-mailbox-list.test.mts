@@ -353,3 +353,16 @@ test("does not offer a next page past the maximum supported position", async () 
   assert.equal(result.total, MAX_MAIL_POSITION + 50);
   assert.equal(result.hasMore, false);
 });
+
+
+test("favorites query selects flagged messages across mailboxes", async () => {
+  const { calls, fetchImpl } = createFetch();
+  await runJmapOAuthMailboxListing({
+    accessToken: "test-token", expectedAccountId: "account-1",
+    mailboxId: "sent-id", favorites: true, searchText: "hello",
+    sessionUrl: `${ORIGIN}/.well-known/jmap`, fetchImpl,
+  });
+  const request = JSON.parse(String(calls[3].init.body));
+  assert.deepEqual(request.methodCalls[0][1].filter, { hasKeyword: "$flagged", text: "hello" });
+  assert.equal(request.methodCalls[0][1].collapseThreads, true);
+});

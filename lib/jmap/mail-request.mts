@@ -8,6 +8,7 @@ export interface MailListingRequest {
   position: number;
   searchText?: string;
   searchScope: "all" | "mailbox";
+  favorites?: boolean;
 }
 
 export class InvalidMailListingRequest extends Error {
@@ -67,7 +68,13 @@ export function parseMailListingRequest(
     throw new InvalidMailListingRequest();
   }
 
+  const favoritesValues = searchParams.getAll("favorites");
+  if (favoritesValues.length > 1 || (favoritesValues.length === 1 && favoritesValues[0] !== "1")) {
+    throw new InvalidMailListingRequest();
+  }
+
   return {
+    ...(favoritesValues.length ? { favorites: true } : {}),
     ...(mailboxId ? { mailboxId } : {}),
     position,
     ...(searchText ? { searchText } : {}),

@@ -22,7 +22,13 @@ test("parses a bounded page and optional mailbox ID", () => {
   );
 });
 
+test("accepts the favorites filter", () => {
+  assert.deepEqual(parseMailListingRequest(new URLSearchParams("favorites=1")), { position: 0, searchScope: "all", favorites: true });
+});
+
 for (const [description, query] of [
+  ["invalid favorites filter", "favorites=0"],
+  ["duplicated favorites filter", "favorites=1&favorites=1"],
   ["negative position", "position=-25"],
   ["fractional position", "position=2.5"],
   ["unaligned position", "position=1"],

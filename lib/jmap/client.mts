@@ -1147,10 +1147,12 @@ function emailPageRequest(
   searchText?: string,
   searchScope: "all" | "mailbox" = "all",
   includeSummaryGet = true,
+  favorites = false,
 ) {
   const filter: Record<string, unknown> = {};
   if (searchText) filter.text = searchText;
-  if (!searchText || searchScope === "mailbox") filter.inMailbox = mailboxId;
+  if (!favorites && (!searchText || searchScope === "mailbox")) filter.inMailbox = mailboxId;
+  if (favorites) filter.hasKeyword = "$flagged";
 
   const methodCalls: unknown[][] = [
     [
@@ -1580,6 +1582,7 @@ async function fetchEmailPage({
   searchText,
   searchScope = "all",
   includeThreadState = false,
+  favorites = false,
 }: {
   context: JmapApiContext;
   mailboxId: string;
@@ -1587,6 +1590,7 @@ async function fetchEmailPage({
   searchText?: string;
   searchScope?: "all" | "mailbox";
   includeThreadState?: boolean;
+  favorites?: boolean;
 }): Promise<{ ids: string[]; total: number | null; messages: JmapEmailSummary[] }> {
   const { apiUrl, accountId, authorization, fetchImpl } = context;
   validateMailboxListingPosition(position);
@@ -1602,6 +1606,7 @@ async function fetchEmailPage({
       searchText,
       searchScope,
       getBatchSize >= MAIL_PAGE_SIZE,
+      favorites,
     ),
     methodName: getBatchSize >= MAIL_PAGE_SIZE
       ? "Email/query and Email/get"
@@ -4800,6 +4805,7 @@ export async function runJmapOAuthMailboxListing({
   position = 0,
   searchText,
   searchScope = "all",
+  favorites = false,
   sessionUrl = "https://mail.rekad.id/.well-known/jmap",
   trustedOrigins = ["https://mail.rekad.id"],
   allowInsecureHttp = false,
@@ -4811,6 +4817,7 @@ export async function runJmapOAuthMailboxListing({
   position?: number;
   searchText?: string;
   searchScope?: "all" | "mailbox";
+  favorites?: boolean;
   sessionUrl?: string;
   trustedOrigins?: string[];
   allowInsecureHttp?: boolean;
@@ -4844,6 +4851,7 @@ export async function runJmapOAuthMailboxListing({
     searchText,
     searchScope,
     includeThreadState: true,
+    favorites,
   });
   return {
     mailboxes,
