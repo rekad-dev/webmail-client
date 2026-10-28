@@ -3569,6 +3569,147 @@ export async function runJmapOAuthDownloadAttachment({
   return { bytes, name, size: bytes.byteLength };
 }
 
+const EMAIL_RAW_GET_CALL_ID = "email-raw-get";
+const MAX_RAW_MESSAGE_DISPLAY_BYTES = 1024 * 1024;
+
+export async function runJmapOAuthRawMessage({
+  accessToken,
+  expectedAccountId,
+  emailId,
+  sessionUrl = "https://mail.rekad.id/.well-known/jmap",
+  trustedOrigins = ["https://mail.rekad.id"],
+  allowInsecureHttp = false,
+  fetchImpl = fetch,
+}: {
+  accessToken: string;
+  expectedAccountId: string;
+  emailId: string;
+  sessionUrl?: string;
+  trustedOrigins?: string[];
+  allowInsecureHttp?: boolean;
+  fetchImpl?: typeof fetch;
+}): Promise<{ text: string; size: number; truncated: boolean }> {
+  validateEmailId(emailId);
+  const operationFetchImpl = withJmapOperationDeadline(fetchImpl, 30_000);
+  const context = await createOAuthJmapContext({
+    accessToken,
+    expectedAccountId,
+    sessionUrl,
+    trustedOrigins,
+    allowInsecureHttp,
+    fetchImpl: operationFetchImpl,
+  });
+  const responseJson = await postJmapApi({
+    apiUrl: context.apiUrl,
+    authorization: context.authorization,
+    requestBody: {
+      using: [CORE_CAPABILITY, MAIL_CAPABILITY],
+      methodCalls: [[
+        "Email/get",
+        { accountId: context.accountId, ids: [emailId], properties: ["id", "blobId", "size"] },
+        EMAIL_RAW_GET_CALL_ID,
+      ]],
+    },
+    methodName: "Email/get raw",
+    fetchImpl: operationFetchImpl,
+    maxResponseBytes: 64 * 1024,
+  });
+  const { payload } = getMethodResponse(responseJson, EMAIL_RAW_GET_CALL_ID, "Email/get");
+  if (
+    payload.accountId !== context.accountId ||
+    !Array.isArray(payload.list) ||
+    !Array.isArray(payload.notFound)
+  ) {
+    throw new JmapPocError("The JMAP API returned invalid message metadata.");
+  }
+  if (payload.notFound.includes(emailId)) throw new JmapEmailNotFoundError();
+  const email = objectValue(payload.list[0]);
+  if (
+    payload.list.length !== 1 ||
+    !email ||
+    email.id !== emailId ||
+    typeof email.blobId !== "string" ||
+    email.blobId.length === 0 ||
+    email.blobId.length > 256 ||
+    /[\u0000-\u001f\u007f]/.test(email.blobId) ||
+    typeof email.size !== "number" ||
+    !Number.isSafeInteger(email.size) ||
+    email.size < 0
+  ) {
+    throw new JmapPocError("The JMAP API returned invalid message metadata.");
+  }
+  const downloadUrl = expandJmapUrlTemplate(
+    context.downloadUrl,
+    {
+      accountId: context.accountId,
+      blobId: email.blobId,
+      name: "message.eml",
+      type: "message/rfc822",
+    },
+    ["accountId", "blobId", "name", "type"],
+    allowInsecureHttp,
+  );
+
+  let downloadResponse: Response;
+  try {
+    downloadResponse = await operationFetchImpl(downloadUrl, {
+      method: "GET",
+      headers: { authorization: context.authorization, accept: "message/rfc822" },
+      redirect: "manual",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch {
+    if (isJmapOperationDeadlineExceeded(operationFetchImpl)) {
+      throw jmapOperationDeadlineError(operationFetchImpl);
+    }
+    throw new JmapPocError("Could not reach the JMAP download endpoint.");
+  }
+  if ([301, 302, 303, 307, 308].includes(downloadResponse.status)) {
+    throw new JmapPocError("The JMAP download endpoint redirected unexpectedly.");
+  }
+  if (!downloadResponse.ok) {
+    throw new JmapPocError(`The JMAP download endpoint returned HTTP ${downloadResponse.status}.`);
+  }
+  const reader = downloadResponse.body?.getReader();
+  if (!reader) throw new JmapPocError("JMAP download returned an empty response.");
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  let truncated = false;
+  try {
+    while (received < MAX_RAW_MESSAGE_DISPLAY_BYTES) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const room = MAX_RAW_MESSAGE_DISPLAY_BYTES - received;
+      if (value.byteLength > room) {
+        chunks.push(value.subarray(0, room));
+        received += room;
+        truncated = true;
+        break;
+      }
+      chunks.push(value);
+      received += value.byteLength;
+    }
+    if (!truncated && received >= MAX_RAW_MESSAGE_DISPLAY_BYTES) {
+      truncated = !(await reader.read()).done;
+    }
+  } catch {
+    throw new JmapPocError("Could not read the JMAP download response.");
+  } finally {
+    void reader.cancel().catch(() => undefined);
+  }
+  const bytes = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return {
+    text: new TextDecoder("utf-8").decode(bytes),
+    size: email.size,
+    truncated,
+  };
+}
+
 function parseDraftAttachmentParts(value: unknown): JmapMailAttachmentInput[] {
   if (value === undefined || value === null) return [];
   if (!Array.isArray(value) || value.length > MAX_MAIL_ATTACHMENTS) {
