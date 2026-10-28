@@ -29,6 +29,10 @@ interface BulkToolbarProps {
   archiveAvailable: boolean;
   trashAvailable: boolean;
   statusText: string;
+  canPrevious: boolean;
+  canNext: boolean;
+  onPrevious(): void;
+  onNext(): void;
   onSelectAll(checked: boolean): void;
   onAction(action: MailAction): void;
   onMove(mailboxId: string): void;
@@ -44,6 +48,10 @@ export function BulkToolbar({
   archiveAvailable,
   trashAvailable,
   statusText,
+  canPrevious,
+  canNext,
+  onPrevious,
+  onNext,
   onSelectAll,
   onAction,
   onMove,
@@ -63,6 +71,11 @@ export function BulkToolbar({
           />
           <span className="visually-hidden">{selectedCount} selected</span>
         </div>
+        <nav className="list-pagination" aria-label="Message pages">
+          <span className="list-pagination-count">{statusText}</span>
+          <Button aria-label="Previous page" className="list-page-button" disabled={!canPrevious} onClick={onPrevious} size="icon" variant="ghost"><MailIcon name="chevron-left" size={17} /></Button>
+          <Button aria-label="Next page" className="list-page-button" disabled={!canNext} onClick={onNext} size="icon" variant="ghost"><MailIcon name="chevron-right" size={17} /></Button>
+        </nav>
         <div className="bulk-action-group" role="group" aria-label="Selected conversation actions">
           <MoveToMenu
             ariaLabel="Move selected conversations to mailbox"
@@ -103,9 +116,6 @@ export function BulkToolbar({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-      </div>
-      <div className="message-toolbar-actions">
-        <p className="result-count">{statusText}</p>
       </div>
     </div>
   );

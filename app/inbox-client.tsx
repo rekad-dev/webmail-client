@@ -458,13 +458,13 @@ export function InboxClient({
   );
   const [searchInput, setSearchInput] = useState("");
   const [searchText, setSearchText] = useState("");
-  const [searchScope, setSearchScope] = useState<"all" | "mailbox">("all");
   const [position, setPosition] = useState(0);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [manualRefreshTarget, setManualRefreshTarget] = useState<"list" | "thread" | "message" | null>(null);
   const [listing, setListing] = useState<MailListing | null>(
     () => initialListing ?? null,
   );
+  const [mailboxes, setMailboxes] = useState<Mailbox[] | undefined>(() => initialListing?.mailboxes);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(!localPreview);
   const [openEmailId, setOpenEmailId] = useState<string | null>(null);
@@ -739,7 +739,6 @@ export function InboxClient({
     if (favorites) params.set("favorites", "1");
     if (searchText) {
       params.set("q", searchText);
-      params.set("searchScope", searchScope);
     }
 
     async function loadMail() {
@@ -756,6 +755,7 @@ export function InboxClient({
         const nextListing = await readListing(response);
         if (controller.signal.aborted) return;
         setListing(nextListing);
+        setMailboxes(nextListing.mailboxes);
         if (!mailboxId) {
           skipMailboxFetch.current = nextListing.selectedMailboxId;
           setMailboxId(nextListing.selectedMailboxId);
@@ -780,7 +780,7 @@ export function InboxClient({
 
     void loadMail();
     return () => controller.abort();
-  }, [localPreview, mailboxId, position, refreshVersion, searchText, searchScope, favorites]);
+  }, [localPreview, mailboxId, position, refreshVersion, searchText, favorites]);
 
   useEffect(() => {
     if (localPreview) return;
@@ -980,11 +980,9 @@ export function InboxClient({
 
   useEffect(() => {
     setSelectedThreadIds(new Set());
-  }, [mailboxId, position, searchText, searchScope, favorites]);
+  }, [mailboxId, position, searchText, favorites]);
 
-  const selectedMailbox = listing?.mailboxes.find(
-    (mailbox) => mailbox.id === listing.selectedMailboxId,
-  );
+  const selectedMailbox = mailboxes?.find((mailbox) => mailbox.id === mailboxId);
   const firstResult = listing?.messages.length ? position + 1 : 0;
   const lastResult = position + (listing?.messages.length ?? 0);
   const resultRange = listing
@@ -1210,7 +1208,6 @@ export function InboxClient({
     setPosition(0);
     setSearchInput("");
     setSearchText("");
-    setSearchScope("mailbox");
     setMailboxId(sentMailbox.id);
     setRefreshVersion((value) => value + 1);
     setOpenThreadId(null);
@@ -1466,11 +1463,6 @@ export function InboxClient({
         <MailSearch
           inputRef={searchInputRef}
           onChange={setSearchInput}
-          onScopeChange={(scope) => {
-            setSearchScope(scope);
-            if (!localPreview) { setPosition(0); setListing(null); }
-          }}
-          scope={searchScope}
           value={searchInput}
         />
 
@@ -1504,9 +1496,9 @@ export function InboxClient({
         <MailboxNav
           isLoading={isLoading}
           localPreview={localPreview}
-          mailboxes={listing?.mailboxes}
+          mailboxes={mailboxes}
           onSelect={selectMailbox}
-          selectedMailboxId={favorites ? undefined : listing?.selectedMailboxId}
+          selectedMailboxId={favorites ? undefined : mailboxId ?? undefined}
         />
 
         <Button aria-pressed={favorites} className={`mailbox-link${favorites ? " is-selected" : ""}`} disabled={localPreview} onClick={selectFavorites} variant="ghost">
@@ -1530,14 +1522,13 @@ export function InboxClient({
       <section className="mail-content" aria-labelledby="mail-title">
         <header className="mail-header">
           <div className="mail-header-navigation">
-            <nav className="pagination" aria-label="Message pages">
-              <Button aria-label={openEmailId ? "Back to conversation" : openThreadId ? "Back to messages" : "Previous page"}
-                className="page-button" disabled={(!openEmailId && !openThreadId && position === 0) || isLoading || actionPending}
-                onClick={() => openEmailId ? closeMessage() : openThreadId ? closeThread() : changePage(Math.max(0, position - PAGE_SIZE))} size="icon" variant="outline"><MailIcon name="chevron-left" size={17} /></Button>
-              <Button aria-label="Next page" className="page-button"
-                disabled={Boolean(openEmailId || openThreadId || !listing?.hasMore || isLoading || actionPending)}
-                onClick={() => changePage(position + PAGE_SIZE)} size="icon" variant="outline"><MailIcon name="chevron-right" size={17} /></Button>
-            </nav>
+            {openEmailId || openThreadId ? (
+              <Button aria-label={openEmailId ? "Back to conversation" : "Back to messages"}
+                className="page-button" disabled={isLoading || actionPending}
+                onClick={() => openEmailId ? closeMessage() : closeThread()} size="icon" variant="ghost">
+                <MailIcon name="chevron-left" size={17} />
+              </Button>
+            ) : null}
             <div className="mail-breadcrumb"><span>rekad Mail</span><MailIcon name="chevron-right" size={14} /><span className="reference-heading-icon"><img src="/figma-mail/mail.svg" alt="" /></span>
               <h1 id="mail-title" ref={mailTitleRef} tabIndex={-1}>Mails</h1>
             </div>
@@ -1569,7 +1560,11 @@ export function InboxClient({
             onSelectAll={(checked) => setSelectedThreadIds(checked ? new Set(selectableMessages.map((message) => message.threadId)) : new Set())}
             selectableCount={selectableMessages.length}
             selectedCount={selectedCount}
-            statusText={listStatus}
+            statusText={resultRange}
+            canPrevious={!localPreview && !openEmailId && !openThreadId && position > 0 && !isLoading && !actionPending}
+            canNext={!localPreview && !openEmailId && !openThreadId && Boolean(listing.hasMore) && !isLoading && !actionPending}
+            onPrevious={() => changePage(Math.max(0, position - PAGE_SIZE))}
+            onNext={() => changePage(position + PAGE_SIZE)}
             trashAvailable={trashAvailable}
           />
         ) : null}
@@ -1611,7 +1606,7 @@ export function InboxClient({
             <h2>{searchText ? "No conversations found" : position === 0 ? favorites ? "No favorites yet" : "This mailbox is empty" : "No conversations on this page"}</h2>
             <p>
               {searchText
-                ? "Try another search or change the search scope."
+                ? "Try another search."
                 : position === 0
                 ? favorites ? "Star a message to find it here." : "New messages will appear here."
                 : "Go to the previous page or refresh to check again."}

@@ -1037,3 +1037,24 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
 }
 
 .settings-title { padding-bottom: 28px; border-bottom: 1px solid var(--line); }
+
+/* Keep the message list directly on the canvas. */
+@media (min-width: 761px) {
+  .mail-content { border: 0; border-radius: 0; background: transparent; }
+  .mail-header { background: transparent; padding-left: 20px; }
+}
+@media (max-width: 760px) {
+  .mail-content { border: 0; border-radius: 0; background: transparent; }
+  .mail-header { background: transparent; }
+}
+.conversation-pane .bulk-toolbar { display: flex; width: 100%; }
+.list-pagination { display: flex; flex: 1 1 auto; min-width: 0; justify-content: center; align-items: center; gap: 4px; }
+.list-pagination-count { overflow: hidden; color: var(--muted); font-size: var(--text-xs); text-overflow: ellipsis; white-space: nowrap; }
+.list-page-button { width: 36px; height: 44px; min-height: 44px; flex: none; }
+.conversation-pane .bulk-action-group { margin-left: 0; }
+@media (max-width: 520px) {
+  .list-pagination { gap: 0; }
+  .list-page-button { width: 32px; }
+  .list-pagination-count { font-size: 12px; }
+  .bulk-action-group button span { display: none; }
+}
