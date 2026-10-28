@@ -5,6 +5,25 @@ scope: session-handoff
 
 # Session Handoff
 
+## 2026-10-28 shadcn/ui, type scale, link confirmation (deployed)
+
+Deployed as `dpl_G76bj74NQNAVjcrWTt2PiNgdsMsp` at `https://webmail.rekad.id`
+(commits up to `595af78`). UI conventions now in force:
+
+- shadcn/ui (new-york, Radix) lives in `components/ui`; mail components are in
+  `components/mail`. Use shadcn Button, Input, Select, DropdownMenu, Popover,
+  Collapsible, AlertDialog and Checkbox instead of native controls or `<details>`
+  menus. `OptionSelect` wraps Select and portals into the nearest dialog.
+- `app/styles.css` is the single entry stylesheet: Tailwind theme and utilities
+  above the hand-written CSS (`legacy` layer, no preflight, only a border/form
+  reset in `base`). The CLI installs a stray `cn` package and `from "cn"`
+  imports; both must be replaced with `@/lib/utils`.
+- Type scale: 14/15/16/18/22/28 px via `--text-xs..2xl` (also used by `text-*`).
+- Message links are real anchors in sanitized HTML; clicks are intercepted in
+  `MessageHtmlFrame` and confirmed in `ExternalLinkDialog`.
+- The earlier sign-in 500 fix is live. The live-account read-only audit is
+  waiting for the user to sign in (task space 65 was handed to the user).
+
 ## 2026-10-28 message view rework (local, not deployed)
 
 Commits `2a60a81`..`2af317f`: message view is Gmail-style (sender details open
