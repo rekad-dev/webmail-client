@@ -9,6 +9,9 @@ export interface MailListingRequest {
   searchText?: string;
   searchScope: "all" | "mailbox";
   favorites?: boolean;
+  hasAttachment?: boolean;
+  recent?: boolean;
+  from?: string;
 }
 
 export class InvalidMailListingRequest extends Error {
@@ -73,8 +76,21 @@ export function parseMailListingRequest(
     throw new InvalidMailListingRequest();
   }
 
+  const flag = (name: string) => {
+    const values = searchParams.getAll(name);
+    if (values.length > 1 || (values.length === 1 && values[0] !== "1")) throw new InvalidMailListingRequest();
+    return values.length === 1;
+  };
+  const hasAttachment = flag("hasAttachment");
+  const recent = flag("recent");
+  const fromValues = searchParams.getAll("from");
+  if (fromValues.length > 1 || (fromValues.length && (!fromValues[0] || fromValues[0].length > 256 || /[\u0000-\u001f\u007f]/.test(fromValues[0])))) throw new InvalidMailListingRequest();
+
   return {
     ...(favoritesValues.length ? { favorites: true } : {}),
+    ...(hasAttachment ? { hasAttachment: true } : {}),
+    ...(recent ? { recent: true } : {}),
+    ...(fromValues.length ? { from: fromValues[0] } : {}),
     ...(mailboxId ? { mailboxId } : {}),
     position,
     ...(searchText ? { searchText } : {}),

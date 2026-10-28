@@ -366,3 +366,20 @@ test("favorites query selects flagged messages across mailboxes", async () => {
   assert.deepEqual(request.methodCalls[0][1].filter, { hasKeyword: "$flagged", text: "hello" });
   assert.equal(request.methodCalls[0][1].collapseThreads, true);
 });
+
+test("search filters apply across mailboxes, including without text", async () => {
+  const { calls, fetchImpl } = createFetch();
+  const before = Date.now();
+  await runJmapOAuthMailboxListing({
+    accessToken: "test-token", expectedAccountId: "account-1",
+    mailboxId: "sent-id", hasAttachment: true, recent: true, from: "me@example.test",
+    sessionUrl: `${ORIGIN}/.well-known/jmap`, fetchImpl,
+  });
+  const request = JSON.parse(String(calls[3].init.body));
+  const filter = request.methodCalls[0][1].filter;
+  assert.equal(filter.inMailbox, undefined);
+  assert.equal(filter.hasAttachment, true);
+  assert.equal(filter.from, "me@example.test");
+  assert.ok(Date.parse(filter.after) >= before - 7 * 86400_000);
+  assert.ok(Date.parse(filter.after) <= Date.now() - 7 * 86400_000);
+});

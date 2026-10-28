@@ -1167,11 +1167,16 @@ function emailPageRequest(
   searchScope: "all" | "mailbox" = "all",
   includeSummaryGet = true,
   favorites = false,
+  filters?: { hasAttachment?: boolean; recent?: boolean; from?: string },
 ) {
   const filter: Record<string, unknown> = {};
   if (searchText) filter.text = searchText;
-  if (!favorites && (!searchText || searchScope === "mailbox")) filter.inMailbox = mailboxId;
+  const hasSearch = Boolean(searchText || filters?.hasAttachment || filters?.recent || filters?.from);
+  if (!favorites && (!hasSearch || searchScope === "mailbox")) filter.inMailbox = mailboxId;
   if (favorites) filter.hasKeyword = "$flagged";
+  if (filters?.hasAttachment) filter.hasAttachment = true;
+  if (filters?.recent) filter.after = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  if (filters?.from) filter.from = filters.from;
 
   const methodCalls: unknown[][] = [
     [
@@ -1602,6 +1607,9 @@ async function fetchEmailPage({
   searchScope = "all",
   includeThreadState = false,
   favorites = false,
+  hasAttachment,
+  recent,
+  from,
 }: {
   context: JmapApiContext;
   mailboxId: string;
@@ -1610,6 +1618,9 @@ async function fetchEmailPage({
   searchScope?: "all" | "mailbox";
   includeThreadState?: boolean;
   favorites?: boolean;
+  hasAttachment?: boolean;
+  recent?: boolean;
+  from?: string;
 }): Promise<{ ids: string[]; total: number | null; messages: JmapEmailSummary[] }> {
   const { apiUrl, accountId, authorization, fetchImpl } = context;
   validateMailboxListingPosition(position);
@@ -1626,6 +1637,7 @@ async function fetchEmailPage({
       searchScope,
       getBatchSize >= MAIL_PAGE_SIZE,
       favorites,
+      { hasAttachment, recent, from },
     ),
     methodName: getBatchSize >= MAIL_PAGE_SIZE
       ? "Email/query and Email/get"
@@ -4930,6 +4942,9 @@ export async function runJmapOAuthMailboxListing({
   searchText,
   searchScope = "all",
   favorites = false,
+  hasAttachment,
+  recent,
+  from,
   sessionUrl = "https://mail.rekad.id/.well-known/jmap",
   trustedOrigins = ["https://mail.rekad.id"],
   allowInsecureHttp = false,
@@ -4943,6 +4958,9 @@ export async function runJmapOAuthMailboxListing({
   searchText?: string;
   searchScope?: "all" | "mailbox";
   favorites?: boolean;
+  hasAttachment?: boolean;
+  recent?: boolean;
+  from?: string;
   sessionUrl?: string;
   trustedOrigins?: string[];
   allowInsecureHttp?: boolean;
@@ -4979,6 +4997,9 @@ export async function runJmapOAuthMailboxListing({
     searchScope,
     includeThreadState: true,
     favorites,
+    hasAttachment,
+    recent,
+    from,
   });
   return {
     mailboxes,

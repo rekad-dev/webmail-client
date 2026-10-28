@@ -187,3 +187,16 @@ test("maps upstream and session-store errors to a generic 503", async () => {
     assert.equal(response.headers.get("cache-control"), "no-store");
   }
 });
+
+test("validates and forwards search filters without bypassing session authentication", async () => {
+  let received: Parameters<MailRouteDependencies["listMail"]>[0] | undefined;
+  const { handler } = makeHandler({ listMail: async (options) => { received = options; return listing; } });
+  const response = await handler(request("?hasAttachment=1&recent=1&from=me%40example.test"));
+  assert.equal(response.status, 200);
+  assert.equal(received?.hasAttachment, true);
+  assert.equal(received?.recent, true);
+  assert.equal(received?.from, "me@example.test");
+  for (const query of ["?recent=0", "?recent=1&recent=1", "?hasAttachment=true", "?from=", "?from=bad%0Avalue"]) {
+    assert.equal((await handler(request(query))).status, 400);
+  }
+});
