@@ -5,6 +5,16 @@ scope: session-handoff
 
 # Session Handoff
 
+## 2026-10-29 account switcher visual correction (deployed)
+
+Commit `3cef79b` fixes account menu styling overridden by Tailwind utilities.
+Deployment `dpl_6v9WArnMFQzPKDRfopYHRrRUJxAv` is Ready and aliased to
+`https://webmail.rekad.id`; its production build passed and the home page
+returned 200. The local build, typecheck and 254 tests passed. An isolated
+loopback preview using sample accounts was reviewed in ego-browser on desktop
+and at 390 px, with keyboard Escape returning focus to the avatar. No real
+account or mailbox was used for the browser review.
+
 ## 2026-10-29 account switcher UI (deployed)
 
 Commit `7aa1fb0` is deployed as `dpl_BqTxek1N3q5K39x5CFyt93SW5btE`,
