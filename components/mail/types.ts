@@ -75,3 +75,9 @@ export interface EmailDetail {
 }
 
 export type MailAction = "mark_read" | "mark_unread" | "star" | "unstar" | "move" | "archive" | "trash";
+
+export interface SharedAccount {
+  id: string;
+  name: string;
+  isReadOnly: boolean;
+}

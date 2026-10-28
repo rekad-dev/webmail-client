@@ -14,6 +14,7 @@ import { BulkToolbar } from "@/components/mail/bulk-toolbar";
 import { ConversationList } from "@/components/mail/conversation-list";
 import { ConversationThread } from "@/components/mail/conversation-thread";
 import { MailboxNav } from "@/components/mail/mailbox-nav";
+import { SharedAccountNav } from "@/components/mail/shared-account-nav";
 import { MailSearch } from "@/components/mail/mail-search";
 import { useSessionGuard } from "@/components/mail/use-session-guard";
 import {
@@ -36,6 +37,7 @@ import type {
   EmailAddress,
   EmailDetail,
   EmailSummary,
+  SharedAccount,
   MailAction,
   MailListing,
   Mailbox,
@@ -99,8 +101,10 @@ async function requestMailAction(
   target: { emailId: string } | { threadId: string },
   destinationMailboxId?: string,
   sourceMailboxId?: string,
+  accountId?: string | null,
 ): Promise<void> {
   const body: Record<string, string> = { action, ...target };
+  if (accountId) body.accountId = accountId;
   if (action === "move" && destinationMailboxId) {
     body.destinationMailboxId = destinationMailboxId;
     if (sourceMailboxId) body.sourceMailboxId = sourceMailboxId;
@@ -407,6 +411,9 @@ function errorMessage(error: string): string {
   if (error === "mailbox_not_found") {
     return "That mailbox is no longer available. Choose another mailbox.";
   }
+  if (error === "account_not_found") {
+    return "You no longer have access to that shared mailbox. Showing your own mail instead.";
+  }
   return "Mail could not be loaded. Check your connection and try again.";
 }
 
@@ -424,6 +431,10 @@ function mailActionErrorMessage(error: string): string {
       return "This conversation is too large for a bulk action. The action was not applied.";
     case "mail_not_found":
       return "That message or mailbox is no longer available. Refresh and try again.";
+    case "account_read_only":
+      return "This shared mailbox is read-only, so the message was left unchanged.";
+    case "account_not_found":
+      return "You no longer have access to this shared mailbox. Refresh and try again.";
     default:
       return "That mailbox action could not be saved. The current view will refresh.";
   }
@@ -451,6 +462,9 @@ export function InboxClient({
   const pictureVersion = profilePictureVersion;
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [favorites, setFavorites] = useState(false);
+  const [sharedAccounts, setSharedAccounts] = useState<SharedAccount[]>([]);
+  const [sharedAccountId, setSharedAccountId] = useState<string | null>(null);
+  const sharedReadOnlyRef = useRef(false);
   const [selectedThreadIds, setSelectedThreadIds] = useState<Set<string>>(() => new Set());
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [mailboxId, setMailboxId] = useState<string | null>(
@@ -736,6 +750,7 @@ export function InboxClient({
     const controller = new AbortController();
     const params = new URLSearchParams({ position: String(position) });
     if (mailboxId) params.set("mailboxId", mailboxId);
+    if (sharedAccountId) params.set("accountId", sharedAccountId);
     if (favorites) params.set("favorites", "1");
     if (searchText) {
       params.set("q", searchText);
@@ -765,6 +780,15 @@ export function InboxClient({
         const reason =
           loadError instanceof Error ? loadError.message : "mail_unavailable";
         setError(reason);
+        if (reason === "account_not_found") {
+          // The group account was removed or access was revoked: fall back to the user's own mail.
+          setSharedAccountId(null);
+          setSharedAccounts((accounts) => accounts.filter((account) => account.id !== sharedAccountId));
+          setListing(null);
+          setMailboxes(undefined);
+          setMailboxId(null);
+          setPosition(0);
+        }
         if (reason === "mailbox_not_found") {
           setListing(null);
           setMailboxId(null);
@@ -780,7 +804,7 @@ export function InboxClient({
 
     void loadMail();
     return () => controller.abort();
-  }, [localPreview, mailboxId, position, refreshVersion, searchText, favorites]);
+  }, [localPreview, mailboxId, position, refreshVersion, searchText, favorites, sharedAccountId]);
 
   useEffect(() => {
     if (localPreview) return;
@@ -792,6 +816,7 @@ export function InboxClient({
       setThreadError(null);
       try {
         const query = new URLSearchParams({ threadId });
+        if (sharedAccountId) query.set("accountId", sharedAccountId);
         const response = await fetch(`/api/mail/thread?${query.toString()}`, {
           method: "GET",
           credentials: "same-origin",
@@ -815,7 +840,7 @@ export function InboxClient({
     }
     void loadThread();
     return () => controller.abort();
-  }, [localPreview, openThreadId, threadRefreshVersion]);
+  }, [localPreview, openThreadId, threadRefreshVersion, sharedAccountId]);
 
   useEffect(() => {
     if (localPreview) return;
@@ -832,6 +857,7 @@ export function InboxClient({
 
       try {
         const query = new URLSearchParams({ emailId });
+        if (sharedAccountId) query.set("accountId", sharedAccountId);
         const response = await fetch(`/api/mail/detail?${query.toString()}`, {
           method: "GET",
           credentials: "same-origin",
@@ -844,7 +870,7 @@ export function InboxClient({
         setEmailDetail(nextDetail);
         setDetailLoading(false);
 
-        if (nextDetail.isUnread) {
+        if (nextDetail.isUnread && !sharedReadOnlyRef.current) {
           readUpdateAttempted = true;
           let readResponse: Response;
           try {
@@ -926,7 +952,7 @@ export function InboxClient({
 
     void loadMessage();
     return () => controller.abort();
-  }, [localPreview, openEmailId, detailRefreshVersion]);
+  }, [localPreview, openEmailId, detailRefreshVersion, sharedAccountId]);
 
   useEffect(() => {
     if (openEmailId) {
@@ -980,7 +1006,36 @@ export function InboxClient({
 
   useEffect(() => {
     setSelectedThreadIds(new Set());
-  }, [mailboxId, position, searchText, favorites]);
+  }, [mailboxId, position, searchText, favorites, sharedAccountId]);
+
+  useEffect(() => {
+    if (localPreview) return;
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const response = await fetch("/api/mail/accounts", {
+          credentials: "same-origin",
+          cache: "no-store",
+          signal: controller.signal,
+          headers: { accept: "application/json" },
+        });
+        if (!response.ok) return;
+        const body: unknown = await response.json();
+        const accounts = (body as { sharedAccounts?: unknown })?.sharedAccounts;
+        if (!Array.isArray(accounts)) return;
+        setSharedAccounts(
+          accounts.flatMap((account): SharedAccount[] =>
+            account && typeof account.id === "string" && typeof account.name === "string"
+              ? [{ id: account.id, name: account.name, isReadOnly: account.isReadOnly === true }]
+              : [],
+          ),
+        );
+      } catch {
+        // Shared mail is optional; the user's own mailbox keeps working.
+      }
+    })();
+    return () => controller.abort();
+  }, [localPreview, refreshVersion]);
 
   const selectedMailbox = mailboxes?.find((mailbox) => mailbox.id === mailboxId);
   const firstResult = listing?.messages.length ? position + 1 : 0;
@@ -1027,6 +1082,28 @@ export function InboxClient({
     }
   }
 
+  function selectSharedAccount(nextAccountId: string | null) {
+    if (localPreview || nextAccountId === sharedAccountId) return;
+    sharedReadOnlyRef.current = sharedAccounts.find((account) => account.id === nextAccountId)?.isReadOnly === true;
+    setSharedAccountId(nextAccountId);
+    setFavorites(false);
+    setManualRefreshTarget(null);
+    restoreMessageFocus.current = false;
+    skipMailboxFetch.current = null;
+    setListing(null);
+    setMailboxes(undefined);
+    setMailboxId(null);
+    setSearchInput("");
+    setSearchText("");
+    setError(null);
+    setActionError(null);
+    setPosition(0);
+    setOpenEmailId(null);
+    setOpenThreadId(null);
+    setThreadView(null);
+    setEmailDetail(null);
+  }
+
   function selectMailbox(nextMailboxId: string) {
     if (localPreview || (nextMailboxId === mailboxId && !favorites)) return;
     setFavorites(false);
@@ -1066,7 +1143,7 @@ export function InboxClient({
     setActionPending(true);
     setActionError(null);
     try {
-      await requestMailAction(action, target, destinationMailboxId, favorites ? undefined : listing?.selectedMailboxId);
+      await requestMailAction(action, target, destinationMailboxId, favorites ? undefined : listing?.selectedMailboxId, sharedAccountId);
       if (action === "mark_unread" && "emailId" in target && target.emailId === openEmailId) {
         closeMessage();
       }
@@ -1097,7 +1174,7 @@ export function InboxClient({
     const completed = new Set<string>();
     try {
       for (const message of targets) {
-        await requestMailAction(action, { threadId: message.threadId }, destinationMailboxId, favorites ? undefined : listing?.selectedMailboxId);
+        await requestMailAction(action, { threadId: message.threadId }, destinationMailboxId, favorites ? undefined : listing?.selectedMailboxId, sharedAccountId);
         completed.add(message.threadId);
       }
     } catch (error) {
@@ -1501,6 +1578,11 @@ export function InboxClient({
         </Button>
 
         <div className="sidebar-navigation">
+        <SharedAccountNav
+          accounts={sharedAccounts}
+          onSelect={selectSharedAccount}
+          selectedAccountId={sharedAccountId}
+        />
         <MailboxNav
           isLoading={isLoading}
           localPreview={localPreview}
@@ -1675,6 +1757,7 @@ export function InboxClient({
         {openEmailId ? (
           <MessageDetailView
             key={openEmailId}
+            accountId={sharedAccountId}
             allowOriginal={!localPreview}
             backButtonRef={detailBackButtonRef}
             headingRef={detailHeadingRef}

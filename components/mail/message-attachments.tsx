@@ -7,9 +7,11 @@ export const MAX_ATTACHMENT_DOWNLOAD_BYTES = 4 * 1024 * 1024;
 
 export function MessageAttachments({
   emailId,
+  accountId,
   attachments,
 }: {
   emailId: string;
+  accountId?: string | null;
   attachments: EmailAttachment[];
 }) {
   if (attachments.length === 0) return null;
@@ -39,7 +41,7 @@ export function MessageAttachments({
               <Button asChild size="sm" variant="outline">
                 <a
                   download
-                  href={`/api/mail/attachments/download?emailId=${encodeURIComponent(emailId)}&attachmentIndex=${attachment.attachmentIndex}`}
+                  href={`/api/mail/attachments/download?emailId=${encodeURIComponent(emailId)}&attachmentIndex=${attachment.attachmentIndex}${accountId ? `&accountId=${encodeURIComponent(accountId)}` : ""}`}
                 >
                   Download
                 </a>

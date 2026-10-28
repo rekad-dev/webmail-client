@@ -41,7 +41,7 @@ function formatSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export function OriginalMessage({ emailId }: { emailId: string | null }) {
+export function OriginalMessage({ emailId, accountId = null }: { emailId: string | null; accountId?: string | null }) {
   const [state, setState] = useState<LoadState>(
     emailId ? { status: "loading" } : { status: "error", message: errorText("message_not_found") },
   );
@@ -54,7 +54,7 @@ export function OriginalMessage({ emailId }: { emailId: string | null }) {
     setState({ status: "loading" });
     (async () => {
       try {
-        const response = await fetch(`/api/mail/original?emailId=${encodeURIComponent(emailId)}`, {
+        const response = await fetch(`/api/mail/original?emailId=${encodeURIComponent(emailId)}${accountId ? `&accountId=${encodeURIComponent(accountId)}` : ""}`, {
           cache: "no-store",
           signal: controller.signal,
         });

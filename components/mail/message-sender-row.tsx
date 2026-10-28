@@ -16,6 +16,7 @@ interface MessageSenderRowProps {
   offlineSaved: boolean;
   offlineSavePending: boolean;
   allowOriginal: boolean;
+  accountId?: string | null;
   onAction(action: MailAction): void;
   onMove(destinationMailboxId: string): void;
   onReply(detail: EmailDetail, trigger: HTMLButtonElement): void;
@@ -48,6 +49,7 @@ export function MessageSenderRow({
   offlineSaved,
   offlineSavePending,
   allowOriginal,
+  accountId,
   onAction,
   onMove,
   onReply,
@@ -133,7 +135,7 @@ export function MessageSenderRow({
             onToggleRead={() => onAction(detail.isUnread ? "mark_read" : "mark_unread")}
             onToggleStar={() => onAction(detail.isStarred ? "unstar" : "star")}
             onTrash={() => onAction("trash")}
-            originalHref={allowOriginal ? `/message/original?emailId=${encodeURIComponent(detail.id)}` : null}
+            originalHref={allowOriginal ? `/message/original?emailId=${encodeURIComponent(detail.id)}${accountId ? `&accountId=${encodeURIComponent(accountId)}` : ""}` : null}
           />
         </div>
       </div>

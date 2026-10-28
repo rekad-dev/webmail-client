@@ -28,6 +28,7 @@ interface MessageDetailViewProps {
   backButtonRef: RefObject<HTMLButtonElement | null>;
   headingRef: RefObject<HTMLHeadingElement | null>;
   allowOriginal: boolean;
+  accountId?: string | null;
   mailboxes: Mailbox[];
   actionPending: boolean;
   actionError: string | null;
@@ -55,6 +56,7 @@ export function MessageDetailView({
   backButtonRef,
   headingRef,
   allowOriginal,
+  accountId,
   mailboxes,
   actionPending,
   actionError,
@@ -125,6 +127,7 @@ export function MessageDetailView({
           <MessageSenderRow
             actionPending={actionPending}
             allowOriginal={allowOriginal}
+            accountId={accountId}
             detail={detail}
             mailboxes={mailboxes}
             offlineAvailable={offlineAvailable}
@@ -147,7 +150,7 @@ export function MessageDetailView({
         ) : null}
 
         <MessageBody detail={detail} />
-        <MessageAttachments attachments={detail.attachments} emailId={detail.id} />
+        <MessageAttachments accountId={accountId} attachments={detail.attachments} emailId={detail.id} />
       </article>
     </section>
   );

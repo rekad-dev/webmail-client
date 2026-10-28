@@ -1058,3 +1058,5 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
   .list-pagination-count { font-size: 12px; }
   .bulk-action-group button span { display: none; }
 }
+
+.shared-account-nav { padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--line, rgba(0,0,0,.08)); }

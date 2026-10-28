@@ -13,11 +13,16 @@ export const metadata: Metadata = {
 export default async function OriginalMessagePage({
   searchParams,
 }: {
-  searchParams: Promise<{ emailId?: string | string[] }>;
+  searchParams: Promise<{ emailId?: string | string[]; accountId?: string | string[] }>;
 }) {
   const session = await getAuthSession();
   if (!session?.expires || Date.parse(session.expires) <= Date.now()) redirect("/");
 
-  const { emailId } = await searchParams;
-  return <OriginalMessage emailId={typeof emailId === "string" ? emailId : null} />;
+  const { emailId, accountId } = await searchParams;
+  return (
+    <OriginalMessage
+      accountId={typeof accountId === "string" ? accountId : null}
+      emailId={typeof emailId === "string" ? emailId : null}
+    />
+  );
 }
