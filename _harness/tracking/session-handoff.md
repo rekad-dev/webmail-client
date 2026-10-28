@@ -5,7 +5,20 @@ scope: session-handoff
 
 # Session Handoff
 
-## 2026-10-28 compose overflow, auto sign-out, SEO, sign-in copy (committed, not deployed)
+## 2026-10-28 offline copies archived, internal-tool sign-in (deployed)
+
+Deployed as `dpl_` at `https://webmail.rekad.id` (aliased; commits up to
+`8ea7d15`). Offline copies are off behind `OFFLINE_COPIES_ENABLED` in
+`lib/offline/feature.mts`; see `archive/offline-copies/README.md`. The offline
+page files moved out of `public/`, and `public/sw.js` is a retirement worker.
+Copies already saved in a browser's IndexedDB stay hidden until that browser
+signs out, which clears them. New-mail alerts still use the same storage and
+were not changed. The sign-in page is a dark single-action card with the
+"rekad administrators will never ask for your password" notice; the
+authentication-details text is gone. The page does not collect a username or
+password, because credentials are entered at mail.rekad.id (OAuth).
+
+## 2026-10-28 compose overflow, auto sign-out, SEO, sign-in copy (deployed with the next entry)
 
 - Compose: the body field grows with its content and the form scrolls; the
   action bar is sticky so Send stays reachable (checked with long text at
