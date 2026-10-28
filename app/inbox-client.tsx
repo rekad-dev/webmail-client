@@ -587,10 +587,7 @@ function MessageDetailView({
 
       <article className="message-detail-paper">
         <div className="reference-message-tools" aria-label="Message tools">
-          {[["Reminder", "reminder"], ["Add Task", "task-check"], ["Permalink", "message-link"], ["Snooze", "snooze"]].map(([label, icon]) => <a key={label} href="#" title={`${label} (not yet available)`} onClick={(event) => event.preventDefault()}><img src={`/figma-mail/${icon}.svg`} alt="" /><span>{label}</span></a>)}
           <span className="reference-message-tools-spacer" />
-          <a href="#" aria-label="Comments (not yet available)" title="Comments (not yet available)" onClick={(event) => event.preventDefault()}><img src="/figma-mail/messages.svg" alt="" /></a>
-          <a href="#" aria-label="Open in new window (not yet available)" title="Open in new window (not yet available)" onClick={(event) => event.preventDefault()}><MailIcon name="expand" size={18} /></a>
           <button type="button" aria-label="Close message" onClick={onClose}><MailIcon name="close" size={18} /></button>
         </div>
         <header className="message-detail-header">
@@ -712,7 +709,6 @@ function MessageDetailView({
             <div className="reference-sender-actions">
               <button type="button" aria-label="Reply" title="Reply" disabled={actionPending} onClick={(event) => onReply(detail, event.currentTarget)}><MailIcon name="reply" size={20} /></button>
               <button type="button" aria-label="Forward" title="Forward" disabled={actionPending} onClick={(event) => onForward(detail, event.currentTarget)}><MailIcon name="forward" size={20} /></button>
-              <button type="button" aria-label="Back to conversation" title="Back to conversation" onClick={onBack}><MailIcon name="chevron-down" size={20} /></button>
             </div>
             {receivedAt || sentAt ? (
               <time className="message-detail-timestamp" dateTime={(detail.receivedAt ?? detail.sentAt) ?? undefined}>
@@ -878,10 +874,6 @@ function MessageDetailView({
             </ul>
           </section>
         ) : null}
-        <div className="reference-share-bar" aria-label="Share message">
-          <a href="#" title="Share message (not yet available)" onClick={(event) => event.preventDefault()}>@mention a user or group to share this email</a>
-          {[["Copy", "share-copy"], ["Create task", "share-task"], ["Add reaction", "share-emoji"]].map(([label, icon]) => <a href="#" key={label} title={`${label} (not yet available)`} aria-label={`${label} (not yet available)`} onClick={(event) => event.preventDefault()}><img src={`/figma-mail/${icon}.svg`} alt="" /></a>)}
-        </div>
       </article>
     </section>
   );
@@ -2275,9 +2267,6 @@ export function InboxClient({
 
         </section>
         <section className="reading-pane" aria-label="Reading pane">
-        {!openThreadId && !openEmailId ? (
-          <div className="reading-placeholder"><MailIcon name="mail" size={24} /><h2>Select a conversation</h2><p>Choose a message from the list to read it here.</p></div>
-        ) : null}
         {openThreadId && !openEmailId ? (
           <section className="thread-view" aria-label="Conversation">
             <button className="detail-back" onClick={closeThread} ref={threadBackButtonRef} type="button">

@@ -1156,3 +1156,34 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
     to { opacity: 1; transform: translateY(0); }
   }
 }
+
+/* Keep the inbox compact and reserve the reading pane for an opened message. */
+.mail-workspace:not(.has-open-message) { grid-template-columns: minmax(0, 1fr); }
+.mail-workspace:not(.has-open-message) .reading-pane { display: none; }
+.conversation-pane .conversation-list-item {
+  height: 6rem;
+  min-height: 6rem;
+  align-items: center;
+  padding: 0 6px;
+}
+.conversation-pane .conversation-select { align-self: center; }
+.conversation-pane .message-row {
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: repeat(3, minmax(0, auto));
+  align-content: center;
+  padding: 8px 0;
+}
+.conversation-pane .message-row .message-copy > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.conversation-pane .message-row .message-preview { display: block; }
+.reference-message-tools button,
+.reference-sender-actions button,
+.reference-message-actions > summary { min-width: 44px; min-height: 44px; }
+.reference-message-tools button:hover,
+.reference-sender-actions button:hover,
+.reference-message-actions > summary:hover { background: var(--violet-light); color: var(--violet-dark); border-radius: var(--radius-md); }
+.reference-message-metadata > summary { display: inline-flex; min-height: 44px; align-items: center; padding: 0; color: var(--violet-dark); text-decoration: underline; text-underline-offset: 3px; }
