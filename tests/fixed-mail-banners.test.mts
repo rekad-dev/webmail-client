@@ -75,3 +75,19 @@ test("stored banner sections are replaced by the fixed markup", () => {
   assert.equal(stripManagedBannerHtml(rebuilt), "<p>Body</p>");
   assert.equal(composedHtmlToText("<p>Hi</p>"), "Hi");
 });
+
+
+test("the responsive branded table keeps reply history inside its centered frame", () => {
+  const { htmlBody } = prepareManagedMessageContent({
+    body: "",
+    htmlBody: "<p>New reply</p><p>On Monday, Sender wrote:</p><blockquote><p>Previous reply</p><blockquote><p>Earlier message</p></blockquote></blockquote>",
+  }, banners);
+  assert.match(htmlBody, /<table role="presentation" align="center" width="600"/);
+  const frame = htmlBody.indexOf('<table role="presentation"');
+  const reply = htmlBody.indexOf("New reply");
+  const history = htmlBody.indexOf("Earlier message");
+  const footer = htmlBody.indexOf("Copyright");
+  const end = htmlBody.indexOf("</table>");
+  assert.ok(frame < reply && reply < history && history < footer && footer < end);
+  assert.match(htmlBody, /<blockquote><p>Previous reply<\/p><blockquote><p>Earlier message<\/p><\/blockquote><\/blockquote>/);
+});

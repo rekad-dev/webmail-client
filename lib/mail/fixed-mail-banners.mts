@@ -7,7 +7,7 @@ import { HEADER_IMAGE_CID, INSTAGRAM_ICON_CID } from "./fixed-mail-images.mts";
  * added after message content is sanitized. Bump the version whenever this
  * markup changes so older saved drafts are rebuilt before they can be sent.
  */
-export const FIXED_BANNER_VERSION = 2;
+export const FIXED_BANNER_VERSION = 3;
 
 const WEBSITE_URL = "https://www.rekad.id";
 const INSTAGRAM_URL = "https://www.instagram.com/rekad.id";
@@ -20,8 +20,8 @@ const FONT = "Arial,Helvetica,sans-serif";
 export function fixedHeaderHtml(): string {
   return (
     '<div style="margin:0;background:#f6f6f6;padding:24px 12px;">' +
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" ' +
-    'style="max-width:600px;margin:0 auto;border-collapse:collapse;">' +
+    '<table role="presentation" align="center" width="600" cellpadding="0" cellspacing="0" border="0" ' +
+    'style="width:100%;max-width:600px;margin:0 auto;border-collapse:collapse;">' +
     '<tr><td style="background:#ffffff;padding:0;">' +
     `<img src="cid:${HEADER_IMAGE_CID}" alt="rekad" width="600" ` +
     'style="display:block;width:100%;max-width:600px;height:auto;border:0;">' +
