@@ -161,7 +161,7 @@ export const localPreviewDetails: Record<string, EmailDetail> = {
     inReplyTo: ["<sample-1a@rekad.id>"],
     references: ["<sample-1a@rekad.id>"],
     textBody: "Hi team,\n\nI left a few notes on the spacing and the main call to action:\n\n1. Keep the warm lemon canvas so the white reading card feels elevated.\n2. Group message actions into a clean segmented bar with clear reply and forward controls.\n3. Show sender avatars across thread cards and message headers.\n\nAttached the annotated spec sheet below.\n\nThanks,\nAri",
-    htmlBody: "<p>Hi team,</p><p>I left a few notes on the spacing and the main call to action:</p><ol><li>Keep the warm lemon canvas so the white reading card feels elevated.</li><li>Group message actions into a clean segmented bar with clear reply and forward controls.</li><li>Show sender avatars across thread cards and message headers.</li></ol><p>Attached the annotated spec sheet below.</p><p>Thanks,<br>Ari</p>",
+    htmlBody: "<p>Hi team,</p><p>I left a few notes on the spacing and the main call to action:</p><ol><li>Keep the warm lemon canvas so the white reading card feels elevated.</li><li>Group message actions into a clean segmented bar with clear reply and forward controls.</li><li>Show sender avatars across thread cards and message headers.</li></ol><p>Attached the annotated <a href=\"https://example.com/annotated-spec\" rel=\"noopener noreferrer nofollow\">spec sheet</a> below.</p><p>Thanks,<br>Ari</p>",
     externalLinks: ["https://rekad.id/design-system"],
     bodyTruncated: false,
     attachments: [
