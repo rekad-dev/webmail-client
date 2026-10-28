@@ -15,6 +15,7 @@ import { ConversationList } from "@/components/mail/conversation-list";
 import { ConversationThread } from "@/components/mail/conversation-thread";
 import { MailboxNav } from "@/components/mail/mailbox-nav";
 import { MailSearch } from "@/components/mail/mail-search";
+import { useSessionGuard } from "@/components/mail/use-session-guard";
 import {
   applyOfflineSyncPage,
   clearOtherOfflineAccounts,
@@ -443,6 +444,7 @@ export function InboxClient({
   initialDetails?: Record<string, EmailDetail>;
 }) {
   const previewId = useId();
+  const [actionSessionEnded, setActionSessionEnded] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [selectedThreadIds, setSelectedThreadIds] = useState<Set<string>>(() => new Set());
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -1043,6 +1045,7 @@ export function InboxClient({
         setDetailRefreshVersion((value) => value + 1);
       }
     } catch (error) {
+      if (error instanceof Error && error.message === "sign_in_required") setActionSessionEnded(true);
       setActionError(mailActionErrorMessage(
         error instanceof Error ? error.message : "mail_unavailable",
       ));
@@ -1067,6 +1070,7 @@ export function InboxClient({
         completed.add(message.threadId);
       }
     } catch (error) {
+      if (error instanceof Error && error.message === "sign_in_required") setActionSessionEnded(true);
       const reason = mailActionErrorMessage(error instanceof Error ? error.message : "mail_unavailable");
       setActionError(completed.size > 0
         ? `${completed.size} conversations were updated before the action stopped. ${reason}`
@@ -1394,6 +1398,14 @@ export function InboxClient({
     setComposeReplyHeaders(undefined);
     setRefreshVersion((value) => value + 1);
   }
+
+  useSessionGuard({
+    enabled: !localPreview && !isComposeOpen,
+    expired: actionSessionEnded ||
+      error === "sign_in_required" ||
+      detailError === "sign_in_required" ||
+      threadError === "sign_in_required",
+  });
 
   const selectableMessages = listing?.messages.filter((message) => !message.isDraft) ?? [];
   const selectedCount = selectableMessages.filter((message) => selectedThreadIds.has(message.threadId)).length;
