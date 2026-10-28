@@ -1,6 +1,8 @@
 "use client";
 
 import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
+import { MailIcon } from "@/app/mail-icons";
 import { ConversationRowMenu } from "./conversation-row-menu";
 import { avatarTone, formatDate, senderInitials, senderLabel } from "./format";
 import type { EmailSummary, MailAction, Mailbox } from "./types";
@@ -52,7 +54,7 @@ export function ConversationList({
         const blocked = localPreview && !canOpen(message);
         return (
           <li
-            className={`conversation-list-item${selectedThreadIds.has(message.threadId) ? " is-selected" : ""}${openThreadId === message.threadId ? " is-open" : ""}`}
+            className={`conversation-list-item${!localPreview && !message.isDraft ? " has-row-actions" : ""}${selectedThreadIds.has(message.threadId) ? " is-selected" : ""}${openThreadId === message.threadId ? " is-open" : ""}`}
             key={message.threadId}
           >
             <div className="conversation-select">
@@ -87,17 +89,24 @@ export function ConversationList({
               <time className="message-date" dateTime={message.receivedAt ?? undefined}>{formatDate(message.receivedAt)}</time>
             </button>
             {!localPreview && !message.isDraft ? (
-              <ConversationRowMenu
-                actionPending={actionPending}
-                archiveAvailable={archiveAvailable}
-                isStarred={message.isStarred}
-                isUnread={message.isUnread}
-                label={sender}
-                mailboxes={mailboxes}
-                onAction={(action) => onAction(action, message.threadId)}
-                onMove={(mailboxId) => onMove(message.threadId, mailboxId)}
-                trashAvailable={trashAvailable}
-              />
+              <div className="conversation-row-actions">
+                <div className="conversation-quick-actions">
+                  <Button aria-label={`Archive conversation from ${sender}`} title="Archive" size="icon" variant="ghost" disabled={actionPending || isLoading || !archiveAvailable} onClick={() => onAction("archive", message.threadId)}><MailIcon name="archive" size={18} /></Button>
+                  <Button aria-label={`Move conversation from ${sender} to Trash`} title="Move to Trash" size="icon" variant="ghost" disabled={actionPending || isLoading || !trashAvailable} onClick={() => onAction("trash", message.threadId)}><MailIcon name="trash" size={18} /></Button>
+                  <Button aria-label={`${message.isUnread ? "Mark read" : "Mark unread"} conversation from ${sender}`} title={message.isUnread ? "Mark read" : "Mark unread"} size="icon" variant="ghost" disabled={actionPending || isLoading} onClick={() => onAction(message.isUnread ? "mark_read" : "mark_unread", message.threadId)}><MailIcon name="mail" size={18} /></Button>
+                </div>
+                <ConversationRowMenu
+                  actionPending={actionPending || isLoading}
+                  archiveAvailable={archiveAvailable}
+                  isStarred={message.isStarred}
+                  isUnread={message.isUnread}
+                  label={sender}
+                  mailboxes={mailboxes}
+                  onAction={(action) => onAction(action, message.threadId)}
+                  onMove={(mailboxId) => onMove(message.threadId, mailboxId)}
+                  trashAvailable={trashAvailable}
+                />
+              </div>
             ) : <span />}
           </li>
         );

@@ -1574,6 +1574,7 @@ export function InboxClient({
         <Button className="sidebar-compose" disabled={!listing || isLoading} size="lg"
           onClick={(event) => openCompose("new", undefined, undefined, event.currentTarget)} ref={composeButtonRef}
           aria-label={isComposeOpen ? "Restore open message" : "Compose new message"}>
+          <MailIcon name="plus" size={18} />
           {isComposeOpen ? "Restore Message" : "Compose"}
         </Button>
 
@@ -1594,7 +1595,9 @@ export function InboxClient({
         <Button aria-pressed={favorites} className={`mailbox-link${favorites ? " is-selected" : ""}`} disabled={localPreview} onClick={selectFavorites} variant="ghost">
           <MailIcon name="star" /><span className="mailbox-name">Favorites</span>
         </Button>
-        <a className="settings-link mailbox-link" href="/settings"><MailIcon name="settings" size={16} /><span className="mailbox-name">Settings</span></a>
+        <Button asChild className="settings-link mailbox-link" variant="ghost">
+          <a href="/settings"><MailIcon name="settings" /><span className="mailbox-name">Settings</span></a>
+        </Button>
         </div>
         <div className="sidebar-rail">
           <Button className="sidebar-collapse" size="icon" variant="ghost"
