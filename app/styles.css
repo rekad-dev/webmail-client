@@ -12,6 +12,7 @@
 @import "tw-animate-css";
 @import "./globals.css" layer(legacy);
 @import "./reference-ui.css" layer(legacy);
+@import "../components/sign-in/sign-in.css" layer(legacy);
 
 /*
  * The parts of Tailwind's preflight the utility classes rely on. Both rules sit

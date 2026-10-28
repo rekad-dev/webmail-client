@@ -111,13 +111,12 @@ export function MessageActionsMenu(props: MessageActionsMenuProps) {
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSeparator />
-        <DropdownMenuItem
-          disabled={!props.offlineAvailable || props.offlineSavePending}
-          onSelect={props.onToggleOffline}
-        >
-          <MailIcon name="offline" size={16} />
-          {props.offlineSavePending ? "Saving…" : props.offlineSaved ? "Remove offline copy" : "Save offline"}
-        </DropdownMenuItem>
+        {props.offlineAvailable ? (
+          <DropdownMenuItem disabled={props.offlineSavePending} onSelect={props.onToggleOffline}>
+            <MailIcon name="offline" size={16} />
+            {props.offlineSavePending ? "Saving…" : props.offlineSaved ? "Remove offline copy" : "Save offline"}
+          </DropdownMenuItem>
+        ) : null}
         {props.originalHref ? (
           <DropdownMenuItem asChild>
             <a href={props.originalHref} rel="noopener noreferrer" target="_blank">

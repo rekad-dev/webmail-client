@@ -6,7 +6,7 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: "/",
-        disallow: ["/api/", "/message/", "/local-preview", "/offline.html"],
+        disallow: ["/api/", "/message/", "/local-preview"],
       },
     ],
     sitemap: "https://webmail.rekad.id/sitemap.xml",

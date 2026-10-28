@@ -1,28 +1,10 @@
 import Image from "next/image";
-import { MailIcon, type MailIconName } from "@/app/mail-icons";
 import { Button } from "@/components/ui/button";
 
-const FEATURES: Array<{ icon: MailIconName; title: string; text: string }> = [
-  {
-    icon: "search",
-    title: "Search",
-    text: "Look through every mailbox, or only the one you have open.",
-  },
-  {
-    icon: "send",
-    title: "Write",
-    text: "Format your message, attach files up to 4 MiB each, and finish unsent drafts later.",
-  },
-  {
-    icon: "mail",
-    title: "Read",
-    text: "Messages open without remote images or scripts, and links ask before they open.",
-  },
-  {
-    icon: "offline",
-    title: "Keep copies",
-    text: "Save a message on this device to read it without a connection.",
-  },
+const SAFETY_TIPS = [
+  "Don't reply to emails that ask for your password, including ones that claim to come from an administrator or threaten to block your account.",
+  "Make sure you open webmail at https://webmail.rekad.id/.",
+  "Be careful with links in emails. Before you enter your username and password, check the address bar and confirm the domain is rekad.id or ends in .rekad.id.",
 ];
 
 const STRUCTURED_DATA = JSON.stringify({
@@ -45,68 +27,67 @@ const STRUCTURED_DATA = JSON.stringify({
   ],
 });
 
+function ShieldLock() {
+  return (
+    <svg aria-hidden="true" className="signin-shield" focusable="false" viewBox="0 0 48 56">
+      <path
+        d="M24 2 3 9v18c0 13 9 22 21 27 12-5 21-14 21-27V9L24 2Z"
+        fill="#f6c93f"
+      />
+      <rect fill="#14204f" height="15" rx="2.5" width="18" x="15" y="26" />
+      <path
+        d="M19 26v-4a5 5 0 0 1 10 0v4"
+        fill="none"
+        stroke="#14204f"
+        strokeLinecap="round"
+        strokeWidth="3.4"
+      />
+    </svg>
+  );
+}
+
 export function SignInView({ signInAction }: { signInAction: () => Promise<void> }) {
   return (
-    <main className="sign-in-shell">
+    <main className="signin-page">
       <script
         dangerouslySetInnerHTML={{ __html: STRUCTURED_DATA }}
         type="application/ld+json"
       />
-      <div className="sign-in-frame">
-        <header className="sign-in-top-nav">
-          <a className="mail-brand sign-in-brand-link" href="/" aria-label="rekad Mail home">
+      <div className="signin-column">
+        <section className="signin-card" aria-labelledby="page-title">
+          <h1 className="signin-brand" id="page-title">
             <Image
               alt=""
-              className="brand-image"
+              className="signin-logo"
               height={836}
               priority
               src="/logo.png"
               width={824}
             />
-            <span className="brand-wordmark">rekad</span>
-            <span className="brand-name">Mail</span>
-          </a>
-          <a className="sign-in-top-badge" href="https://www.rekad.id">www.rekad.id</a>
-        </header>
+            <span className="signin-wordmark">rekad</span>
+            <span className="signin-product">Mail</span>
+          </h1>
+          <p className="signin-lead">Sign in with your rekad.id account.</p>
+          <form action={signInAction}>
+            <Button className="signin-button" size="lg" type="submit">
+              Sign in
+            </Button>
+          </form>
+          <p className="signin-note">You enter your username and password on mail.rekad.id.</p>
+        </section>
 
-        <div className="sign-in-split">
-          <section className="status-card sign-in-panel" aria-labelledby="page-title">
-            <div className="sign-in-panel-header">
-              <h1 id="page-title">Sign in to rekad Mail</h1>
-              <p className="sign-in-lead">Read and send email with your rekad.id account.</p>
-            </div>
+        <hr className="signin-rule" />
 
-            <form action={signInAction} className="sign-in-form">
-              <Button className="sign-in-button" size="lg" type="submit">
-                <MailIcon name="mail" size={19} />
-                <span>Continue to sign in</span>
-              </Button>
-              <p className="sign-in-note">You enter your password on mail.rekad.id, not on this page.</p>
-            </form>
-
-            <p className="sign-in-offline">
-              Saved a message for offline reading on this browser?{" "}
-              <a href="/offline.html">Open offline copies</a>
-            </p>
-          </section>
-
-          <aside className="sign-in-showcase" aria-labelledby="features-title">
-            <h2 className="sign-in-features-title" id="features-title">What you can do here</h2>
-            <ul className="sign-in-showcase-rows">
-              {FEATURES.map((feature) => (
-                <li className="sign-in-showcase-row" key={feature.title}>
-                  <span className="sign-in-showcase-icon">
-                    <MailIcon name={feature.icon} size={18} />
-                  </span>
-                  <div className="sign-in-showcase-lines">
-                    <strong>{feature.title}</strong>
-                    <span>{feature.text}</span>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </aside>
-        </div>
+        <section className="signin-safety" aria-labelledby="safety-title">
+          <ShieldLock />
+          <h2 id="safety-title">rekad administrators will never ask for your password</h2>
+          <p>To keep your account safe:</p>
+          <ul>
+            {SAFETY_TIPS.map((tip) => (
+              <li key={tip}>{tip}</li>
+            ))}
+          </ul>
+        </section>
       </div>
     </main>
   );

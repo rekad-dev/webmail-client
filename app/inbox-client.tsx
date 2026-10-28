@@ -30,6 +30,7 @@ import {
   setActiveOfflineScope,
   type OfflineMessageContent,
 } from "../lib/offline/mail-cache.mts";
+import { OFFLINE_COPIES_ENABLED } from "../lib/offline/feature.mts";
 
 import type {
   EmailAddress,
@@ -514,12 +515,17 @@ export function InboxClient({
     if (localPreview) return;
     setNotificationsSupported("Notification" in window);
     let active = true;
-    if ("serviceWorker" in navigator) {
+    if (!("serviceWorker" in navigator)) {
+      if (OFFLINE_COPIES_ENABLED) setOfflineStatus("Offline copies are available, but this browser does not support an offline page.");
+    } else if (OFFLINE_COPIES_ENABLED) {
       void navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {
         if (active) setOfflineStatus("Offline copies are ready, but the offline page could not be installed.");
       });
     } else {
-      setOfflineStatus("Offline copies are available, but this browser does not support an offline page.");
+      // Remove the offline worker that an earlier version installed.
+      void navigator.serviceWorker.getRegistrations()
+        .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
+        .catch(() => undefined);
     }
 
     async function prepareOfflineStorage() {
@@ -593,7 +599,7 @@ export function InboxClient({
   }, [searchInput, searchText, localPreview, initialListing]);
 
   useEffect(() => {
-    if (localPreview) return;
+    if (localPreview || !OFFLINE_COPIES_ENABLED) return;
     if (!offlineReady || !offlineScope) return;
     let active = true;
     let running = false;
@@ -1498,10 +1504,6 @@ export function InboxClient({
             <p className="local-preview-sidebar-note">Mailbox tools are disabled in this local preview.</p>
           ) : (
             <>
-              <a className="sidebar-tool-link" href="/offline.html" title="Offline copies">
-                <MailIcon name="offline" /><span>Offline copies</span><span className="tool-count">{offlineCount}</span>
-              </a>
-              <p className="offline-copy-status" role="status">{offlineStatus}</p>
               {notificationsSupported ? (
                 <Button aria-pressed={notificationsEnabled} className="sidebar-tool-link notification-toggle"
                   disabled={!notificationsReady} onClick={() => void toggleNewMailNotifications()} variant="ghost"
@@ -1680,7 +1682,7 @@ export function InboxClient({
             mailboxes={listing?.mailboxes ?? []}
             actionPending={actionPending}
             actionError={actionError}
-            offlineAvailable={offlineReady && Boolean(offlineScope)}
+            offlineAvailable={OFFLINE_COPIES_ENABLED && offlineReady && Boolean(offlineScope)}
             offlineSaved={Boolean(emailDetail && offlineSavedIds.has(emailDetail.id))}
             offlineSavePending={Boolean(emailDetail && offlineSavePendingId === emailDetail.id)}
             offlineSaveError={offlineSaveError}

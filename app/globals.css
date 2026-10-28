@@ -99,22 +99,6 @@ a:focus-visible {
   outline-offset: 3px;
 }
 
-.sign-in-shell {
-  display: grid;
-  min-height: 100vh;
-  place-items: center;
-  padding: 24px;
-}
-
-.status-card {
-  width: min(100%, 520px);
-  padding: 36px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface);
-  box-shadow: 0 10px 32px rgb(25 35 45 / 6%);
-}
-
 .eyebrow {
   margin: 0 0 12px;
   color: var(--accent);
@@ -130,16 +114,6 @@ h1 {
   line-height: 1.15;
 }
 
-.status-card > p:not(.eyebrow):not(.sign-in-brand) {
-  color: var(--muted);
-  line-height: 1.6;
-}
-
-.status-card form {
-  margin-top: 24px;
-}
-
-.sign-in-button,
 .sign-out-button {
   min-height: 44px;
   padding: 0 18px;
@@ -151,7 +125,6 @@ h1 {
   cursor: pointer;
 }
 
-.sign-in-button:hover,
 .sign-out-button:hover:not(:disabled) {
   background: var(--violet-dark);
 }
@@ -1539,9 +1512,6 @@ h1 {
 }
 
 @media (max-width: 520px) {
-  .status-card {
-    padding: 28px 23px;
-  }
 
   .mail-content {
     padding: 22px 16px 36px;
