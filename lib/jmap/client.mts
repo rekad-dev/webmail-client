@@ -106,6 +106,7 @@ interface JmapAccount {
 }
 
 interface JmapSession {
+  username?: string;
   capabilities?: Record<string, unknown>;
   accounts?: Record<string, JmapAccount>;
   primaryAccounts?: Record<string, string>;
@@ -4846,6 +4847,43 @@ export async function runJmapOAuthDestroyDraft({
   if (!destroyed.includes(emailId)) {
     throw new JmapPocError("The JMAP API did not confirm the temporary draft cleanup.");
   }
+}
+
+/** The sign-in name the JMAP session reports, for labelling an account in the switcher. */
+export async function runJmapOAuthAccountLabel({
+  accessToken,
+  expectedAccountId,
+  sessionUrl = "https://mail.rekad.id/.well-known/jmap",
+  trustedOrigins = ["https://mail.rekad.id"],
+  allowInsecureHttp = false,
+  fetchImpl = fetch,
+}: {
+  accessToken: string;
+  expectedAccountId: string;
+  sessionUrl?: string;
+  trustedOrigins?: string[];
+  allowInsecureHttp?: boolean;
+  fetchImpl?: typeof fetch;
+}): Promise<string | null> {
+  const parsedSessionUrl = parseUrl(sessionUrl, undefined, allowInsecureHttp);
+  const allowedOrigins = parseTrustedOrigins(trustedOrigins, parsedSessionUrl, allowInsecureHttp);
+  const { session } = await fetchSession({
+    sessionUrl: parsedSessionUrl,
+    trustedOrigins: allowedOrigins,
+    allowInsecureHttp,
+    authorization: makeOAuthAuthorization(accessToken),
+    fetchImpl,
+  });
+  if (getPrimaryMailAccountId(session) !== expectedAccountId) {
+    throw new JmapAccountMismatchError();
+  }
+  const username = session.username;
+  return typeof username === "string" &&
+    username.length > 0 &&
+    username.length <= 320 &&
+    !/[\u0000-\u001f\u007f]/.test(username)
+    ? username
+    : null;
 }
 
 /** Lists the primary account and any group accounts the session advertises. */

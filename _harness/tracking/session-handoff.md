@@ -541,3 +541,39 @@ access could not resolve raw.githubusercontent.com. The local antislop skill is
 therefore a clearly attributed project adaptation, not a verbatim upstream
 package install. A Vercel React best-practices skill was researched as a useful
 optional addition but could not be installed in this environment.
+
+## Shared group mail and account switching (2026-10-28)
+
+The refinements through `b7fb957` were deployed to webmail.rekad.id from a
+clean `git archive` export of HEAD (Vercel is reachable again; the untracked
+`reference.png` and scratch files were not uploaded).
+
+**Group mail.** `lib/jmap/account-scope.mts` derives candidate accounts from a
+fresh JMAP session: the primary account plus accounts with `isPersonal: false`
+and the mail capability. The client never supplies an account list. Routes for
+list, thread, detail, attachment download, original and actions accept an
+`accountId` (query, or body for actions) that `createJmapApiContext` re-checks
+against the live session on every call, with `expectedAccountId` still pinning
+the OAuth session's primary account. Unknown or revoked accounts raise
+`JmapSharedAccountUnavailableError` (404 `account_not_found`, session kept);
+read-only accounts reject changes before any API call (403
+`account_read_only`). `GET /api/mail/accounts` lists shared accounts; the
+sidebar shows them above the mailbox list. Not done: sending as a group
+identity, drafts inside a group account, a merged cross-account list, offline
+copies, notifications for group mail. Not verified against the real
+`core@rekad.id` account.
+
+**Account switching.** Each browser keeps up to 4 sessions in an httpOnly
+cookie (`rekad.accounts`) holding their Auth.js session tokens; switching
+re-issues the Auth.js cookie for the chosen, still-valid session
+(`lib/auth/linked-accounts.mts`, `/api/account/{linked,add,switch,remove}`).
+Add-account sets a 10 minute intent cookie, then starts a new Stalwart sign-in
+with `prompt=login`; the new session joins on the next list call. Stalwart may
+ignore `prompt=login`: a repeat login of the same subject replaces and revokes
+the older session instead of duplicating it. Removing an account revokes its
+server session first. Tabs: the page's `accountHandle` is sent as
+`x-rekad-account` on `/api/mail`, `/api/profile` and `/api/account` requests;
+`getRequestOAuthSessionId` returns no session on a mismatch, and add/remove
+return 409 `account_changed`, so a stale tab cannot act as, or sign out, the
+newly selected account. Other tabs also reload through a BroadcastChannel.
+Not verified in a real browser with two real accounts.

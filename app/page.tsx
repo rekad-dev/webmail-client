@@ -1,5 +1,6 @@
 import { getAuthSession, signIn } from "@/auth";
 import { getProfilePictureVersion } from "@/lib/profile/profile-picture-store.mts";
+import { AccountRequestScope } from "@/components/mail/account-request-scope";
 import { SignInView } from "@/components/sign-in/sign-in-view";
 import { InboxClient } from "./inbox-client";
 
@@ -25,11 +26,14 @@ export default async function HomePage() {
 
   return (
     isSignedIn ? (
-      <InboxClient
-        accountName={session?.user?.name}
-        accountEmail={session?.user?.email}
-        profilePictureVersion={profilePictureVersion}
-      />
+      <>
+        {session?.accountHandle ? <AccountRequestScope handle={session.accountHandle} /> : null}
+        <InboxClient
+          accountName={session?.user?.name}
+          accountEmail={session?.user?.email}
+          profilePictureVersion={profilePictureVersion}
+        />
+      </>
     ) : (
       <SignInView signInAction={signInWithStalwart} />
     )

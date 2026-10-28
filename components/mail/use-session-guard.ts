@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { signOut } from "next-auth/react";
 import { clearAllOfflineMail } from "@/lib/offline/mail-cache.mts";
+import { announceAccountChange } from "./account-request-scope";
 
 const CHECK_INTERVAL_MS = 2 * 60_000;
 
@@ -17,6 +18,24 @@ async function leaveExpiredSession(): Promise<void> {
     await clearAllOfflineMail();
   } catch {
     // Storage may be unavailable; the session is already invalid.
+  }
+  try {
+    // Drops the dead session and moves to another linked account when one is still valid.
+    const response = await fetch("/api/account/remove", {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: { accept: "application/json", "content-type": "application/json" },
+      body: "{}",
+    });
+    if (response.ok || response.status === 409) {
+      // 409: this tab belongs to an account the browser has since left; reload to the current one.
+      if (response.ok) announceAccountChange();
+      window.location.assign("/");
+      return;
+    }
+  } catch {
+    // Fall back to clearing the cookie directly.
   }
   try {
     await signOut({ redirect: false });

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getAuthSession } from "@/auth";
 import { getProfilePictureVersion } from "@/lib/profile/profile-picture-store.mts";
+import { AccountRequestScope } from "@/components/mail/account-request-scope";
 import { SettingsView } from "./settings-view";
 
 export default async function SettingsPage() {
@@ -19,5 +20,10 @@ export default async function SettingsPage() {
     }
   }
 
-  return <SettingsView accountName={accountName} pictureVersion={pictureVersion} pictureAvailable={pictureAvailable} />;
+  return (
+    <>
+      {session.accountHandle ? <AccountRequestScope handle={session.accountHandle} /> : null}
+      <SettingsView accountName={accountName} pictureVersion={pictureVersion} pictureAvailable={pictureAvailable} />
+    </>
+  );
 }

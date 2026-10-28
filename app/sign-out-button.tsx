@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { clearAllOfflineMail } from "../lib/offline/mail-cache.mts";
+import { announceAccountChange } from "@/components/mail/account-request-scope";
 
 export function SignOutButton() {
   const [isPending, setIsPending] = useState(false);
@@ -22,9 +22,22 @@ export function SignOutButton() {
     }
 
     try {
-      const response = await signOut({ redirect: false, redirectTo: "/" });
-      if (response.url) {
-        window.location.assign(response.url);
+      // Revokes this account's session; the browser continues as another linked account, if any.
+      const response = await fetch("/api/account/remove", {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { accept: "application/json", "content-type": "application/json" },
+        body: "{}",
+      });
+      if (response.status === 409) {
+        // This tab was opened for a different account than the browser now uses.
+        window.location.reload();
+        return;
+      }
+      if (response.ok) {
+        announceAccountChange();
+        window.location.assign("/");
         return;
       }
     } catch {

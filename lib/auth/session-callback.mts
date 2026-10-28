@@ -1,6 +1,8 @@
 import type { Session } from "next-auth";
 import type { JWT } from "next-auth/jwt";
 
+import { accountHandle } from "./account-handle.mts";
+
 export interface OAuthSessionSummary {
   subject: string;
   expiresAt: Date;
@@ -43,6 +45,7 @@ export function createOAuthSessionCallback(
       return {
         ...session,
         expires: activeSession.expiresAt.toISOString(),
+        accountHandle: accountHandle(sessionId),
         user: {
           ...(session.user ?? {}),
           id: activeSession.subject,

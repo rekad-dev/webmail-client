@@ -2,7 +2,8 @@ import {
   getAuthenticatedOAuthSession,
   revokeOAuthSession,
 } from "@/lib/auth/session-store.mts";
-import { getRequestOAuthSessionId } from "@/lib/auth/request-session.mts";
+import { accountHandleMismatch } from "@/lib/auth/account-handle.mts";
+import { readCookieOAuthSessionId } from "@/lib/auth/request-session.mts";
 import { runJmapOAuthAccessCheck } from "@/lib/jmap/client.mts";
 
 export const runtime = "nodejs";
@@ -23,9 +24,13 @@ function jsonResponse(
 
 export async function GET(request: Request): Promise<Response> {
   try {
-    const sessionId = await getRequestOAuthSessionId(request);
+    const sessionId = await readCookieOAuthSessionId(request);
     if (!sessionId) {
       return jsonResponse({ authenticated: false }, 401);
+    }
+    // The tab was loaded for another account; it must reload, not sign anyone out.
+    if (accountHandleMismatch(request, sessionId)) {
+      return jsonResponse({ authenticated: true, error: "account_changed" }, 409);
     }
 
     const session = await getAuthenticatedOAuthSession(sessionId);
