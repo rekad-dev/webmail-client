@@ -5,6 +5,19 @@ scope: session-handoff
 
 # Session Handoff
 
+## 2026-10-29 inbox refinements and search (deployed)
+
+Production deployment `dpl_7CcVHGKGpsKBuY64GndtwmGn3fgK` is Ready and
+aliased to `https://webmail.rekad.id`, from commit `24623a7` (including
+`056428c`). The compose/sidebar and row refinements are live, along with a
+larger search field, matching conversation suggestions, tab-local search
+history and JMAP filters for attachments, the last seven days and the signed-in
+email address. Search is scoped to the selected personal or shared account;
+the from-me filter does not include other aliases. The local 254-test suite,
+typecheck and production builds passed. Anonymous home returned 200 and a
+filtered search returned 401. Browser presentation and authenticated search
+behavior have not been checked live; no mailbox data was accessed.
+
 ## 2026-10-29 shared group mail and account switching (deployed)
 
 Commit `523bd28`, including shared group mail and account switching, was
