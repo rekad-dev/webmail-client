@@ -1957,13 +1957,6 @@ export function InboxClient({
     ? listing ? "Refreshing messages…" : "Loading conversations…"
     : selectedCount > 0 ? `${selectedCount} selected` : listing ? resultRange : "";
 
-  function placeholder(label: string, icon?: string) {
-    return <a href="#" title={`${label} (not yet available)`} aria-label={`${label} (not yet available)`}
-      onClick={(event) => event.preventDefault()} className={icon ? "reference-rail-link" : "reference-nav-link"} key={label}>
-      {icon ? <img src={`/figma-mail/${icon}.svg`} alt="" /> : label}
-    </a>;
-  }
-
   function renderMailbox(mailbox: Mailbox) {
     const isSelected = mailbox.id === listing?.selectedMailboxId;
     return (
@@ -2011,7 +2004,6 @@ export function InboxClient({
           </label>
         </div>
 
-          <a className="reference-theme-placeholder" href="#" title="Theme (not yet available)" aria-label="Theme (not yet available)" onClick={(event) => event.preventDefault()}><img src="/figma-mail/moon.svg" alt="" /></a>
           <div className="mail-header-account">
             <button className="icon-button refresh-button" disabled={localPreview || currentViewLoading} aria-busy={currentViewLoading}
               onClick={refresh} type="button" aria-label={refreshLabel}
@@ -2038,24 +2030,18 @@ export function InboxClient({
             )}
           </div>
       </header>
-      <nav className="reference-app-rail" aria-label="Applications">
-        <a href="#" className="reference-rail-link is-active" aria-label="Mail" onClick={(event) => event.preventDefault()}><img src="/figma-mail/mail.svg" alt="" /></a>
-        {[["Calendar", "calendar"], ["Tasks", "tasks"], ["Notes", "notes"], ["Contacts", "contacts"], ["Bookmarks", "bookmark"]].map(([label, icon]) => placeholder(label, icon))}
-      </nav>
       <aside className="mail-sidebar" aria-label="Mail navigation">
         <button className="compose-launch-button sidebar-compose" disabled={!listing || isLoading}
           onClick={(event) => openCompose("new", undefined, undefined, event.currentTarget)} ref={composeButtonRef}
           type="button" aria-label={isComposeOpen ? "Restore open message" : "Compose new message"}>
           {isComposeOpen ? "Restore Message" : "Compose"}
         </button>
-        <div className="reference-sidebar-shortcuts">{placeholder("Home")}{placeholder("All Unread")}<a href="#" className="reference-create-group" title="Create a Group (not yet available)" onClick={(event) => event.preventDefault()}>+ Create a Group</a></div>
-        <p className="sidebar-section-label mailbox-heading">Home</p>
+        <p className="sidebar-section-label mailbox-heading">Mailboxes</p>
 
         <nav className="mailbox-nav" aria-label="Mailboxes">
-          {["inbox", "drafts", "templates", "snoozed", "sent", "junk", "trash", "archive"].map((role) => {
+          {["inbox", "drafts", "sent", "junk", "trash", "archive"].map((role) => {
             const mailbox = listing?.mailboxes.find((item) => item.role === role);
             if (mailbox) return renderMailbox(mailbox);
-            if (role === "templates" || role === "snoozed" || (role === "junk" && listing)) return placeholder(role === "junk" ? "Spam" : role === "templates" ? "Templates" : "Snoozed");
             return null;
           })}
           {listing?.mailboxes.filter((mailbox) => mailbox.role !== null && !["inbox", "drafts", "sent", "junk", "trash", "archive"].includes(mailbox.role)).map(renderMailbox)}
@@ -2065,10 +2051,6 @@ export function InboxClient({
           ) : null}
         </nav>
 
-        <div className="reference-sidebar-sections">
-          <p>Tags</p>{["Open", "Negotiation", "Deal"].map((label, index) => <a href="#" key={label} title={`${label} (not yet available)`} onClick={(event) => event.preventDefault()}><span className={`reference-tag reference-tag-${index}`} />{label}</a>)}
-          <p>Views</p>{["Unread", "All Messages", "Flagged"].map((label) => placeholder(label))}
-        </div>
         <details className="reference-mail-tools"><summary>Mail tools</summary>        <div className="sidebar-rail">
           <button className="icon-button sidebar-collapse" type="button"
             aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
@@ -2150,7 +2132,6 @@ export function InboxClient({
                     <option value="">Move to folder</option>{listing?.mailboxes.map((mailbox) => <option key={mailbox.id} value={mailbox.id}>{mailbox.name}</option>)}
                   </select>
                 </label>
-                <a href="#" className="toolbar-action reference-tag-action" title="Tag as (not yet available)" onClick={(event) => event.preventDefault()}><img src="/figma-mail/bookmark.svg" alt="" /><span>Tag as</span></a>
                 <button className="toolbar-action" aria-label="Move selected conversations to Trash" disabled={localPreview || selectedCount === 0 || actionPending || !trashAvailable}
                   onClick={() => void performSelectedMailAction("trash")} title="Move selected conversations to Trash" type="button"><MailIcon name="trash" size={19} /><span>Delete</span></button>
                 <details className="selection-menu">
@@ -2506,9 +2487,6 @@ export function InboxClient({
           <p className="stale-list-note">Showing the last successfully loaded page.</p>
         ) : null}
       </section>
-      <nav className="reference-utility-rail" aria-label="Other tools">
-        {[["Settings", "settings"], ["Calendar", "calendar"], ["Attachments", "clip"], ["Notes", "notes"], ["Links", "link"], ["Shortcuts", "energy"], ["Reminders", "clock"], ["Messages", "messages"]].map(([label, icon]) => placeholder(label, icon))}
-      </nav>
       {isComposeOpen ? (
         <ComposeDialog
           key={composeInstance}

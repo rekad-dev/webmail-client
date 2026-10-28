@@ -1190,3 +1190,12 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
 .reference-sender-actions button:hover,
 .reference-message-actions > summary:hover { background: var(--violet-light); color: var(--violet-dark); border-radius: var(--radius-md); }
 .reference-message-metadata > summary { display: inline-flex; min-height: 44px; align-items: center; padding: 0; color: var(--violet-dark); text-decoration: underline; text-underline-offset: 3px; }
+
+@media (min-width: 761px) {
+  .mail-shell, .mail-shell.is-sidebar-collapsed { grid-template-columns: 200px minmax(0, 1fr); }
+  .mail-shell.is-sidebar-collapsed { grid-template-columns: 76px minmax(0, 1fr); }
+  .mail-sidebar { grid-column: 1; }
+  .mail-content { grid-column: 2; }
+  .compose-backdrop:not(.is-minimized) { right: 16px; left: 216px; }
+  .is-sidebar-collapsed .compose-backdrop:not(.is-minimized) { left: 92px; }
+}
