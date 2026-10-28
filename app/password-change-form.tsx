@@ -21,7 +21,7 @@ function errorMessage(error: PasswordChangeError | null): string {
     case "password_change_unavailable":
       return "This account can’t change its password here. Contact your mail administrator or password provider.";
     case "password_change_rejected":
-      return "The current password, one-time code, or password rules were not accepted. Check them and try again.";
+      return "The password change was rejected. Check your current password and the mail provider’s password rules.";
     case "password_change_outcome_unknown":
       return "The server didn’t confirm the result. Sign out and check whether the new password works before trying again.";
     case "invalid_request":
@@ -60,12 +60,10 @@ export function PasswordChangeForm() {
     const currentPassword = data.get("currentPassword");
     const newPassword = data.get("newPassword");
     const confirmPassword = data.get("confirmPassword");
-    const otpCode = data.get("otpCode");
     if (
       typeof currentPassword !== "string" ||
       typeof newPassword !== "string" ||
-      typeof confirmPassword !== "string" ||
-      (otpCode !== null && typeof otpCode !== "string")
+      typeof confirmPassword !== "string"
     ) {
       setError("invalid_request");
       setSuccess(false);
@@ -89,7 +87,6 @@ export function PasswordChangeForm() {
         body: JSON.stringify({
           currentPassword,
           newPassword,
-          ...(otpCode ? { otpCode } : {}),
         }),
       });
       let body: unknown;
@@ -153,17 +150,8 @@ export function PasswordChangeForm() {
             type="password"
           />
         </label>
-        <label className="password-change-field">
-          <span>One-time code <span className="password-change-optional">optional</span></span>
-          <Input
-            autoComplete="one-time-code"
-            inputMode="numeric"
-            name="otpCode"
-            type="text"
-          />
-        </label>
       </fieldset>
-      <p className="password-change-hint">Enter a code if your account requires one. Password rules are set by your mail provider.</p>
+      <p className="password-change-hint">Password rules are set by your mail provider.</p>
       {error ? <p className="password-change-message is-error" role="alert">{errorMessage(error)}</p> : null}
       {success ? <p className="password-change-message is-success" role="status">Password updated.</p> : null}
       <Button className="password-change-submit" disabled={isPending} type="submit">

@@ -19,9 +19,6 @@ export function SettingsView({ accountName, pictureVersion, pictureAvailable }: 
       </header>
       <div className="settings-page">
         <div className="settings-title"><h1>Settings</h1><p>Manage your account and security.</p></div>
-        <nav className="settings-navigation" aria-label="Settings sections">
-          <a href="#profile">Profile</a><a href="#security">Security</a>
-        </nav>
         <section className="settings-section" id="profile" aria-labelledby="profile-title">
           <div className="settings-section-intro">
             <h2 id="profile-title">Profile picture</h2>

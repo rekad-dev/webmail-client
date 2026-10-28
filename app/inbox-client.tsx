@@ -1512,7 +1512,7 @@ export function InboxClient({
         <Button aria-pressed={favorites} className={`mailbox-link${favorites ? " is-selected" : ""}`} disabled={localPreview} onClick={selectFavorites} variant="ghost">
           <MailIcon name="star" /><span className="mailbox-name">Favorites</span>
         </Button>
-        <a className="settings-link mailbox-link" href="/settings"><MailIcon name="settings" /><span className="mailbox-name">Settings</span></a>
+        <a className="settings-link mailbox-link" href="/settings"><MailIcon name="settings" size={16} /><span className="mailbox-name">Settings</span></a>
         </div>
         <div className="sidebar-rail">
           <Button className="sidebar-collapse" size="icon" variant="ghost"

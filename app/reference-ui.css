@@ -1035,3 +1035,5 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
 @media (max-width: 760px) {
   .sidebar-navigation { width: 100%; flex: none; }
 }
+
+.settings-title { padding-bottom: 28px; border-bottom: 1px solid var(--line); }

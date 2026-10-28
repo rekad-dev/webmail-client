@@ -26,7 +26,6 @@ export function AccountMenu({
       </PopoverTrigger>
       <PopoverContent align="end" className="grid max-h-[80vh] w-80 gap-3 overflow-y-auto p-4">
         <p className="text-sm break-all text-muted-foreground">{accountEmail || "Signed in to rekad Mail"}</p>
-        <a className="account-settings-link" href="/settings">Settings</a>
         <SignOutButton />
       </PopoverContent>
     </Popover>
