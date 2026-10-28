@@ -83,7 +83,6 @@ export function MailboxNav({
       {!mailboxes && isLoading ? <p className="sidebar-note">Loading mailboxes…</p> : null}
       {folders.length > 0 ? (
         <>
-          <p className="sidebar-section-label">Folders</p>
           {folders.map(link)}
         </>
       ) : null}

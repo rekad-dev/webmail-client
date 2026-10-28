@@ -84,7 +84,7 @@ export function BulkToolbar({
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button aria-label="More selected conversation actions" size="icon-sm" variant="ghost">
+              <Button className="bulk-more" aria-label="More selected conversation actions" size="icon-sm" variant="ghost">
                 <MailIcon name="more" size={18} />
               </Button>
             </DropdownMenuTrigger>

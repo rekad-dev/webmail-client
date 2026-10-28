@@ -7,7 +7,6 @@ import type { ComposeFields } from "./compose-dialog";
 import { plainTextEditorContent } from "./rich-text-editor";
 import { MailIcon, type MailIconName } from "./mail-icons";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { MessageDetailView } from "@/components/mail/message-detail-view";
 import { AccountMenu } from "@/components/mail/account-menu";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
@@ -451,6 +450,7 @@ export function InboxClient({
   const [actionSessionEnded, setActionSessionEnded] = useState(false);
   const [pictureVersion, setPictureVersion] = useState<number | null>(profilePictureVersion);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [favorites, setFavorites] = useState(false);
   const [selectedThreadIds, setSelectedThreadIds] = useState<Set<string>>(() => new Set());
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [mailboxId, setMailboxId] = useState<string | null>(
@@ -736,6 +736,7 @@ export function InboxClient({
     const controller = new AbortController();
     const params = new URLSearchParams({ position: String(position) });
     if (mailboxId) params.set("mailboxId", mailboxId);
+    if (favorites) params.set("favorites", "1");
     if (searchText) {
       params.set("q", searchText);
       params.set("searchScope", searchScope);
@@ -779,7 +780,7 @@ export function InboxClient({
 
     void loadMail();
     return () => controller.abort();
-  }, [localPreview, mailboxId, position, refreshVersion, searchText, searchScope]);
+  }, [localPreview, mailboxId, position, refreshVersion, searchText, searchScope, favorites]);
 
   useEffect(() => {
     if (localPreview) return;
@@ -979,7 +980,7 @@ export function InboxClient({
 
   useEffect(() => {
     setSelectedThreadIds(new Set());
-  }, [mailboxId, position, searchText, searchScope]);
+  }, [mailboxId, position, searchText, searchScope, favorites]);
 
   const selectedMailbox = listing?.mailboxes.find(
     (mailbox) => mailbox.id === listing.selectedMailboxId,
@@ -1021,7 +1022,8 @@ export function InboxClient({
   }
 
   function selectMailbox(nextMailboxId: string) {
-    if (localPreview || nextMailboxId === mailboxId) return;
+    if (localPreview || (nextMailboxId === mailboxId && !favorites)) return;
+    setFavorites(false);
     setManualRefreshTarget(null);
     restoreMessageFocus.current = false;
     setListing(null);
@@ -1029,6 +1031,19 @@ export function InboxClient({
     setActionError(null);
     setPosition(0);
     setMailboxId(nextMailboxId);
+    setOpenEmailId(null);
+    setOpenThreadId(null);
+    setThreadView(null);
+    setEmailDetail(null);
+  }
+
+  function selectFavorites() {
+    if (localPreview || favorites) return;
+    setFavorites(true);
+    setListing(null);
+    setPosition(0);
+    setError(null);
+    setActionError(null);
     setOpenEmailId(null);
     setOpenThreadId(null);
     setThreadView(null);
@@ -1045,7 +1060,7 @@ export function InboxClient({
     setActionPending(true);
     setActionError(null);
     try {
-      await requestMailAction(action, target, destinationMailboxId, listing?.selectedMailboxId);
+      await requestMailAction(action, target, destinationMailboxId, favorites ? undefined : listing?.selectedMailboxId);
       if (action === "mark_unread" && "emailId" in target && target.emailId === openEmailId) {
         closeMessage();
       }
@@ -1076,7 +1091,7 @@ export function InboxClient({
     const completed = new Set<string>();
     try {
       for (const message of targets) {
-        await requestMailAction(action, { threadId: message.threadId }, destinationMailboxId, listing?.selectedMailboxId);
+        await requestMailAction(action, { threadId: message.threadId }, destinationMailboxId, favorites ? undefined : listing?.selectedMailboxId);
         completed.add(message.threadId);
       }
     } catch (error) {
@@ -1475,6 +1490,7 @@ export function InboxClient({
             ) : (
               <AccountMenu accountEmail={accountEmail} displayAccount={displayAccount} onPictureChange={setPictureVersion} pictureVersion={pictureVersion} />
             )}
+            {notificationStatus ? <span className="visually-hidden" role="status">{notificationStatus}</span> : null}
           </div>
       </header>
       <aside className="mail-sidebar" aria-label="Mail navigation">
@@ -1483,18 +1499,21 @@ export function InboxClient({
           aria-label={isComposeOpen ? "Restore open message" : "Compose new message"}>
           {isComposeOpen ? "Restore Message" : "Compose"}
         </Button>
-        <p className="sidebar-section-label mailbox-heading">Mailboxes</p>
 
+        <div className="sidebar-navigation">
         <MailboxNav
           isLoading={isLoading}
           localPreview={localPreview}
           mailboxes={listing?.mailboxes}
           onSelect={selectMailbox}
-          selectedMailboxId={listing?.selectedMailboxId}
+          selectedMailboxId={favorites ? undefined : listing?.selectedMailboxId}
         />
 
-        <Collapsible className="reference-mail-tools">
-        <CollapsibleTrigger className="mail-tools-trigger">Mail tools</CollapsibleTrigger>
+        <Button aria-pressed={favorites} className={`mailbox-link${favorites ? " is-selected" : ""}`} disabled={localPreview} onClick={selectFavorites} variant="ghost">
+          <MailIcon name="star" /><span className="mailbox-name">Favorites</span>
+        </Button>
+        <a className="settings-link mailbox-link" href="/settings"><MailIcon name="settings" /><span className="mailbox-name">Settings</span></a>
+        </div>
         <div className="sidebar-rail">
           <Button className="sidebar-collapse" size="icon" variant="ghost"
             aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
@@ -1502,23 +1521,6 @@ export function InboxClient({
             <MailIcon name="sidebar" size={19} />
           </Button>
         </div>
-        <CollapsibleContent className="sidebar-tools">
-          {localPreview ? (
-            <p className="local-preview-sidebar-note">Mailbox tools are disabled in this local preview.</p>
-          ) : (
-            <>
-              {notificationsSupported ? (
-                <Button aria-pressed={notificationsEnabled} className="sidebar-tool-link notification-toggle"
-                  disabled={!notificationsReady} onClick={() => void toggleNewMailNotifications()} variant="ghost"
-                  title={notificationsEnabled ? "Turn off new mail alerts" : "Enable new mail alerts"}>
-                  <MailIcon name="bell" /><span>{!notificationsReady ? "Preparing alerts…" : notificationsEnabled ? "Mail alerts on" : "Enable mail alerts"}</span>
-                </Button>
-              ) : <p className="notification-status">Browser notifications are not available.</p>}
-              {notificationStatus ? <p className="notification-status" role="status">{notificationStatus}</p> : null}
-            </>
-          )}
-        </CollapsibleContent>
-        </Collapsible>
         <div className="sidebar-footer">
           <ProfileAvatar className="account-avatar" name={displayAccount} version={pictureVersion} />
           <span className="sidebar-account-copy"><strong>{displayAccount}</strong><span>{accountEmail || "Signed in to rekad Mail"}</span></span>
@@ -1554,7 +1556,7 @@ export function InboxClient({
 
         <div className={`mail-workspace${openThreadId || openEmailId ? " has-open-message" : ""}`}>
         <section className="conversation-pane" aria-label="Message list">
-          <h2 className="conversation-pane-title">{searchText ? "Search results" : selectedMailbox?.name ?? "Inbox"}</h2>
+          <h2 className="conversation-pane-title">{searchText ? "Search results" : favorites ? "Favorites" : selectedMailbox?.name ?? "Inbox"}</h2>
         {listing ? (
           <BulkToolbar
             actionPending={actionPending}
@@ -1606,12 +1608,12 @@ export function InboxClient({
                 <path d="M2.5 3.5h27v17h-27zM3 4l13 10L29 4" />
               </svg>
             </span>
-            <h2>{searchText ? "No conversations found" : position === 0 ? "This mailbox is empty" : "No conversations on this page"}</h2>
+            <h2>{searchText ? "No conversations found" : position === 0 ? favorites ? "No favorites yet" : "This mailbox is empty" : "No conversations on this page"}</h2>
             <p>
               {searchText
                 ? "Try another search or change the search scope."
                 : position === 0
-                ? "New messages will appear here."
+                ? favorites ? "Star a message to find it here." : "New messages will appear here."
                 : "Go to the previous page or refresh to check again."}
             </p>
           </div>

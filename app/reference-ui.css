@@ -981,3 +981,38 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
   .message-details-toggle svg { transition: none; }
 }
 
+
+/* Mail navigation and account settings. */
+@media (min-width: 761px) {
+  .mailbox-link > svg { display: block; flex: none; }
+  .is-sidebar-collapsed .settings-link .mailbox-name { display: none; }
+}
+.settings-link { display: flex; text-decoration: none; }
+.account-settings-link { color: var(--ink); font-size: var(--text-sm); text-decoration: none; }
+.account-settings-link:hover { text-decoration: underline; }
+.conversation-pane .bulk-toolbar { flex: 1; }
+.conversation-pane .bulk-action-group { margin-left: auto; }
+.bulk-more:hover, .bulk-more[data-state="open"] { background: transparent !important; }
+.bulk-more svg { stroke-width: 3; }
+.settings-page { width: min(100% - 32px, 680px); margin: 48px auto; color: var(--ink); }
+.settings-page nav a { color: var(--violet-dark); text-decoration: none; }
+.settings-page nav a:hover { text-decoration: underline; }
+.settings-page h1 { margin: 24px 0; font-size: 28px; font-weight: 700; }
+.settings-card { border: 1px solid var(--line); border-radius: var(--radius-xl); background: var(--surface); padding: 24px; box-shadow: var(--shadow-card); }
+.settings-card .password-change-form { max-width: 480px; margin: 0; border: 0; padding: 0; gap: 16px; }
+.settings-card .password-change-form h2 { font-size: var(--text-lg); }
+.settings-card .password-change-fields { gap: 14px; }
+.settings-card .password-change-submit { justify-self: start; padding: 0 18px; }
+@media (max-width: 760px) {
+  .settings-page { margin: 24px auto; }
+  .settings-card { padding: 18px; }
+}
+
+.sidebar-navigation { display: contents; }
+@media (max-width: 760px) {
+  .sidebar-navigation { display: flex; flex: 1 1 0; min-width: 0; align-items: center; overflow-x: auto; gap: 4px; }
+  .sidebar-navigation .mailbox-nav { overflow: visible; flex: none; }
+}
+@media (max-width: 760px) {
+  .sidebar-navigation { width: 100%; flex: none; }
+}

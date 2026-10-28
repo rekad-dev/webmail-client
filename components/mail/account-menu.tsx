@@ -1,7 +1,6 @@
 "use client";
 
 import { MailIcon } from "@/app/mail-icons";
-import { PasswordChangeForm } from "@/app/password-change-form";
 import { SignOutButton } from "@/app/sign-out-button";
 import { Button } from "@/components/ui/button";
 import { ProfileAvatar } from "@/components/profile/profile-avatar";
@@ -31,7 +30,7 @@ export function AccountMenu({
       <PopoverContent align="end" className="grid max-h-[80vh] w-80 gap-3 overflow-y-auto p-4">
         <p className="text-sm break-all text-muted-foreground">{accountEmail || "Signed in to rekad Mail"}</p>
         <ProfilePictureEditor name={displayAccount} onChange={onPictureChange} version={pictureVersion} />
-        <PasswordChangeForm />
+        <a className="account-settings-link" href="/settings">Settings</a>
         <SignOutButton />
       </PopoverContent>
     </Popover>
