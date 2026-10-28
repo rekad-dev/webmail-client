@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useId, useRef, useState, type RefObject } from "react";
 import Image from "next/image";
 import { ComposeDialog } from "./compose-dialog";
 import type { ComposeFields } from "./compose-dialog";
@@ -977,6 +977,7 @@ export function InboxClient({
   initialThreads?: Record<string, ThreadView>;
   initialDetails?: Record<string, EmailDetail>;
 }) {
+  const previewId = useId();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [selectedThreadIds, setSelectedThreadIds] = useState<Set<string>>(() => new Set());
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -2216,7 +2217,7 @@ export function InboxClient({
 
         {listing && listing.messages.length > 0 ? (
           <ol className={`message-list${isLoading ? " is-loading" : ""}`} aria-label="Conversations">
-            {listing.messages.map((message) => (
+            {listing.messages.map((message, index) => (
               <li className={`conversation-list-item${selectedThreadIds.has(message.threadId) ? " is-selected" : ""}${openThreadId === message.threadId ? " is-open" : ""}`} key={message.threadId}>
                 <label className="conversation-select">
                   <input aria-label={`Select conversation from ${senderLabel(message)}: ${message.subject?.trim() || "(no subject)"}`}
@@ -2232,13 +2233,14 @@ export function InboxClient({
                   data-email-id={message.id} data-thread-id={message.threadId}
                   title={localPreview && !initialThreads?.[message.threadId] ? "Opening sample messages is disabled in the local preview" : undefined}
                   aria-label={`${message.isDraft ? "Edit saved draft" : `Open ${message.isUnread ? "unread" : "read"} conversation`}${message.isStarred ? ", starred" : ""} from ${senderLabel(message)}: ${message.subject?.trim() || "(no subject)"}`}
+                  aria-describedby={message.preview.trim() ? `${previewId}-list-${index}` : undefined}
                   onClick={(event) => {
                     if (message.isDraft) openSavedDraft(message.id, event.currentTarget, message.subject);
                     else { openThread(message.threadId); openMessage(message.id); }
                   }}>
                   <span className={`message-avatar avatar-tone-${avatarTone(message)}`} aria-hidden="true">{senderInitials(message)}</span>
                   <span className="message-sender">{senderLabel(message)}{message.isStarred ? <span className="conversation-star" aria-hidden="true"> ★</span> : null}</span>
-                  <span className="message-copy"><span className="message-subject">{message.isDraft ? <em>Draft: </em> : null}{message.subject?.trim() || "(no subject)"}</span><span className="message-preview">{message.preview}</span></span>
+                  <span className="message-copy"><span className="message-subject">{message.isDraft ? <em>Draft: </em> : null}{message.subject?.trim() || "(no subject)"}</span><span className="message-preview" id={`${previewId}-list-${index}`}>{message.preview}</span></span>
                   <time className="message-date" dateTime={message.receivedAt ?? undefined}>{formatDate(message.receivedAt)}</time>
                 </button>
                 {!localPreview && !message.isDraft ? (
@@ -2369,12 +2371,13 @@ export function InboxClient({
                   <p className="thread-truncated-note" role="status">Showing the latest 100 messages. Bulk conversation actions are unavailable; message actions still work for the messages shown.</p>
                 ) : null}
                 <ol className="thread-message-list" aria-label="Messages in this conversation">
-                  {threadView.messages.map((message) => (
+                  {threadView.messages.map((message, index) => (
                     <li className="thread-message-card" key={message.id}>
                       <button
                         className={`thread-message-open${message.isUnread ? " is-unread" : ""}`}
                         data-email-id={message.id}
                         aria-label={`${message.isDraft ? "Edit saved draft" : `Open ${message.isUnread ? "unread" : "read"} message`}${message.isStarred ? ", starred" : ""} from ${senderLabel(message)}: ${message.subject?.trim() || "(no subject)"}`}
+                        aria-describedby={message.preview.trim() ? `${previewId}-thread-${index}` : undefined}
                         onClick={(event) => message.isDraft
                           ? openSavedDraft(message.id, event.currentTarget, message.subject)
                           : openMessage(message.id)}
@@ -2389,7 +2392,7 @@ export function InboxClient({
                             {message.isStarred ? <span className="conversation-star" aria-hidden="true"> ★</span> : null}
                           </span>
                           <span className="message-subject">{message.subject?.trim() || "(no subject)"}</span>
-                          <span className="message-preview">{message.preview}</span>
+                          <span className="message-preview" id={`${previewId}-thread-${index}`}>{message.preview}</span>
                         </span>
                         <time className="message-date" dateTime={message.receivedAt ?? undefined}>{formatDate(message.receivedAt)}</time>
                       </button>
