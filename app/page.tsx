@@ -41,7 +41,6 @@ export default async function HomePage() {
           <div className="sign-in-split">
             <section className="status-card sign-in-panel" aria-labelledby="page-title">
               <div className="sign-in-panel-header">
-                <p className="eyebrow">Account access</p>
                 <h1 id="page-title">Sign in to rekad Mail</h1>
                 <p className="sign-in-lead">
                   Continue with your provisioned rekad account to read, search, and send mail through Stalwart.
