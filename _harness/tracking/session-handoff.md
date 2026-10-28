@@ -5,18 +5,24 @@ scope: session-handoff
 
 # Session Handoff
 
-## 2026-10-28 fixed email header and footer (local, not deployed)
+## 2026-10-28 fixed email header and footer
 
 Banner customization is disabled: the admin page, `/api/admin/banners`, the
 allowlist (`REKAD_BANNER_ADMIN_SUBJECTS`), and the settings store were removed.
-`lib/mail/fixed-mail-banners.mts` holds the markup (version 1): a grey page with
-a 600 px card, `public/mail-header.png` at the top of the card, the message, and
-a centered grey footer (copyright with the current year, www.rekad.id and
-Instagram links). The footer's Instagram URL is inferred from the header image
-(`rekad.id`), and no postal address or social icons are included. The image is
-referenced by its public URL, so recipients' clients may block it until they
-allow images. `app_managed_mail_banners` remains in the database, unused.
-The header image only reaches recipients after this is deployed.
+`lib/mail/fixed-mail-banners.mts` holds the markup (version 2): a grey page with
+a 600 px card, the rekad header at the top of the card, the message, and a
+centered grey footer (copyright with the current year, the Apple Developer
+Academy @BINUS address, www.rekad.id and @rekad.id links, and a grey Instagram
+icon). The header and icon are embedded in each message as `cid:` inline parts
+(`multipart/related`), so they show without "load images". Their bytes live in
+`lib/mail/fixed-mail-images.mts` (generated from `lib/mail/assets`, with a test
+that fails on drift); they are uploaded as JMAP blobs when a draft is created
+(cached per account for 5 minutes). Inline `cid` images are hidden from
+attachment lists and ignored when reopening drafts. `public/mail-header.png`
+is only used for the compose preview. `app_managed_mail_banners` remains in the
+database, unused. The Instagram link is inferred from the header image
+(`rekad.id`). Not yet verified: a real send through Stalwart and how Gmail and
+Apple Mail render it.
 
 ## 2026-10-28 shadcn/ui, type scale, link confirmation (deployed)
 

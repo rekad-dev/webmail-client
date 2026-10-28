@@ -1,5 +1,6 @@
 import { isIP } from "node:net";
 import { createHash } from "node:crypto";
+import { FIXED_INLINE_IMAGES } from "../mail/fixed-mail-images.mts";
 import { sanitizeEmailHtml } from "../mail/sanitize-email-html.mts";
 import {
   composedHtmlToText,
@@ -1706,6 +1707,17 @@ function firstBodyValue(
   return { value: null, truncated: false };
 }
 
+/** Images embedded by the sender (inline with a Content-ID) are part of the body, not attachments. */
+function isEmbeddedInlineImage(part: Record<string, unknown>): boolean {
+  return (
+    part.disposition === "inline" &&
+    typeof part.cid === "string" &&
+    part.cid.length > 0 &&
+    typeof part.type === "string" &&
+    part.type.toLowerCase().startsWith("image/")
+  );
+}
+
 function parseEmailAttachments(value: unknown): JmapEmailAttachmentSummary[] {
   if (!Array.isArray(value)) return [];
   return value.slice(0, MAX_EMAIL_ATTACHMENT_PARTS).flatMap((rawPart, attachmentIndex) => {
@@ -1713,6 +1725,7 @@ function parseEmailAttachments(value: unknown): JmapEmailAttachmentSummary[] {
       return [];
     }
     const part = rawPart as Record<string, unknown>;
+    if (isEmbeddedInlineImage(part)) return [];
     return [
       {
         attachmentIndex,
@@ -1773,8 +1786,8 @@ function detailGetRequest(
             "mailboxIds",
           ],
           bodyProperties: includeAttachmentBlobIds
-            ? ["partId", "blobId", "type", "name", "size", "disposition"]
-            : ["partId", "type", "name", "size"],
+            ? ["partId", "blobId", "type", "name", "size", "disposition", "cid"]
+            : ["partId", "type", "name", "size", "disposition", "cid"],
           fetchTextBodyValues: true,
           fetchHTMLBodyValues: true,
           maxBodyValueBytes: EMAIL_BODY_VALUE_MAX_BYTES,
@@ -2944,6 +2957,40 @@ function validatedMailAttachments(
   return attachments;
 }
 
+interface JmapInlineImage {
+  cid: string;
+  name: string;
+  type: string;
+  blobId: string;
+  size: number;
+}
+
+const INLINE_IMAGE_CACHE_TTL_MS = 5 * 60_000;
+const inlineImageCache = new Map<string, { at: number; images: JmapInlineImage[] }>();
+
+/** Uploads the fixed header and footer images so they travel inside the message. */
+async function uploadFixedInlineImages(
+  context: JmapApiContext,
+  allowInsecureHttp: boolean,
+): Promise<JmapInlineImage[]> {
+  const cached = inlineImageCache.get(context.accountId);
+  if (cached && Date.now() - cached.at < INLINE_IMAGE_CACHE_TTL_MS) return cached.images;
+  const images: JmapInlineImage[] = [];
+  for (const image of FIXED_INLINE_IMAGES) {
+    const bytes = Uint8Array.from(Buffer.from(image.base64, "base64"));
+    const uploaded = await uploadBlobWithContext({
+      context,
+      bytes,
+      type: image.type,
+      allowInsecureHttp,
+      fetchImpl: context.fetchImpl,
+    });
+    images.push({ cid: image.cid, name: image.name, type: image.type, blobId: uploaded.blobId, size: uploaded.size });
+  }
+  inlineImageCache.set(context.accountId, { at: Date.now(), images });
+  return images;
+}
+
 function emailCreateDraftRequest(
   accountId: string,
   draftsMailboxId: string,
@@ -2952,6 +2999,7 @@ function emailCreateDraftRequest(
   input: JmapMailSendInput,
   allowNoRecipients = false,
   callId = EMAIL_CREATE_DRAFT_CALL_ID,
+  inlineImages: JmapInlineImage[] = [],
 ) {
   const bcc = uniqueEmailAddresses([...identity.bcc, ...input.bcc]);
   const recipients = [...input.to, ...input.cc, ...bcc];
@@ -2992,14 +3040,28 @@ function emailCreateDraftRequest(
     throw new JmapSendRejectedError("message_too_large");
   }
   const textPart = { type: "text/plain", partId: "rekad-text-body" };
+  const htmlPart = { type: "text/html", partId: "rekad-html-body" };
+  const richPart = inlineImages.length > 0
+    ? {
+        type: "multipart/related",
+        subParts: [
+          htmlPart,
+          ...inlineImages.map((image) => ({
+            blobId: image.blobId,
+            type: image.type,
+            name: image.name,
+            cid: image.cid,
+            disposition: "inline",
+            size: image.size,
+          })),
+        ],
+      }
+    : htmlPart;
   const contentPart = htmlBody === null
     ? textPart
     : {
         type: "multipart/alternative",
-        subParts: [
-          textPart,
-          { type: "text/html", partId: "rekad-html-body" },
-        ],
+        subParts: [textPart, richPart],
       };
   const bodyStructure = attachments.length > 0
     ? {
@@ -3326,40 +3388,19 @@ function attachmentGetRequest(accountId: string, emailId: string) {
   };
 }
 
-export async function runJmapOAuthUploadAttachment({
-  accessToken,
-  expectedAccountId,
+async function uploadBlobWithContext({
+  context,
   bytes,
-  type,
-  sessionUrl = "https://mail.rekad.id/.well-known/jmap",
-  trustedOrigins = ["https://mail.rekad.id"],
-  allowInsecureHttp = false,
-  fetchImpl = fetch,
+  type: safeType,
+  allowInsecureHttp,
+  fetchImpl: operationFetchImpl,
 }: {
-  accessToken: string;
-  expectedAccountId: string;
+  context: JmapApiContext;
   bytes: Uint8Array;
   type: string;
-  sessionUrl?: string;
-  trustedOrigins?: string[];
-  allowInsecureHttp?: boolean;
-  fetchImpl?: typeof fetch;
+  allowInsecureHttp: boolean;
+  fetchImpl: typeof fetch;
 }): Promise<JmapUploadedAttachment> {
-  if (bytes.byteLength > MAX_MAIL_ATTACHMENT_BYTES) {
-    throw new JmapAttachmentTooLargeError();
-  }
-  const safeType = /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i.test(type)
-    ? type.toLowerCase()
-    : "application/octet-stream";
-  const operationFetchImpl = withJmapOperationDeadline(fetchImpl, 30_000);
-  const context = await createOAuthJmapContext({
-    accessToken,
-    expectedAccountId,
-    sessionUrl,
-    trustedOrigins,
-    allowInsecureHttp,
-    fetchImpl: operationFetchImpl,
-  });
   const uploadUrl = expandJmapUrlTemplate(
     context.uploadUrl,
     { accountId: context.accountId },
@@ -3417,6 +3458,49 @@ export async function runJmapOAuthUploadAttachment({
     type: safeType,
     size: bytes.byteLength,
   };
+}
+
+export async function runJmapOAuthUploadAttachment({
+  accessToken,
+  expectedAccountId,
+  bytes,
+  type,
+  sessionUrl = "https://mail.rekad.id/.well-known/jmap",
+  trustedOrigins = ["https://mail.rekad.id"],
+  allowInsecureHttp = false,
+  fetchImpl = fetch,
+}: {
+  accessToken: string;
+  expectedAccountId: string;
+  bytes: Uint8Array;
+  type: string;
+  sessionUrl?: string;
+  trustedOrigins?: string[];
+  allowInsecureHttp?: boolean;
+  fetchImpl?: typeof fetch;
+}): Promise<JmapUploadedAttachment> {
+  if (bytes.byteLength > MAX_MAIL_ATTACHMENT_BYTES) {
+    throw new JmapAttachmentTooLargeError();
+  }
+  const safeType = /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i.test(type)
+    ? type.toLowerCase()
+    : "application/octet-stream";
+  const operationFetchImpl = withJmapOperationDeadline(fetchImpl, 30_000);
+  const context = await createOAuthJmapContext({
+    accessToken,
+    expectedAccountId,
+    sessionUrl,
+    trustedOrigins,
+    allowInsecureHttp,
+    fetchImpl: operationFetchImpl,
+  });
+  return uploadBlobWithContext({
+    context,
+    bytes,
+    type: safeType,
+    allowInsecureHttp,
+    fetchImpl: operationFetchImpl,
+  });
 }
 
 export async function runJmapOAuthDownloadAttachment({
@@ -3712,10 +3796,17 @@ export async function runJmapOAuthRawMessage({
 
 function parseDraftAttachmentParts(value: unknown): JmapMailAttachmentInput[] {
   if (value === undefined || value === null) return [];
-  if (!Array.isArray(value) || value.length > MAX_MAIL_ATTACHMENTS) {
+  if (!Array.isArray(value) || value.length > MAX_MAIL_ATTACHMENTS + FIXED_INLINE_IMAGES.length) {
     throw new JmapPocError("The saved draft contains invalid attachments.");
   }
-  const attachments = value.map((candidate) => {
+  const userParts = value.filter((candidate) => {
+    const part = objectValue(candidate);
+    return !part || !isEmbeddedInlineImage(part);
+  });
+  if (userParts.length > MAX_MAIL_ATTACHMENTS) {
+    throw new JmapPocError("The saved draft contains invalid attachments.");
+  }
+  const attachments = userParts.map((candidate) => {
     const part = objectValue(candidate);
     if (
       !part ||
@@ -4159,6 +4250,9 @@ export async function runJmapOAuthSaveDraft({
   if (!identity) throw new JmapSendRejectedError("identity_invalid");
   const fromEmail = getIdentityFromAddress(identity, verifiedInput.fromEmail);
   if (draftId) await getDraftFromContext(context, preflight.draftsMailboxId, draftId);
+  const inlineImages = managedBanners
+    ? await uploadFixedInlineImages(context, allowInsecureHttp)
+    : [];
 
   const responseJson = await postJmapApi({
     apiUrl: context.apiUrl,
@@ -4171,6 +4265,7 @@ export async function runJmapOAuthSaveDraft({
       contentInput,
       true,
       EMAIL_DRAFT_CREATE_CALL_ID,
+      inlineImages,
     ),
     methodName: "Email/set",
     fetchImpl,
@@ -4283,6 +4378,9 @@ export async function runJmapOAuthCreateDraft({
     return { emailId: existingDraftId };
   }
 
+  const inlineImages = managedBanners
+    ? await uploadFixedInlineImages(context, allowInsecureHttp)
+    : [];
   const responseJson = await postJmapApi({
     apiUrl: context.apiUrl,
     authorization: context.authorization,
@@ -4292,6 +4390,9 @@ export async function runJmapOAuthCreateDraft({
       identity,
       fromEmail,
       contentInput,
+      false,
+      EMAIL_CREATE_DRAFT_CALL_ID,
+      inlineImages,
     ),
     methodName: "Email/set",
     fetchImpl,

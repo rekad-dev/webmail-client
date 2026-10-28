@@ -182,7 +182,7 @@ test("retrieves bounded message detail and returns sanitized HTML only", async (
   assert.equal(args.fetchTextBodyValues, true);
   assert.equal(args.fetchHTMLBodyValues, true);
   assert.equal(args.maxBodyValueBytes, 256 * 1024);
-  assert.deepEqual(args.bodyProperties, ["partId", "type", "name", "size"]);
+  assert.deepEqual(args.bodyProperties, ["partId", "type", "name", "size", "disposition", "cid"]);
   assert.equal(JSON.stringify(detail).includes("blobId"), false);
 });
 

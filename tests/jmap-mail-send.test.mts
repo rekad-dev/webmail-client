@@ -12,6 +12,7 @@ import {
   type JmapMailSendInput,
 } from "../lib/jmap/client.mts";
 import { createMailAttachmentReceipt } from "../lib/jmap/mail-attachment-receipt.mts";
+import { getFixedMailBanners } from "../lib/mail/fixed-mail-banners.mts";
 
 const CORE = "urn:ietf:params:jmap:core";
 const MAIL = "urn:ietf:params:jmap:mail";
@@ -65,10 +66,17 @@ function makeFetch(options: {
   draftAttachments?: Array<Record<string, unknown>>;
 } = {}) {
   const apiRequests: Record<string, unknown>[] = [];
+  const uploads: Array<{ type: string | null; size: number }> = [];
   const fetchImpl: typeof fetch = async (inputValue, init) => {
     const url = new URL(inputValue instanceof Request ? inputValue.url : inputValue.toString());
     if (url.pathname === "/.well-known/jmap") {
       return Response.json(session());
+    }
+    if (url.pathname === "/jmap/upload/account-1/") {
+      const type = new Headers(init?.headers).get("content-type");
+      const size = (init?.body as ArrayBuffer).byteLength;
+      uploads.push({ type, size });
+      return Response.json({ accountId: "account-1", blobId: `inline-blob-${uploads.length}`, type, size });
     }
     if (url.pathname !== "/jmap/") throw new Error("Unexpected JMAP request");
     assert.equal(new Headers(init?.headers).get("authorization"), `Bearer ${token}`);
@@ -158,7 +166,7 @@ function makeFetch(options: {
     });
     return Response.json({ methodResponses });
   };
-  return { fetchImpl, apiRequests };
+  return { fetchImpl, apiRequests, uploads };
 }
 
 const options = (fetchImpl: typeof fetch) => ({
@@ -287,6 +295,7 @@ test("reopens saved draft attachment references for the compose form", async () 
     "name",
     "size",
     "disposition",
+    "cid",
   ]);
 });
 
@@ -411,4 +420,77 @@ test("retries the Sent update as an idempotent Email/set operation", async () =>
       "keywords/$draft": null,
     },
   });
+});
+
+test("embeds the fixed header and footer images as inline parts of the message", async () => {
+  const { fetchImpl, apiRequests, uploads } = makeFetch();
+  await runJmapOAuthCreateDraft({
+    ...options(fetchImpl),
+    managedBanners: getFixedMailBanners(),
+    input: {
+      ...input,
+      attachments: [{
+        blobId: attachmentReceipt("file-blob", "text/plain", 4),
+        name: "notes.txt",
+        type: "text/plain",
+        size: 4,
+      }],
+    },
+  });
+
+  assert.deepEqual(uploads.map((upload) => upload.type), ["image/png", "image/png"]);
+  const request = apiRequests.at(-1);
+  const create = (request?.methodCalls as unknown[][])[0]?.[1] as {
+    create: { draft: Record<string, unknown> };
+  };
+  const draft = create.create.draft;
+  const bodyValues = draft.bodyValues as Record<string, { value: string }>;
+  assert.match(bodyValues["rekad-html-body"].value, /src="cid:rekad-header"/);
+  assert.match(bodyValues["rekad-html-body"].value, /src="cid:rekad-instagram"/);
+  const structure = draft.bodyStructure as { type: string; subParts: Array<Record<string, unknown>> };
+  assert.equal(structure.type, "multipart/mixed");
+  assert.deepEqual(structure.subParts[0], {
+    type: "multipart/alternative",
+    subParts: [
+      { type: "text/plain", partId: "rekad-text-body" },
+      {
+        type: "multipart/related",
+        subParts: [
+          { type: "text/html", partId: "rekad-html-body" },
+          {
+            blobId: "inline-blob-1",
+            type: "image/png",
+            name: "rekad-header.png",
+            cid: "rekad-header",
+            disposition: "inline",
+            size: uploads[0].size,
+          },
+          {
+            blobId: "inline-blob-2",
+            type: "image/png",
+            name: "instagram.png",
+            cid: "rekad-instagram",
+            disposition: "inline",
+            size: uploads[1].size,
+          },
+        ],
+      },
+    ],
+  });
+  assert.equal(structure.subParts[1].disposition, "attachment");
+});
+
+test("does not list embedded inline images as attachments of a saved draft", async () => {
+  const { fetchImpl } = makeFetch({
+    draftAttachments: [
+      { blobId: "inline-1", type: "image/png", name: "rekad-header.png", size: 9000, disposition: "inline", cid: "rekad-header" },
+      { blobId: "file-1", type: "text/plain", name: "notes.txt", size: 4, disposition: "attachment" },
+    ],
+  });
+  const draft = await runJmapOAuthGetDraft({
+    ...options(fetchImpl),
+    attachmentReceiptSecret: receiptSecret,
+    draftId: "email-1",
+  });
+  assert.deepEqual(draft.attachments.map((attachment) => attachment.name), ["notes.txt"]);
 });

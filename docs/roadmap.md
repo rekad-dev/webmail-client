@@ -36,10 +36,9 @@ No Stalwart client or server-wide setting changed.
 The approved cross-phase compose feature adds a Tiptap rich-text editor for all
 users and a server-sanitized plain-text alternative. Banner customization was
 disabled on 2026-10-28: the admin page, its API, and the stored settings are no
-longer used. Every outgoing message gets the fixed header image
-(`public/mail-header.png`, served from `https://webmail.rekad.id`) above the
+longer used. Every outgoing message gets a fixed header image above the
 message and a fixed footer below it, both defined in
-`lib/mail/fixed-mail-banners.mts`. The unused `app_managed_mail_banners` table
+`lib/mail/fixed-mail-banners.mts` and embedded as inline images. The unused `app_managed_mail_banners` table
 is left in place.
 
 The latest reference UI is deployed as `dpl_6tcSUUPDK5stvVwAUeZ5xBDroZZT`
