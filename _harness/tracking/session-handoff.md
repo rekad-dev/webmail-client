@@ -5,6 +5,26 @@ scope: session-handoff
 
 # Session Handoff
 
+## 2026-10-28 compose overflow, auto sign-out, SEO, sign-in copy (committed, not deployed)
+
+- Compose: the body field grows with its content and the form scrolls; the
+  action bar is sticky so Send stays reachable (checked with long text at
+  desktop and 390 px in the local preview).
+- Auto sign-out: `components/mail/use-session-guard.ts` ends the session on a
+  `sign_in_required` result or a 401 from `/api/auth/status` (checked every 2
+  minutes and on tab focus or reconnect). It clears offline copies like a
+  manual sign-out and is off while the composer is open. Not tested against a
+  real expired session.
+- SEO: metadata (title, description, canonical, Open Graph, Twitter), JSON-LD
+  on the sign-in page, `robots.ts`, `sitemap.ts`, `opengraph-image.png`, app
+  icons, noindex on `/message/original` and `offline.html`. Cloudflare serves a
+  managed robots.txt block on the live domain; Google also needs the site
+  verified and the URL submitted in Search Console, which only the domain
+  owner can do.
+- Sign-in copy was rewritten with the humanizer skill (installed globally from
+  blader/humanizer) and the project antislop filter; the fake mailbox window
+  and developer jargon are gone.
+
 ## 2026-10-28 fixed email header and footer
 
 Banner customization is disabled: the admin page, `/api/admin/banners`, the
