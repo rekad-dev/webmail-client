@@ -118,7 +118,7 @@ a:focus-visible {
 .eyebrow {
   margin: 0 0 12px;
   color: var(--accent);
-  font-size: 0.76rem;
+  font-size: var(--text-xs);
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -126,7 +126,7 @@ a:focus-visible {
 
 h1 {
   margin: 0;
-  font-size: clamp(1.7rem, 5vw, 2.3rem);
+  font-size: var(--text-2xl);
   line-height: 1.15;
 }
 
@@ -179,7 +179,7 @@ h1 {
 .sign-out-error {
   margin: 10px 0 0;
   color: var(--danger);
-  font-size: 0.85rem;
+  font-size: var(--text-sm);
   line-height: 1.45;
 }
 
@@ -205,7 +205,7 @@ h1 {
   gap: 10px;
   margin: 0 8px 40px;
   color: var(--ink);
-  font-size: 1.05rem;
+  font-size: var(--text-base);
   font-weight: 700;
   text-decoration: none;
 }
@@ -250,7 +250,7 @@ h1 {
 .mailbox-unread {
   flex: none;
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
 }
 
@@ -258,7 +258,7 @@ h1 {
   margin: 0;
   padding: 10px 12px;
   color: var(--muted);
-  font-size: 0.88rem;
+  font-size: var(--text-sm);
 }
 
 .offline-nav {
@@ -273,15 +273,15 @@ h1 {
   justify-content: space-between;
   gap: 12px;
   color: var(--ink);
-  font-size: 0.82rem;
+  font-size: var(--text-xs);
   font-weight: 700;
   text-decoration: none;
 }
 
 .offline-nav a:hover { color: var(--violet-dark); text-decoration: underline; }
 .offline-nav a span { color: var(--muted); font-variant-numeric: tabular-nums; }
-.offline-nav p { margin: 7px 0 0; color: var(--muted); font-size: 0.74rem; line-height: 1.4; }
-.notification-toggle { min-height: 44px; margin-top: 10px; padding: 0 9px; border: 1px solid var(--input); border-radius: var(--radius-md); background: var(--surface); color: var(--ink); font-size: 0.76rem; font-weight: 700; cursor: pointer; }
+.offline-nav p { margin: 7px 0 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.4; }
+.notification-toggle { min-height: 44px; margin-top: 10px; padding: 0 9px; border: 1px solid var(--input); border-radius: var(--radius-md); background: var(--surface); color: var(--ink); font-size: var(--text-xs); font-weight: 700; cursor: pointer; }
 .notification-toggle:hover:not(:disabled) { background: var(--lemon-light); }
 .notification-toggle:disabled { cursor: wait; color: var(--muted); }
 
@@ -312,7 +312,7 @@ h1 {
 }
 
 .mail-header h1 {
-  font-size: clamp(1.65rem, 3vw, 2.1rem);
+  font-size: var(--text-2xl);
 }
 
 .refresh-button,
@@ -326,7 +326,7 @@ h1 {
   border-radius: 7px;
   background: var(--surface);
   color: var(--ink);
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   cursor: pointer;
 }
@@ -348,7 +348,7 @@ h1 {
 }
 
 .refresh-icon {
-  font-size: 1.15rem;
+  font-size: var(--text-lg);
   line-height: 1;
 }
 
@@ -372,7 +372,7 @@ h1 {
 
 .mail-search-controls label {
   color: var(--ink);
-  font-size: 0.82rem;
+  font-size: var(--text-xs);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -400,7 +400,7 @@ h1 {
   padding: 0 9px;
   color: var(--ink);
   font: inherit;
-  font-size: 0.82rem;
+  font-size: var(--text-xs);
 }
 
 .message-toolbar-actions {
@@ -431,7 +431,7 @@ h1 {
 }
 
 .compose-launch-button span {
-  font-size: 1.2rem;
+  font-size: var(--text-lg);
   line-height: 1;
 }
 
@@ -482,7 +482,7 @@ h1 {
 .compose-header h2 {
   margin: 0;
   color: var(--ink);
-  font-size: 1.35rem;
+  font-size: var(--text-xl);
 }
 
 .compose-close {
@@ -495,7 +495,7 @@ h1 {
   border-radius: 7px;
   background: transparent;
   color: var(--muted);
-  font-size: 1.7rem;
+  font-size: var(--text-2xl);
   line-height: 1;
   cursor: pointer;
 }
@@ -530,7 +530,7 @@ h1 {
   margin: 0;
   padding: 8px 0 2px;
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: var(--text-xs);
 }
 
 .draft-save-status.is-error {
@@ -540,7 +540,7 @@ h1 {
 .compose-field label,
 .compose-label {
   color: var(--ink);
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
   font-weight: 700;
 }
 
@@ -599,7 +599,7 @@ h1 {
 .compose-attachment-field input[type="file"] {
   min-height: 44px;
   padding: 6px 0;
-  font-size: 0.86rem;
+  font-size: var(--text-sm);
 }
 
 .compose-attachment-field input[type="file"]::file-selector-button {
@@ -637,13 +637,13 @@ h1 {
   min-width: 0;
   overflow-wrap: anywhere;
   color: var(--ink);
-  font-size: 0.86rem;
+  font-size: var(--text-sm);
   font-weight: 600;
 }
 
 .compose-attachment-size {
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
   white-space: nowrap;
 }
 
@@ -654,7 +654,7 @@ h1 {
   border-radius: 5px;
   background: transparent;
   color: var(--danger-foreground);
-  font-size: 0.82rem;
+  font-size: var(--text-xs);
   text-decoration: underline;
   text-underline-offset: 2px;
   cursor: pointer;
@@ -673,7 +673,7 @@ h1 {
 .attachment-upload-error {
   margin: 7px 0 0;
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: var(--text-xs);
   line-height: 1.45;
 }
 
@@ -689,7 +689,7 @@ h1 {
   margin: 0;
   overflow-wrap: anywhere;
   color: var(--ink);
-  font-size: 0.92rem;
+  font-size: var(--text-sm);
   line-height: 1.5;
 }
 
@@ -697,7 +697,7 @@ h1 {
 .compose-default-note {
   margin: 0;
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
   line-height: 1.45;
 }
 
@@ -728,13 +728,13 @@ h1 {
   background: var(--violet-light);
   padding: 4px 8px;
   color: var(--ink);
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
 }
 
 .compose-default-bcc p {
   margin: 0;
   color: var(--muted);
-  font-size: 0.76rem;
+  font-size: var(--text-xs);
   line-height: 1.4;
 }
 
@@ -746,7 +746,7 @@ h1 {
   gap: 14px;
   padding: 16px 24px;
   color: var(--ink);
-  font-size: 0.88rem;
+  font-size: var(--text-sm);
   line-height: 1.45;
 }
 
@@ -775,7 +775,7 @@ h1 {
 .compose-send-error {
   margin: 14px 0 0;
   color: var(--danger);
-  font-size: 0.84rem;
+  font-size: var(--text-xs);
   line-height: 1.45;
 }
 
@@ -786,7 +786,7 @@ h1 {
   background: var(--violet-light);
   padding: 11px 12px;
   color: var(--violet-dark);
-  font-size: 0.84rem;
+  font-size: var(--text-xs);
   line-height: 1.45;
 }
 
@@ -837,7 +837,7 @@ h1 {
 .result-count {
   margin: 0;
   color: var(--muted);
-  font-size: 0.88rem;
+  font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
 
@@ -849,7 +849,7 @@ h1 {
 .page-button {
   width: 38px;
   min-height: 36px;
-  font-size: 1.1rem;
+  font-size: var(--text-lg);
 }
 
 .message-list {
@@ -916,13 +916,13 @@ h1 {
 
 .message-sender {
   color: var(--ink);
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
 }
 
 .message-subject {
   margin-top: 4px !important;
   color: var(--ink);
-  font-size: 0.94rem;
+  font-size: var(--text-sm);
 }
 
 .message-row.is-unread .message-sender,
@@ -934,19 +934,19 @@ h1 {
 .message-preview {
   margin-top: 5px !important;
   color: var(--muted);
-  font-size: 0.86rem;
+  font-size: var(--text-sm);
 }
 
 .message-date {
   padding-top: 1px;
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
   white-space: nowrap;
 }
 
 .conversation-star {
   color: var(--warning);
-  font-size: 0.95rem;
+  font-size: var(--text-sm);
 }
 
 .conversation-row-actions,
@@ -974,7 +974,7 @@ h1 {
   background: #fff;
   color: var(--ink);
   font: inherit;
-  font-size: 0.82rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   cursor: pointer;
 }
@@ -1015,13 +1015,13 @@ h1 {
   overflow-wrap: anywhere;
   margin: 0;
   color: var(--ink);
-  font-size: clamp(1.25rem, 2.4vw, 1.7rem);
+  font-size: var(--text-2xl);
 }
 
 .thread-truncated-note {
   margin: 0 0 12px;
   color: var(--muted);
-  font-size: 0.84rem;
+  font-size: var(--text-xs);
 }
 
 .thread-message-list {
@@ -1116,7 +1116,7 @@ h1 {
   overflow-wrap: anywhere;
   margin: 0;
   color: var(--ink);
-  font-size: clamp(1.25rem, 2.4vw, 1.65rem);
+  font-size: var(--text-2xl);
   line-height: 1.3;
 }
 
@@ -1135,7 +1135,7 @@ h1 {
 
 .message-metadata dt {
   color: var(--muted);
-  font-size: 0.84rem;
+  font-size: var(--text-xs);
 }
 
 .message-metadata dd {
@@ -1143,7 +1143,7 @@ h1 {
   margin: 0;
   overflow-wrap: anywhere;
   color: var(--ink);
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
 }
 
 .read-state-warning {
@@ -1152,7 +1152,7 @@ h1 {
   background: var(--lemon-light);
   padding: 11px clamp(18px, 3vw, 30px);
   color: var(--warning);
-  font-size: 0.87rem;
+  font-size: var(--text-sm);
   line-height: 1.45;
 }
 
@@ -1164,7 +1164,7 @@ h1 {
 .message-safety-note {
   margin: 0 0 11px;
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: var(--text-xs);
   line-height: 1.45;
 }
 
@@ -1184,14 +1184,14 @@ h1 {
   white-space: pre-wrap;
   color: #26333d;
   font-family: Arial, Helvetica, sans-serif;
-  font-size: 0.96rem;
+  font-size: var(--text-sm);
   line-height: 1.65;
 }
 
 .message-body-empty {
   margin: 4px 0;
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
 }
 
 .message-attachments {
@@ -1202,12 +1202,12 @@ h1 {
 .message-attachments h3 {
   margin: 0;
   color: var(--ink);
-  font-size: 0.95rem;
+  font-size: var(--text-sm);
 }
 
 .message-attachments h3 span {
   color: var(--muted);
-  font-size: 0.84rem;
+  font-size: var(--text-xs);
   font-weight: 400;
 }
 
@@ -1227,7 +1227,7 @@ h1 {
   gap: 12px;
   border-top: 1px solid var(--line);
   padding: 10px 0 2px;
-  font-size: 0.86rem;
+  font-size: var(--text-sm);
 }
 
 .attachment-name {
@@ -1240,7 +1240,7 @@ h1 {
 .attachment-details {
   flex: none;
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
 }
 
 .attachment-download {
@@ -1248,7 +1248,7 @@ h1 {
   padding: 0 8px;
   border-radius: 5px;
   color: var(--violet-dark);
-  font-size: 0.82rem;
+  font-size: var(--text-xs);
   font-weight: 700;
   text-decoration: underline;
   text-underline-offset: 2px;
@@ -1256,7 +1256,7 @@ h1 {
 
 .attachment-over-limit {
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -1264,7 +1264,7 @@ h1 {
 .message-attachments > p {
   margin: 9px 0 0;
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: var(--text-xs);
   line-height: 1.45;
 }
 
@@ -1306,13 +1306,13 @@ h1 {
 .empty-state h2 {
   margin: 0;
   color: var(--ink);
-  font-size: 1.05rem;
+  font-size: var(--text-base);
 }
 
 .empty-state p,
 .mail-state p {
   margin: 8px 0 0;
-  font-size: 0.9rem;
+  font-size: var(--text-sm);
   line-height: 1.5;
 }
 
@@ -1338,7 +1338,7 @@ h1 {
   background: var(--danger-background);
   padding: 12px 14px;
   color: var(--danger-foreground);
-  font-size: 0.88rem;
+  font-size: var(--text-sm);
   line-height: 1.45;
 }
 
@@ -1360,7 +1360,7 @@ h1 {
 .stale-list-note {
   margin: 12px 0;
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
 }
 
 .visually-hidden {
@@ -1454,7 +1454,7 @@ h1 {
   .sidebar-footer .sign-out-button {
     min-height: 36px;
     padding: 0 11px;
-    font-size: 0.82rem;
+    font-size: var(--text-xs);
   }
 
   .sidebar-footer .sign-out-error {
@@ -1573,7 +1573,7 @@ h1 {
   .compose-launch-button {
     min-height: 36px;
     padding: 0 10px;
-    font-size: 0.86rem;
+    font-size: var(--text-sm);
   }
 
   .compose-dialog {
@@ -1619,7 +1619,7 @@ h1 {
     max-width: 100%;
     padding-left: 8px;
     background: var(--surface);
-    font-size: 0.74rem;
+    font-size: var(--text-xs);
   }
 
   .message-copy {

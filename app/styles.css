@@ -1,0 +1,58 @@
+/*
+ * Entry stylesheet. Tailwind utilities (used by the shadcn components in
+ * components/ui) sit above the hand-written rules, which are kept in the
+ * `legacy` layer so a utility class always wins on an element that has both.
+ * Tailwind's preflight is intentionally not imported: the legacy rules already
+ * define the base styles.
+ */
+@layer theme, base, legacy, components, utilities;
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@import "tw-animate-css";
+@import "./globals.css" layer(legacy);
+@import "./reference-ui.css" layer(legacy);
+
+@custom-variant dark (&:is(.dark *));
+
+/* One type scale for the whole interface; Tailwind's text-* utilities use it too. */
+@theme static {
+  --text-xs: 0.875rem;
+  --text-xs--line-height: 1.4;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.45;
+  --text-base: 1rem;
+  --text-base--line-height: 1.55;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.4;
+  --text-xl: 1.375rem;
+  --text-xl--line-height: 1.3;
+  --text-2xl: 1.75rem;
+  --text-2xl--line-height: 1.2;
+}
+
+/* shadcn colour names map onto the app's existing tokens. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted-surface);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--violet-light);
+  --color-accent-foreground: var(--violet-dark);
+  --color-destructive: var(--danger);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+}

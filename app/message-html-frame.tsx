@@ -7,10 +7,10 @@ const POLICY =
 
 const READING_STYLES = `
 html { overflow: hidden; }
-body { display: flow-root; margin: 0; color: #1f1f1f; font: 14px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; overflow-wrap: anywhere; word-break: normal; }
+body { display: flow-root; margin: 0; color: #1f1f1f; font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; overflow-wrap: anywhere; word-break: normal; }
 p, div { margin: 0 0 0.75em; }
 blockquote { margin: 0.75em 0; border-left: 3px solid #d0d0d5; padding-left: 12px; color: #5a5a5a; }
-pre, code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; }
+pre, code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 14px; }
 pre { white-space: pre-wrap; }
 table { max-width: 100%; border-collapse: collapse; }
 td, th { padding: 2px 6px; vertical-align: top; }

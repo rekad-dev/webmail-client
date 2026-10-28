@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Inter_Tight, Nunito } from "next/font/google";
-import "./globals.css";
-import "./reference-ui.css";
+import "./styles.css";
 
 const nunito = Nunito({
   variable: "--font-nunito",
