@@ -1,16 +1,22 @@
 "use client";
 
 import { useState } from "react";
+import { LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { clearAllOfflineMail } from "../lib/offline/mail-cache.mts";
 import { announceAccountChange } from "@/components/mail/account-request-scope";
 
-export function SignOutButton() {
+export function SignOutButton({ menuItem = false, disabled = false, onPendingChange }: {
+  menuItem?: boolean;
+  disabled?: boolean;
+  onPendingChange?(pending: boolean): void;
+} = {}) {
   const [isPending, setIsPending] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   async function handleSignOut() {
     setIsPending(true);
+    onPendingChange?.(true);
     setErrorMessage(null);
 
     try {
@@ -18,6 +24,7 @@ export function SignOutButton() {
     } catch {
       setErrorMessage("Offline copies could not be cleared. Sign out is paused; check browser storage and retry.");
       setIsPending(false);
+      onPendingChange?.(false);
       return;
     }
 
@@ -46,17 +53,19 @@ export function SignOutButton() {
 
     setErrorMessage("Sign out failed. Please try again.");
     setIsPending(false);
+    onPendingChange?.(false);
   }
 
   return (
     <div className="auth-actions">
       <Button
         aria-busy={isPending}
-        className="sign-out-button"
-        disabled={isPending}
+        className={menuItem ? "sign-out-button account-sign-out" : "sign-out-button"}
+        disabled={disabled || isPending}
         onClick={() => void handleSignOut()}
-        variant="outline"
+        variant={menuItem ? "ghost" : "outline"}
       >
+        {menuItem ? <LogOut aria-hidden="true" size={18} /> : null}
         {isPending ? "Signing out…" : "Sign out"}
       </Button>
       {errorMessage ? (
