@@ -38,6 +38,7 @@ if (process.exitCode !== 1) {
         "0001-oauth-sessions.sql",
         "0002-mail-send-attempts.sql",
         "0003-managed-mail-banners.sql",
+        "0004-profile-pictures.sql",
       ];
       const migrations = await Promise.all(
         migrationFiles.map((file) =>

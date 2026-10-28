@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { MessageDetailView } from "@/components/mail/message-detail-view";
 import { AccountMenu } from "@/components/mail/account-menu";
+import { ProfileAvatar } from "@/components/profile/profile-avatar";
 import { BulkToolbar } from "@/components/mail/bulk-toolbar";
 import { ConversationList } from "@/components/mail/conversation-list";
 import { ConversationThread } from "@/components/mail/conversation-thread";
@@ -432,6 +433,7 @@ function mailActionErrorMessage(error: string): string {
 export function InboxClient({
   accountName,
   accountEmail,
+  profilePictureVersion = null,
   localPreview = false,
   initialListing,
   initialThreads,
@@ -439,6 +441,7 @@ export function InboxClient({
 }: {
   accountName?: string | null;
   accountEmail?: string | null;
+  profilePictureVersion?: number | null;
   localPreview?: boolean;
   initialListing?: MailListing;
   initialThreads?: Record<string, ThreadView>;
@@ -446,6 +449,7 @@ export function InboxClient({
 }) {
   const previewId = useId();
   const [actionSessionEnded, setActionSessionEnded] = useState(false);
+  const [pictureVersion, setPictureVersion] = useState<number | null>(profilePictureVersion);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [selectedThreadIds, setSelectedThreadIds] = useState<Set<string>>(() => new Set());
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -1417,7 +1421,6 @@ export function InboxClient({
   const selectedCount = selectableMessages.filter((message) => selectedThreadIds.has(message.threadId)).length;
   const allPageSelected = selectableMessages.length > 0 && selectedCount === selectableMessages.length;
   const displayAccount = accountName?.trim() || accountEmail?.trim() || "rekad account";
-  const accountInitial = Array.from(displayAccount)[0]?.toLocaleUpperCase() || "r";
   const archiveAvailable = Boolean(listing?.mailboxes.some((mailbox) => mailbox.role === "archive"));
   const trashAvailable = Boolean(listing?.mailboxes.some((mailbox) => mailbox.role === "trash"));
   const currentViewLoading = openEmailId ? detailLoading : openThreadId ? threadLoading : isLoading;
@@ -1470,7 +1473,7 @@ export function InboxClient({
             {localPreview ? (
               <span className="local-preview-account-label">Local preview</span>
             ) : (
-              <AccountMenu accountEmail={accountEmail} displayAccount={displayAccount} />
+              <AccountMenu accountEmail={accountEmail} displayAccount={displayAccount} onPictureChange={setPictureVersion} pictureVersion={pictureVersion} />
             )}
           </div>
       </header>
@@ -1517,7 +1520,7 @@ export function InboxClient({
         </CollapsibleContent>
         </Collapsible>
         <div className="sidebar-footer">
-          <span className="account-avatar" aria-hidden="true">{accountInitial}</span>
+          <ProfileAvatar className="account-avatar" name={displayAccount} version={pictureVersion} />
           <span className="sidebar-account-copy"><strong>{displayAccount}</strong><span>{accountEmail || "Signed in to rekad Mail"}</span></span>
         </div>
       </aside>
