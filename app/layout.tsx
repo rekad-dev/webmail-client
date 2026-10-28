@@ -15,9 +15,26 @@ const interTight = Inter_Tight({
   display: "swap",
 });
 
+const siteUrl = "https://webmail.rekad.id";
+const title = "rekad Mail, webmail for rekad.id";
+const description = "Sign in to read and send email with your rekad.id account.";
+
 export const metadata: Metadata = {
-  title: "rekad Mail",
-  description: "A lightweight webmail client for rekad.",
+  metadataBase: new URL(siteUrl),
+  title: { default: title, template: "%s | rekad Mail" },
+  description,
+  applicationName: "rekad Mail",
+  alternates: { canonical: "/" },
+  robots: { index: true, follow: true },
+  openGraph: {
+    type: "website",
+    siteName: "rekad Mail",
+    url: siteUrl,
+    title,
+    description,
+    locale: "en_US",
+  },
+  twitter: { card: "summary_large_image", title, description },
 };
 
 export default function RootLayout({

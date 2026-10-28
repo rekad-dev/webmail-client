@@ -6,7 +6,7 @@ import { OriginalMessage } from "./original-message";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Original message · rekad Mail",
+  title: "Original message",
   robots: { index: false, follow: false },
 };
 
