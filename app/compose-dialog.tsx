@@ -9,7 +9,7 @@ import {
   type RefObject,
 } from "react";
 import { MailIcon } from "./mail-icons";
-import { CustomSelect } from "./custom-select";
+import { OptionSelect } from "@/components/mail/option-select";
 import { plainTextEditorContent, RichTextEditor } from "./rich-text-editor";
 
 interface EmailAddress {
@@ -1196,7 +1196,7 @@ export function ComposeDialog({
             {preflight.identities.length > 1 || !selectedIdentity ? (
               <div className="compose-field compose-sender-field">
                 <label htmlFor="compose-identity">From</label>
-                <CustomSelect
+                <OptionSelect
                   label="From"
                   disabled={!canEdit}
                   id="compose-identity"

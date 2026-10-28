@@ -16,19 +16,25 @@ test("removes executable markup, remote resources, styles, and inline handlers",
   assert.deepEqual(result.externalLinks, []);
 });
 
-test("makes body links inert and returns only safe external destinations", () => {
+test("keeps only safe links, with a normalized href and no-referrer rel", () => {
   const result = sanitizeEmailHtml(
-    '<p><a href="https://example.test/path?q=1">Open</a>' +
+    '<p><a href="https://example.test/path?q=1" target="_blank" onclick="run()">Open</a>' +
       '<a href="mailto:help@example.test">Contact</a>' +
       '<a href="javascript:alert(1)">Unsafe</a>' +
       '<a href="//tracker.example/path">Protocol relative</a>' +
       '<a href="https://user:secret@example.test/">Credentials</a></p>',
   );
 
-  assert.match(result.html, /<span>Open<\/span>/);
-  assert.match(result.html, /<span>Contact<\/span>/);
+  assert.match(
+    result.html,
+    /<a href="https:\/\/example\.test\/path\?q=1" rel="noopener noreferrer nofollow">Open<\/a>/,
+  );
+  assert.match(result.html, /<a href="mailto:help@example\.test" rel="noopener noreferrer nofollow">Contact<\/a>/);
   assert.match(result.html, /<span>Unsafe<\/span>/);
-  assert.doesNotMatch(result.html, /<a\b|href=/i);
+  assert.match(result.html, /<span>Protocol relative<\/span>/);
+  assert.match(result.html, /<span>Credentials<\/span>/);
+  assert.doesNotMatch(result.html, /javascript:|tracker\.example|secret|target=|onclick/i);
+  assert.equal((result.html.match(/<a\b/g) ?? []).length, 2);
   assert.deepEqual(result.externalLinks, [
     "https://example.test/path?q=1",
     "mailto:help@example.test",

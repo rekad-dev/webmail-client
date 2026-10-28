@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { CustomSelect } from "./custom-select";
+import { OptionSelect } from "@/components/mail/option-select";
 
 interface RichTextEditorProps {
   id: string;
@@ -133,7 +133,7 @@ export function RichTextEditor({
         {toolbarButton("underline", "Underline", editor.isActive("underline"), () => editor.chain().focus().toggleUnderline().run())}
         {toolbarButton("strike", "Strikethrough", editor.isActive("strike"), () => editor.chain().focus().toggleStrike().run())}
         <label className="rich-text-heading-label" htmlFor={`${id}-heading`}>Heading</label>
-        <CustomSelect
+        <OptionSelect
           label="Text style"
           disabled={disabled}
           id={`${id}-heading`}

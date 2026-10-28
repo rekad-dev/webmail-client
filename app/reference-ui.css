@@ -990,7 +990,7 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
 .reference-tag-1 { background: var(--orange); }
 .reference-tag-2 { background: var(--green); }
 .reference-mail-tools { margin-top: 20px; color: var(--muted); font-size: var(--text-xs); }
-.reference-mail-tools > summary { padding: 8px 0; cursor: pointer; }
+.mail-tools-trigger { display: block; min-height: 44px; border: 0; background: transparent; padding: 8px 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .reference-mail-tools .sidebar-tools { margin: 0; padding: 0; }
 .reference-mail-tools .sidebar-tools > p { margin-left: 8px; }
 .reference-message-tools { display: flex; min-height: 52px; flex-wrap: wrap; align-items: center; gap: 16px; border-bottom: 1px solid var(--line); padding: 8px 20px; }

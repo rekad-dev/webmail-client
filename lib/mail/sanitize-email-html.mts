@@ -78,7 +78,7 @@ export function sanitizeEmailHtml(dirtyHtml: string): SanitizedEmailHtml {
   const html = sanitizeHtml(source, {
     allowedTags: [...EMAIL_HTML_TAGS],
     allowedAttributes: {
-      a: ["href"],
+      a: ["href", "rel"],
       td: ["colspan", "rowspan"],
       th: ["colspan", "rowspan"],
     },
@@ -96,7 +96,11 @@ export function sanitizeEmailHtml(dirtyHtml: string): SanitizedEmailHtml {
         if (href && externalLinks.size < MAX_EXTERNAL_LINKS) {
           externalLinks.add(href);
         }
-        return { tagName: "span", attribs: {} };
+        // The reader intercepts clicks and asks before leaving the app.
+        const attribs: Record<string, string> = href
+          ? { href, rel: "noopener noreferrer nofollow" }
+          : {};
+        return { tagName: href ? "a" : "span", attribs };
       },
     },
   });

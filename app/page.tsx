@@ -1,6 +1,7 @@
 import { getAuthSession, signIn } from "@/auth";
 import Image from "next/image";
 import { InboxClient } from "./inbox-client";
+import { Button } from "@/components/ui/button";
 import { MailIcon } from "./mail-icons";
 import { isManagedBannerAdmin } from "@/lib/mail/managed-banner-store.mts";
 
@@ -48,10 +49,10 @@ export default async function HomePage() {
               </div>
 
               <form action={signInWithStalwart} className="sign-in-form">
-                <button className="sign-in-button" type="submit">
+                <Button className="sign-in-button" size="lg" type="submit">
                   <MailIcon name="mail" size={19} />
                   <span>Sign in with Stalwart</span>
-                </button>
+                </Button>
               </form>
 
               <dl className="sign-in-meta-list">

@@ -1,5 +1,7 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useRef, useState, type FormEvent } from "react";
 
 type PasswordChangeError =
@@ -127,7 +129,7 @@ export function PasswordChangeForm() {
       <fieldset className="password-change-fields" disabled={isPending}>
         <label className="password-change-field">
           <span>Current password</span>
-          <input
+          <Input
             autoComplete="current-password"
             name="currentPassword"
             required
@@ -136,7 +138,7 @@ export function PasswordChangeForm() {
         </label>
         <label className="password-change-field">
           <span>New password</span>
-          <input
+          <Input
             autoComplete="new-password"
             name="newPassword"
             required
@@ -145,7 +147,7 @@ export function PasswordChangeForm() {
         </label>
         <label className="password-change-field">
           <span>Confirm new password</span>
-          <input
+          <Input
             autoComplete="new-password"
             name="confirmPassword"
             required
@@ -154,7 +156,7 @@ export function PasswordChangeForm() {
         </label>
         <label className="password-change-field">
           <span>One-time code <span className="password-change-optional">optional</span></span>
-          <input
+          <Input
             autoComplete="one-time-code"
             inputMode="numeric"
             name="otpCode"
@@ -165,9 +167,9 @@ export function PasswordChangeForm() {
       <p className="password-change-hint">Enter a code if your account requires one. Password rules are set by your mail provider.</p>
       {error ? <p className="password-change-message is-error" role="alert">{errorMessage(error)}</p> : null}
       {success ? <p className="password-change-message is-success" role="status">Password updated.</p> : null}
-      <button className="password-change-submit" disabled={isPending} type="submit">
+      <Button className="password-change-submit" disabled={isPending} type="submit">
         {isPending ? "Updating password…" : "Update password"}
-      </button>
+      </Button>
     </form>
   );
 }

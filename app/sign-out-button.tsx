@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { signOut } from "next-auth/react";
+import { Button } from "@/components/ui/button";
 import { clearAllOfflineMail } from "../lib/offline/mail-cache.mts";
 
 export function SignOutButton() {
@@ -36,15 +37,15 @@ export function SignOutButton() {
 
   return (
     <div className="auth-actions">
-      <button
+      <Button
         aria-busy={isPending}
         className="sign-out-button"
         disabled={isPending}
         onClick={() => void handleSignOut()}
-        type="button"
+        variant="outline"
       >
         {isPending ? "Signing out…" : "Sign out"}
-      </button>
+      </Button>
       {errorMessage ? (
         <p className="sign-out-error" role="alert">
           {errorMessage}

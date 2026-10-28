@@ -157,7 +157,7 @@ test("retrieves bounded message detail and returns sanitized HTML only", async (
     inReplyTo: [],
     references: [],
     textBody: "Plain body\nSecond line",
-    htmlBody: "<div>Hello <span>Open</span></div>",
+    htmlBody: '<div>Hello <a href="https://example.test/" rel="noopener noreferrer nofollow">Open</a></div>',
     externalLinks: ["https://example.test/"],
     bodyTruncated: false,
     attachments: [

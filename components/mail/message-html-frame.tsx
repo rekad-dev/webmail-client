@@ -15,6 +15,7 @@ pre { white-space: pre-wrap; }
 table { max-width: 100%; border-collapse: collapse; }
 td, th { padding: 2px 6px; vertical-align: top; }
 hr { border: 0; border-top: 1px solid #d0d0d5; }
+a { color: #2b3058; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 `;
 
 function isolatedHtmlDocument(html: string): string {
@@ -26,11 +27,23 @@ function isolatedHtmlDocument(html: string): string {
  *
  * The frame is sandboxed without allow-scripts and carries a CSP that blocks
  * scripts, styles, images, and navigation, so allow-same-origin only lets this
- * component read the frame's size and apply reading styles through the CSSOM.
+ * component read the frame's size, apply reading styles through the CSSOM, and
+ * intercept link clicks so the reader can confirm before leaving the app.
  */
-export function MessageHtmlFrame({ html }: { html: string }) {
+export function MessageHtmlFrame({
+  html,
+  onLinkClick,
+}: {
+  html: string;
+  /** Called with the link's destination; the frame never navigates on its own. */
+  onLinkClick(href: string): void;
+}) {
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const [height, setHeight] = useState(96);
+  const onLinkClickRef = useRef(onLinkClick);
+  useEffect(() => {
+    onLinkClickRef.current = onLinkClick;
+  }, [onLinkClick]);
 
   const fit = useCallback(() => {
     const frame = frameRef.current;
@@ -50,6 +63,20 @@ export function MessageHtmlFrame({ html }: { html: string }) {
     setHeight(Math.max(48, Math.ceil(doc.body.getBoundingClientRect().height)));
   }, []);
 
+  const attachLinkGuard = useCallback(() => {
+    const doc = frameRef.current?.contentDocument;
+    if (!doc) return;
+    const intercept = (event: Event) => {
+      const target = event.target as Element | null;
+      const link = target?.closest?.("a[href]");
+      if (!link) return;
+      event.preventDefault();
+      if (event.type === "click") onLinkClickRef.current(link.getAttribute("href") ?? "");
+    };
+    doc.addEventListener("click", intercept, true);
+    doc.addEventListener("auxclick", intercept, true);
+  }, []);
+
   useEffect(() => {
     const frame = frameRef.current;
     if (!frame) return;
@@ -61,7 +88,10 @@ export function MessageHtmlFrame({ html }: { html: string }) {
   return (
     <iframe
       className="message-html-frame"
-      onLoad={fit}
+      onLoad={() => {
+        attachLinkGuard();
+        fit();
+      }}
       ref={frameRef}
       referrerPolicy="no-referrer"
       sandbox="allow-same-origin"

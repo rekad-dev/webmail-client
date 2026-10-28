@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { RichTextEditor } from "../../rich-text-editor";
 
 interface BannerSettings {
@@ -169,9 +170,9 @@ export function BannerSettings() {
                   : <span className="muted">No footer banner</span>}
               </div>
             </div>
-            <button className="admin-banner-save" disabled={saving || !hasChanges} onClick={() => void save()} type="button">
+            <Button className="admin-banner-save" disabled={saving || !hasChanges} onClick={() => void save()}>
               {saving ? "Saving…" : "Save banners"}
-            </button>
+            </Button>
           </>
         ) : null}
         {feedback ? <p className="admin-banner-feedback" role={error ? "alert" : "status"}>{feedback}</p> : null}
