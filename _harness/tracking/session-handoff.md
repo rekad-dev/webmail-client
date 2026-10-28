@@ -5,6 +5,18 @@ scope: session-handoff
 
 # Session Handoff
 
+## 2026-10-28 message view rework (local, not deployed)
+
+Commits `2a60a81`..`2af317f`: message view is Gmail-style (sender details open
+from the "to …" line, formatted body at natural height, custom kebab menu with
+only working actions, "Links in this message" panel removed; body links remain
+inert). `/message/original?emailId=` shows parsed headers plus up to 1 MB of raw
+source via `/api/mail/original`. The earlier sign-in HTTP 500 was an Auth.js
+`InvalidCheck` redirect whose immutable headers were mutated; fixed in
+`2af317f`. The live-account audit is still pending a deploy and a fresh
+sign-in. Show original has only unit tests; it was not run against a real
+mailbox.
+
 ## Latest feature: rich-text composition and managed banners
 
 The user approved a rich-text editor for all users and an admin page for
