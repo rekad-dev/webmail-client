@@ -4,6 +4,11 @@ A lightweight webmail client for the existing Stalwart server. Stalwart remains
 responsible for accounts, message storage, and sending; this repository builds
 the client and its server-side JMAP boundary.
 
+## Brand name
+
+Always write the organization and brand name as lowercase `rekad`, including
+in headings, interface copy, and documentation.
+
 ## Current milestone
 
 Phase 0 establishes the Next.js App Router foundation and a local JMAP proof of

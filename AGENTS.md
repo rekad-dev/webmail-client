@@ -14,6 +14,10 @@ This repository uses a small harness. Read this entrypoint, then route to the mi
 
 PROMPT.md is the authoritative product brief. This repository is a webmail client for Stalwart, using a Next.js backend-for-frontend and JMAP. It must not recreate mail-server responsibilities.
 
+## Brand name
+
+Always write the organization and brand name as lowercase `rekad`, including in headings, interface copy, and documentation.
+
 ## Model default
 
 Request exact gpt-6-luna when the runtime exposes model selection. If another model is active or needed, ask the user to confirm that model by name. Do not switch models automatically or stop the whole turn; continue independent work and leave only model-dependent work pending until the user answers. Details are in _harness/rules.md.
