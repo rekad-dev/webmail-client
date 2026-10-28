@@ -5,6 +5,17 @@ scope: session-handoff
 
 # Session Handoff
 
+## 2026-10-29 shared group mail and account switching (deployed)
+
+Commit `523bd28`, including shared group mail and account switching, was
+deployed from a clean Git export to the existing `rekad/webmail-client` project
+as `dpl_DE7Cu8Gw72dqD9UwG6W34CkaSQej`. Vercel reports Ready and the
+`https://webmail.rekad.id` alias. The production build, 252 local tests and
+typecheck passed; anonymous checks returned 200 for the home page and 401 for
+the shared and linked accounts APIs. No migration was required. Live shared
+mail and switching with two accounts remain unverified; see the shared group
+mail and account switching section below for scope and limitations.
+
 ## 2026-10-28 profile pictures (deployed)
 
 Deployed with commit `cb3fdb4` after the user approved running the additive
