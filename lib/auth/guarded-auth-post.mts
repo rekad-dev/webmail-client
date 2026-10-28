@@ -1,5 +1,21 @@
 export { isTrustedAppOrigin as isTrustedLogoutOrigin } from "./trusted-origin.mts";
 
+/**
+ * Auth.js answers failed callbacks with Response.redirect(), whose headers are
+ * immutable, so headers are applied to a copy rather than the original.
+ */
+export function withSecurityHeaders(response: Response): Response {
+  const headers = new Headers(response.headers);
+  for (const [name, value] of Object.entries(LOGOUT_RESPONSE_HEADERS)) {
+    headers.set(name, value);
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 const LOGOUT_RESPONSE_HEADERS = {
   "Cache-Control": "no-store",
   "Referrer-Policy": "no-referrer",
@@ -29,11 +45,7 @@ export async function handleGuardedAuthPost(
   dependencies: GuardedAuthPostDependencies,
 ): Promise<Response> {
   if (!isAuthSignOutRequest(request)) {
-    const response = await dependencies.authPost(request);
-    for (const [name, value] of Object.entries(LOGOUT_RESPONSE_HEADERS)) {
-      response.headers.set(name, value);
-    }
-    return response;
+    return withSecurityHeaders(await dependencies.authPost(request));
   }
 
   if (!dependencies.isTrustedOrigin(request)) {
@@ -51,9 +63,5 @@ export async function handleGuardedAuthPost(
     );
   }
 
-  const response = await dependencies.authPost(request);
-  for (const [name, value] of Object.entries(LOGOUT_RESPONSE_HEADERS)) {
-    response.headers.set(name, value);
-  }
-  return response;
+  return withSecurityHeaders(await dependencies.authPost(request));
 }

@@ -5,6 +5,7 @@ import {
   handleGuardedAuthPost,
   isAuthSignOutRequest,
   isTrustedLogoutOrigin,
+  withSecurityHeaders,
 } from "../lib/auth/guarded-auth-post.mts";
 
 function request(
@@ -191,4 +192,22 @@ test("passes other Auth.js POST actions through", async () => {
   assert.equal(receivedRequest, originalRequest);
   assert.equal(await response.text(), "callback");
   assert.equal(response.headers.get("referrer-policy"), "no-referrer");
+});
+
+test("adds security headers to immutable Auth.js redirects without losing cookies", () => {
+  const original = Response.redirect("https://webmail.example.test/api/auth/error?error=Configuration", 302);
+  assert.throws(() => original.headers.set("Cache-Control", "no-store"), TypeError);
+
+  const headers = new Headers({ Location: "https://webmail.example.test/" });
+  headers.append("Set-Cookie", "a=1; Path=/");
+  headers.append("Set-Cookie", "b=2; Path=/");
+  const withCookies = withSecurityHeaders(new Response(null, { status: 302, headers }));
+  assert.deepEqual(withCookies.headers.getSetCookie(), ["a=1; Path=/", "b=2; Path=/"]);
+
+  const response = withSecurityHeaders(original);
+  assert.equal(response.status, 302);
+  assert.equal(response.headers.get("location"), "https://webmail.example.test/api/auth/error?error=Configuration");
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.equal(response.headers.get("referrer-policy"), "no-referrer");
+  assert.equal(response.headers.get("x-content-type-options"), "nosniff");
 });
