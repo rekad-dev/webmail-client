@@ -32,13 +32,13 @@ function ShieldLock() {
     <svg aria-hidden="true" className="signin-shield" focusable="false" viewBox="0 0 48 56">
       <path
         d="M24 2 3 9v18c0 13 9 22 21 27 12-5 21-14 21-27V9L24 2Z"
-        fill="#f6c93f"
+        fill="var(--lemon)"
       />
-      <rect fill="#14204f" height="15" rx="2.5" width="18" x="15" y="26" />
+      <rect fill="var(--violet-dark)" height="15" rx="2.5" width="18" x="15" y="26" />
       <path
         d="M19 26v-4a5 5 0 0 1 10 0v4"
         fill="none"
-        stroke="#14204f"
+        stroke="var(--violet-dark)"
         strokeLinecap="round"
         strokeWidth="3.4"
       />
@@ -69,11 +69,7 @@ export function SignInView({ signInAction }: { signInAction: () => Promise<void>
           </h1>
           <p className="signin-lead">Sign in with your rekad.id account.</p>
           <form action={signInAction}>
-            <Button
-              className="w-full border border-[#e0b53a] bg-linear-to-b from-[#fadb62] to-[#f0c63f] font-extrabold tracking-wider text-[#14204f] uppercase hover:from-[#fbe27e] hover:to-[#f3cd4d]"
-              size="lg"
-              type="submit"
-            >
+            <Button className="w-full font-bold" size="lg" type="submit">
               Sign in
             </Button>
           </form>
