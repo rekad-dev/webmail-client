@@ -86,8 +86,7 @@ export function ProfilePictureEditor({
   }
 
   return (
-    <section aria-labelledby="profile-picture-heading" className="grid gap-3 border-b pb-4">
-      <h2 className="text-sm font-bold" id="profile-picture-heading">Profile picture</h2>
+    <div className="settings-picture-editor">
       <div className="flex items-center gap-4">
         <ProfileAvatar className="size-16 text-xl" name={name} version={version} />
         <div className="flex flex-wrap gap-2">
@@ -118,6 +117,6 @@ export function ProfilePictureEditor({
           {message.text}
         </p>
       ) : null}
-    </section>
+    </div>
   );
 }

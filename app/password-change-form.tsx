@@ -125,7 +125,6 @@ export function PasswordChangeForm() {
 
   return (
     <form className="password-change-form" onSubmit={(event) => void handleSubmit(event)} ref={formRef}>
-      <h2>Change password</h2>
       <fieldset className="password-change-fields" disabled={isPending}>
         <label className="password-change-field">
           <span>Current password</span>

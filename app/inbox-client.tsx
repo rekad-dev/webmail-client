@@ -448,7 +448,7 @@ export function InboxClient({
 }) {
   const previewId = useId();
   const [actionSessionEnded, setActionSessionEnded] = useState(false);
-  const [pictureVersion, setPictureVersion] = useState<number | null>(profilePictureVersion);
+  const pictureVersion = profilePictureVersion;
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [favorites, setFavorites] = useState(false);
   const [selectedThreadIds, setSelectedThreadIds] = useState<Set<string>>(() => new Set());
@@ -1488,7 +1488,7 @@ export function InboxClient({
             {localPreview ? (
               <span className="local-preview-account-label">Local preview</span>
             ) : (
-              <AccountMenu accountEmail={accountEmail} displayAccount={displayAccount} onPictureChange={setPictureVersion} pictureVersion={pictureVersion} />
+              <AccountMenu accountEmail={accountEmail} displayAccount={displayAccount} pictureVersion={pictureVersion} />
             )}
             {notificationStatus ? <span className="visually-hidden" role="status">{notificationStatus}</span> : null}
           </div>

@@ -994,18 +994,37 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
 .conversation-pane .bulk-action-group { margin-left: auto; }
 .bulk-more:hover, .bulk-more[data-state="open"] { background: transparent !important; }
 .bulk-more svg { stroke-width: 3; }
-.settings-page { width: min(100% - 32px, 680px); margin: 48px auto; color: var(--ink); }
-.settings-page nav a { color: var(--violet-dark); text-decoration: none; }
-.settings-page nav a:hover { text-decoration: underline; }
-.settings-page h1 { margin: 24px 0; font-size: 28px; font-weight: 700; }
-.settings-card { border: 1px solid var(--line); border-radius: var(--radius-xl); background: var(--surface); padding: 24px; box-shadow: var(--shadow-card); }
-.settings-card .password-change-form { max-width: 480px; margin: 0; border: 0; padding: 0; gap: 16px; }
-.settings-card .password-change-form h2 { font-size: var(--text-lg); }
-.settings-card .password-change-fields { gap: 14px; }
-.settings-card .password-change-submit { justify-self: start; padding: 0 18px; }
+/* Settings uses the same section rhythm as the reference, with rekad's palette. */
+.settings-shell { min-height: 100dvh; color: var(--ink); background: var(--canvas); }
+.settings-header { display: flex; min-height: 72px; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid var(--line); background: var(--surface); padding: 0 32px; }
+.settings-brand { display: inline-flex; align-items: center; gap: 8px; color: var(--violet-dark); font-size: var(--text-lg); font-weight: 800; text-decoration: none; }
+.settings-brand img { width: 38px; height: 39px; object-fit: contain; }
+.settings-brand strong { color: var(--ink); font-size: var(--text-base); font-weight: 700; }
+.settings-back { display: inline-flex; min-height: 44px; align-items: center; gap: 4px; color: var(--ink); font-size: var(--text-sm); text-decoration: none; }
+.settings-back:hover { color: var(--violet-dark); }
+.settings-page { width: min(100% - 64px, 1040px); margin: 0 auto; padding: 46px 0 80px; }
+.settings-title h1 { margin: 0; font-size: 30px; font-weight: 700; line-height: 1.2; }
+.settings-title p { margin: 8px 0 0; color: var(--muted); font-size: var(--text-sm); }
+.settings-navigation { display: flex; gap: 28px; margin-top: 28px; border-bottom: 1px solid var(--line); }
+.settings-navigation a { display: inline-flex; min-height: 44px; align-items: center; border-bottom: 2px solid transparent; color: var(--muted); font-size: var(--text-sm); font-weight: 700; text-decoration: none; }
+.settings-navigation a:hover, .settings-navigation a:focus-visible { border-color: var(--violet-dark); color: var(--violet-dark); }
+.settings-section { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; border-bottom: 1px solid var(--line); padding: 36px 0 40px; scroll-margin-top: 24px; }
+.settings-section-intro h2 { margin: 0 0 6px; font-size: var(--text-lg); font-weight: 700; }
+.settings-section-intro p { max-width: 32ch; margin: 0; color: var(--muted); font-size: var(--text-sm); line-height: 1.5; }
+.settings-picture-editor { display: grid; align-content: start; gap: 16px; }
+.settings-picture-editor > p { margin: 0; line-height: 1.5; }
+.settings-picture-editor .text-muted-foreground { color: var(--muted); }
+.settings-section .password-change-form { max-width: none; margin: 0; border: 0; padding: 0; gap: 16px; }
+.settings-section .password-change-fields { gap: 16px; }
+.settings-section .password-change-field { font-size: var(--text-sm); font-weight: 700; }
+.settings-section .password-change-field input { font-size: var(--text-sm); font-weight: 400; }
+.settings-section .password-change-submit { justify-self: start; padding: 0 18px; }
+.settings-unavailable { margin: 0; color: var(--muted); font-size: var(--text-sm); line-height: 1.5; }
 @media (max-width: 760px) {
-  .settings-page { margin: 24px auto; }
-  .settings-card { padding: 18px; }
+  .settings-header { min-height: 64px; padding: 0 16px; }
+  .settings-page { width: min(100% - 32px, 1040px); padding: 32px 0 56px; }
+  .settings-title h1 { font-size: 26px; }
+  .settings-section { grid-template-columns: minmax(0, 1fr); gap: 22px; padding: 28px 0 32px; }
 }
 
 .sidebar-navigation { display: contents; }
