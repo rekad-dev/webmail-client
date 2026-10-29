@@ -20,6 +20,11 @@ Recipient, subject and body survived minimizing/restoring; desktop and 390px
 checks showed no document horizontal overflow. No real mailbox was accessed.
 Impeccable's detector returned no findings for the two changed files.
 
+Deployed commit `201c435` from a clean Git archive to `webmail.rekad.id`.
+Vercel deployment `dpl_6CGVqAV36xSSTwP3rpjZ61MRgVrJ` is READY; the
+production build passed. Anonymous HTTP checks: home 200, settings 307 to
+home, linked accounts 401. No signed-in production compose check was run.
+
 ## 2026-10-29 sliding sessions and signing in again to a logged-out account (deployed)
 
 Commit `bb729c0` was deployed from a clean Git archive to the existing
