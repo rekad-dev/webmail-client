@@ -3,6 +3,7 @@
 import type { RefObject } from "react";
 import { MailIcon } from "@/app/mail-icons";
 import { Button } from "@/components/ui/button";
+import { SenderAvatar } from "@/components/profile/sender-avatar";
 import { avatarTone, formatDate, senderInitials, senderLabel } from "./format";
 import { MoveToMenu } from "./move-to-menu";
 import type { MailAction, Mailbox, ThreadView } from "./types";
@@ -152,9 +153,7 @@ export function ConversationThread({
                       : onOpenMessage(message.id)}
                     type="button"
                   >
-                    <span className={`message-avatar avatar-tone-${avatarTone(message)}`} aria-hidden="true">
-                      {senderInitials(message)}
-                    </span>
+                    <SenderAvatar address={message.from[0]?.email} initials={senderInitials(message)} tone={avatarTone(message)} />
                     <span className="message-copy">
                       <span className="message-sender">
                         {senderLabel(message)}

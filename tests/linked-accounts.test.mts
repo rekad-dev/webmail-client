@@ -16,7 +16,7 @@ const AUTH = "authjs.session-token";
 const token = (n: number) => `h${n}.k${n}.i${n}.c${n}.t${n}`;
 const handle = (n: number) => accountHandle(`s${n}`);
 
-function setup(options: { valid?: number[]; failRevoke?: boolean } = {}) {
+function setup(options: { valid?: number[]; failRevoke?: boolean; pictures?: Record<string, { email: string | null; version: number } | "error"> } = {}) {
   const valid = new Set(options.valid ?? [1, 2, 3, 4, 5, 6, 101]);
   const revoked: string[] = [];
   const deps: LinkedAccountsDependencies = {
@@ -36,6 +36,11 @@ function setup(options: { valid?: number[]; failRevoke?: boolean } = {}) {
       revoked.push(sessionId);
     },
     getAccountLabel: async (sessionId) => `user-${sessionId.slice(1)}@rekad.id`,
+    getPictureEntry: async (subject) => {
+      const entry = options.pictures?.[subject];
+      if (entry === "error") throw new Error("table missing");
+      return entry ?? null;
+    },
     isTrustedOrigin: (request) => request.headers.get("origin") === "https://webmail.rekad.id",
   };
   return { handlers: createLinkedAccountsHandlers(deps), revoked };
@@ -250,4 +255,15 @@ test("reconciling without labels reuses the stored names", async () => {
     headers: { cookie: `${AUTH}=${token(1)}; ${LINKED_ACCOUNTS_COOKIE_NAME}=${labelRecord(1, "Ana")}~${labelRecord(2, "Budi")}` },
   }));
   assert.deepEqual((await response.json()).accounts.map((account: { label: string }) => account.label), ["Ana", "Budi"]);
+});
+
+test("lists each account's picture address and version, and survives a picture lookup failure", async () => {
+  const { handlers } = setup({ pictures: { "subject-1": { email: "user-1@rekad.id", version: 42 }, "subject-2": "error" } });
+  const response = await handlers.GET(request("/api/account/linked", 1, [1, 2]));
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.deepEqual(body.accounts.map((account: Record<string, unknown>) => [account.handle, account.pictureAddress, account.pictureVersion]), [
+    [handle(1), "user-1@rekad.id", 42],
+    [handle(2), undefined, undefined],
+  ]);
 });

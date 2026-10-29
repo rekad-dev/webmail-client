@@ -5,6 +5,7 @@ import { MailIcon } from "@/app/mail-icons";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { MessageActionsMenu } from "./message-actions-menu";
+import { SenderAvatar } from "@/components/profile/sender-avatar";
 import { addressLabel, avatarTone, formatDetailDate, senderInitials, senderLabel } from "./format";
 import type { EmailDetail, MailAction, Mailbox } from "./types";
 
@@ -64,9 +65,7 @@ export function MessageSenderRow({
   return (
     <Collapsible asChild>
       <div className="message-detail-sender-row">
-        <span className={`message-avatar avatar-tone-${avatarTone(detail)}`} aria-hidden="true">
-          {senderInitials(detail)}
-        </span>
+        <SenderAvatar address={detail.from[0]?.email} initials={senderInitials(detail)} tone={avatarTone(detail)} />
         <div className="message-detail-sender-copy">
           <div className="message-detail-sender-line">
             <strong dir="auto">{senderLabel(detail)}</strong>

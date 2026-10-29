@@ -17,6 +17,8 @@ interface LinkedAccount {
   label: string;
   active: boolean;
   lapsed: boolean;
+  pictureAddress: string | null;
+  pictureVersion: number | null;
 }
 
 const JSON_HEADERS = { accept: "application/json", "content-type": "application/json" };
@@ -70,7 +72,14 @@ export function AccountMenu({
       setAccounts(
         list.flatMap((item): LinkedAccount[] =>
           item && typeof item.handle === "string" && typeof item.label === "string"
-            ? [{ handle: item.handle, label: item.label, active: item.active === true, lapsed: item.lapsed === true }]
+            ? [{
+              handle: item.handle,
+              label: item.label,
+              active: item.active === true,
+              lapsed: item.lapsed === true,
+              pictureAddress: typeof item.pictureAddress === "string" ? item.pictureAddress : null,
+              pictureVersion: typeof item.pictureVersion === "number" ? item.pictureVersion : null,
+            }]
             : [],
         ),
       );
@@ -176,7 +185,7 @@ export function AccountMenu({
                   </div>
                 ) : (
                   <Button aria-label={`Switch to ${account.label}`} aria-busy={switchingHandle === account.handle || undefined} className="account-switcher-row h-auto justify-start px-2" disabled={pending} onClick={() => void switchTo(account.handle)} variant="ghost">
-                    <ProfileAvatar className="account-switcher-avatar size-10 rounded-md" fallbackClassName="rounded-md" name={account.label} version={null} />
+                    <ProfileAvatar address={account.pictureAddress} className="account-switcher-avatar size-10 rounded-md" fallbackClassName="rounded-md" name={account.label} version={account.pictureVersion} />
                     <span className="account-switcher-details">
                       <strong>{account.label}</strong>
                       {switchingHandle === account.handle ? <span className="account-switcher-opening">Opening…</span> : null}

@@ -13,6 +13,7 @@ import {
   getOAuthSessionSummary,
   revokeOAuthSession,
 } from "./session-store.mts";
+import { getProfilePictureEntry } from "../profile/profile-picture-store.mts";
 import { runJmapOAuthAccountLabel } from "../jmap/client.mts";
 import { getJmapSettings } from "../jmap/settings.mts";
 
@@ -44,6 +45,7 @@ const dependencies: LinkedAccountsDependencies = {
       },
     });
   },
+  getPictureEntry: getProfilePictureEntry,
   isTrustedOrigin: isTrustedAppOrigin,
 };
 

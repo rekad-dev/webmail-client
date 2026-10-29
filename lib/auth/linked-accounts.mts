@@ -97,6 +97,8 @@ export interface LinkedAccountsDependencies {
   getSessionSummary(sessionId: string): Promise<{ subject: string; expiresAt: Date } | null>;
   revokeSession(sessionId: string): Promise<void>;
   getAccountLabel(sessionId: string): Promise<string | null>;
+  /** The address and version of a person's profile picture, when they have one. */
+  getPictureEntry?(subject: string): Promise<{ email: string | null; version: number } | null>;
   isTrustedOrigin(request: Request): boolean;
   now?(): number;
 }
@@ -258,17 +260,21 @@ export function createLinkedAccountsHandlers(deps: LinkedAccountsDependencies) {
       const resolved = await Promise.all(
         list.map(async (entry) => {
           const fresh = withLabels ? await deps.getAccountLabel(entry.sessionId).catch(() => null) : null;
-          return { entry, label: fresh ?? entry.label };
+          // A missing table or database error only means initials are shown instead.
+          const picture = await deps.getPictureEntry?.(entry.subject).catch(() => null) ?? null;
+          return { entry, label: fresh ?? entry.label, picture };
         }),
       );
       for (const { entry, label } of resolved) entry.label = label;
       const cookies = [...linkedCookie(state.entries, state.lapsed)];
       if (state.hadIntent) cookies.push(deleteCookie(ADD_ACCOUNT_INTENT_COOKIE_NAME));
       const accounts = [
-        ...resolved.map(({ entry, label }) => ({
+        ...resolved.map(({ entry, label, picture }) => ({
           handle: entry.handle,
           label: label ?? "Account",
           active: entry.sessionId === state.active?.sessionId,
+          // Only the address and version are listed; the image itself is fetched, and cached, separately.
+          ...(picture?.email ? { pictureAddress: picture.email, pictureVersion: picture.version } : {}),
         })),
         ...state.lapsed.map((account) => ({ handle: account.handle, label: account.label, active: false, lapsed: true })),
       ];

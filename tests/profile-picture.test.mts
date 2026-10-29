@@ -39,7 +39,7 @@ test("rejects other formats, odd sizes, truncated files, and oversized files", (
 });
 
 function makeHandlers(overrides: Partial<Parameters<typeof createProfilePictureHandlers>[0]> = {}) {
-  const saved: Array<{ subject: string; type: string; size: number }> = [];
+  const saved: Array<{ subject: string; type: string; size: number; address: string | null }> = [];
   const deleted: string[] = [];
   const handlers = createProfilePictureHandlers({
     getSessionId: async () => "session-1",
@@ -47,8 +47,13 @@ function makeHandlers(overrides: Partial<Parameters<typeof createProfilePictureH
     isTrustedOrigin: () => true,
     getPicture: async (subject) =>
       subject === "subject-1" ? { type: "image/png", bytes: PNG, updatedAt: new Date(1_700_000_000_000) } : null,
-    savePicture: async (subject, type, bytes) => {
-      saved.push({ subject, type, size: bytes.byteLength });
+    getPictureByAddress: async (address) =>
+      address === "ada@rekad.id" ? { type: "image/png", bytes: PNG, updatedAt: new Date(1_700_000_000_000) } : null,
+    getVersionsByAddress: async (addresses) =>
+      Object.fromEntries(addresses.filter((address) => address === "ada@rekad.id").map((address) => [address, 1_700_000_000_000])),
+    getSessionAddress: async () => "Ada@Rekad.id",
+    savePicture: async (subject, type, bytes, address) => {
+      saved.push({ subject, type, size: bytes.byteLength, address });
       return 1_700_000_000_123;
     },
     deletePicture: async (subject) => {
@@ -89,7 +94,7 @@ test("stores a valid upload under the session's own subject", async () => {
   const response = await handlers.PUT(put(PNG));
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { version: 1_700_000_000_123 });
-  assert.deepEqual(saved, [{ subject: "subject-1", type: "image/png", size: PNG.byteLength }]);
+  assert.deepEqual(saved, [{ subject: "subject-1", type: "image/png", size: PNG.byteLength, address: "ada@rekad.id" }]);
 });
 
 test("rejects bad uploads without storing them", async () => {
@@ -130,4 +135,41 @@ test("crops the centered square of a wide, tall, or square image", async () => {
   assert.deepEqual(centeredSquare(400, 200), { x: 100, y: 0, side: 200 });
   assert.deepEqual(centeredSquare(200, 301), { x: 0, y: 50, side: 200 });
   assert.deepEqual(centeredSquare(256, 256), { x: 0, y: 0, side: 256 });
+});
+
+test("serves a colleague's picture by address, and caches it only at its current version", async () => {
+  const { handlers } = makeHandlers();
+  const plain = await handlers.GET(new Request(`${url}?address=Ada%40Rekad.id`));
+  assert.equal(plain.status, 200);
+  assert.equal(plain.headers.get("cache-control"), "private, no-cache");
+  assert.equal(plain.headers.get("vary"), "Cookie");
+  const current = await handlers.GET(new Request(`${url}?address=ada%40rekad.id&v=1700000000000`));
+  assert.match(current.headers.get("cache-control") ?? "", /^private, max-age=\d+/);
+  const stale = await handlers.GET(new Request(`${url}?address=ada%40rekad.id&v=1`));
+  assert.equal(stale.headers.get("cache-control"), "private, no-cache");
+});
+
+test("does not look up a colleague's picture without a session or with a malformed address", async () => {
+  assert.equal((await makeHandlers({ getSessionId: async () => null }).handlers.GET(new Request(`${url}?address=ada%40rekad.id`))).status, 401);
+  const { handlers } = makeHandlers();
+  assert.equal((await handlers.GET(new Request(`${url}?address=nobody%40rekad.id`))).status, 404);
+  assert.equal((await handlers.GET(new Request(`${url}?address=not-an-address`))).status, 404);
+  assert.equal((await handlers.GET(new Request(`${url}?address=%3Cscript%3E%40x.id`))).status, 404);
+});
+
+test("lists which addresses have a picture, without image bytes, and bounds the lookup", async () => {
+  const { handlers } = makeHandlers();
+  const response = await handlers.VERSIONS(new Request("https://app.example.test/api/profile/pictures?address=ada%40rekad.id&address=bob%40rekad.id&address=junk"));
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.deepEqual(await response.json(), { pictures: { "ada@rekad.id": 1_700_000_000_000 } });
+  const many = Array.from({ length: 51 }, (_, index) => `address=u${index}%40rekad.id`).join("&");
+  assert.equal((await handlers.VERSIONS(new Request(`https://app.example.test/api/profile/pictures?${many}`))).status, 400);
+  assert.equal((await makeHandlers({ getSessionId: async () => null }).handlers.VERSIONS(new Request("https://app.example.test/api/profile/pictures?address=ada%40rekad.id"))).status, 401);
+});
+
+test("saves a picture without an address when the sign-in carries none", async () => {
+  const { handlers, saved } = makeHandlers({ getSessionAddress: async () => null });
+  assert.equal((await handlers.PUT(put(PNG))).status, 200);
+  assert.equal(saved[0]?.address, null);
 });

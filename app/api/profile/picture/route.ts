@@ -1,24 +1,10 @@
-import { getRequestOAuthSessionId } from "@/lib/auth/request-session.mts";
-import { getOAuthSessionSummary } from "@/lib/auth/session-store.mts";
-import { isTrustedAppOrigin } from "@/lib/auth/trusted-origin.mts";
 import { createProfilePictureHandlers } from "@/lib/profile/profile-picture-route.mts";
-import {
-  deleteProfilePicture,
-  getProfilePicture,
-  saveProfilePicture,
-} from "@/lib/profile/profile-picture-store.mts";
+import { profilePictureDependencies } from "@/lib/profile/profile-picture-deps";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const handlers = createProfilePictureHandlers({
-  getSessionId: getRequestOAuthSessionId,
-  getSessionSummary: getOAuthSessionSummary,
-  isTrustedOrigin: isTrustedAppOrigin,
-  getPicture: getProfilePicture,
-  savePicture: saveProfilePicture,
-  deletePicture: deleteProfilePicture,
-});
+const handlers = createProfilePictureHandlers(profilePictureDependencies);
 
 export const GET = handlers.GET;
 export const PUT = handlers.PUT;

@@ -11,12 +11,31 @@ const JSON_HEADERS = {
   Vary: "Cookie",
 };
 
+export const MAX_PICTURE_LOOKUP_ADDRESSES = 50;
+const ADDRESS_PATTERN = /^[^\s@<>"'`,;()\\]+@[^\s@<>"'`,;()\\]+\.[^\s@<>"'`,;()\\]+$/;
+// A picture URL names the version it was found at, so a changed picture gets a new URL.
+const VERSIONED_CACHE_CONTROL = "private, max-age=86400, stale-while-revalidate=604800";
+const UNVERSIONED_CACHE_CONTROL = "private, no-cache";
+
+/** The lowercase form every stored and requested address uses, or null if it is not a plain address. */
+export function normalizePictureAddress(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const address = value.trim().toLowerCase();
+  return address.length >= 3 && address.length <= 320 && ADDRESS_PATTERN.test(address) ? address : null;
+}
+
+type StoredPicture = { type: ProfilePictureType; bytes: Uint8Array; updatedAt: Date };
+
 export interface ProfilePictureRouteDependencies {
   getSessionId(request: Request): Promise<string | null>;
   getSessionSummary(sessionId: string): Promise<{ subject: string } | null>;
   isTrustedOrigin(request: Request): boolean;
-  getPicture(subject: string): Promise<{ type: ProfilePictureType; bytes: Uint8Array; updatedAt: Date } | null>;
-  savePicture(subject: string, type: ProfilePictureType, bytes: Uint8Array): Promise<number>;
+  getPicture(subject: string): Promise<StoredPicture | null>;
+  getPictureByAddress(address: string): Promise<StoredPicture | null>;
+  getVersionsByAddress(addresses: string[]): Promise<Record<string, number>>;
+  /** The signed-in person's own address, from their verified sign-in, or null if unknown. */
+  getSessionAddress(request: Request, subject: string): Promise<string | null>;
+  savePicture(subject: string, type: ProfilePictureType, bytes: Uint8Array, address: string | null): Promise<number>;
   deletePicture(subject: string): Promise<void>;
 }
 
@@ -72,16 +91,26 @@ export function createProfilePictureHandlers(dependencies: ProfilePictureRouteDe
     }
   }
 
+  /** Serves the signed-in person's picture, or a colleague's when `address` names one. */
   async function GET(request: Request): Promise<Response> {
     const auth = await authenticate(request);
     if (auth instanceof Response) return auth;
+    const params = new URL(request.url).searchParams;
+    const requested = params.get("address");
+    const address = requested === null ? null : normalizePictureAddress(requested);
+    if (requested !== null && !address) return json({ error: "no_picture" }, 404);
+    // Only a version that matches the stored picture may be cached for long.
+    const versioned = /^\d{1,16}$/.test(params.get("v") ?? "");
     try {
-      const picture = await dependencies.getPicture(auth.subject);
+      const picture = address
+        ? await dependencies.getPictureByAddress(address)
+        : await dependencies.getPicture(auth.subject);
       if (!picture) return json({ error: "no_picture" }, 404);
       const etag = `"${picture.updatedAt.getTime()}"`;
+      const cacheable = versioned && params.get("v") === String(picture.updatedAt.getTime());
       const headers = new Headers({
         "Content-Type": picture.type,
-        "Cache-Control": "private, no-cache",
+        "Cache-Control": cacheable ? VERSIONED_CACHE_CONTROL : UNVERSIONED_CACHE_CONTROL,
         ETag: etag,
         "Content-Security-Policy": "default-src 'none'; sandbox",
         "Cross-Origin-Resource-Policy": "same-origin",
@@ -114,7 +143,8 @@ export function createProfilePictureHandlers(dependencies: ProfilePictureRouteDe
     const picture = validateProfilePicture(bytes);
     if (!picture) return json({ error: "invalid_picture" }, 400);
     try {
-      const version = await dependencies.savePicture(auth.subject, picture.type, picture.bytes);
+      const address = normalizePictureAddress(await dependencies.getSessionAddress(request, auth.subject));
+      const version = await dependencies.savePicture(auth.subject, picture.type, picture.bytes, address);
       return json({ version }, 200);
     } catch {
       return json({ error: "profile_unavailable" }, 503);
@@ -133,5 +163,20 @@ export function createProfilePictureHandlers(dependencies: ProfilePictureRouteDe
     }
   }
 
-  return { GET, PUT, DELETE };
+  /** Tells which of the given addresses have a picture. It never returns image bytes. */
+  async function VERSIONS(request: Request): Promise<Response> {
+    const auth = await authenticate(request);
+    if (auth instanceof Response) return auth;
+    const requested = new URL(request.url).searchParams.getAll("address");
+    if (requested.length > MAX_PICTURE_LOOKUP_ADDRESSES) return json({ error: "too_many_addresses" }, 400);
+    const addresses = [...new Set(requested.flatMap((value) => normalizePictureAddress(value) ?? []))];
+    try {
+      const pictures = await dependencies.getVersionsByAddress(addresses);
+      return json({ pictures }, 200);
+    } catch {
+      return json({ error: "profile_unavailable" }, 503);
+    }
+  }
+
+  return { GET, PUT, DELETE, VERSIONS };
 }
