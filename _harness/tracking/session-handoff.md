@@ -5,7 +5,18 @@ scope: session-handoff
 
 # Session Handoff
 
-## 2026-10-29 sliding sessions and signing in again to a logged-out account (local, not deployed)
+## 2026-10-29 sliding sessions and signing in again to a logged-out account (deployed)
+
+Commit `bb729c0` was deployed from a clean Git archive to the existing
+`rekad/webmail-client` project. Vercel deployment
+`dpl_94jGjfRHJHhBBpsQdSGDkPEXa9nu` is READY and aliased to
+`https://webmail.rekad.id` (deployment URL:
+`https://webmail-client-nmyx0i1sw-rekad.vercel.app`). All 282 tests and
+typecheck passed again; the production build passed on Vercel. Anonymous HTTP
+checks: `/` 200, `/settings` 307 to `/`, `/api/auth/status` 401, and
+`/api/account/linked` 401. No signed-in browser checks or mailbox operations
+were performed. Real login prefill and rolling renewal remain unverified.
+Untracked `reference.png` was excluded from the release.
 
 Sessions now idle out after 7 days of non-use; `getAuthenticatedOAuthSession`
 (any mailbox call, and the 2-minute `/api/auth/status` poll) pushes `expires_at`
