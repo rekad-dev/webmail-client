@@ -153,9 +153,8 @@ export function AccountMenu({
         </div>
         <div className="account-switcher-section">
           <p className="account-switcher-heading">Switch account</p>
-          {/* The list is usable at once; a background refresh only adds a quiet hint. */}
+          {/* Keep the existing list available while accounts refresh. */}
           {loadingAccounts && accounts.length === 0 ? <p className="account-switcher-status" role="status">Loading accounts…</p> : null}
-          {loadingAccounts && accounts.length > 0 ? <p className="account-switcher-updating" aria-live="polite">Updating…</p> : null}
           {accountsError ? <p className="account-switcher-status" role="status">Accounts could not be loaded. Open the menu again to retry.</p> : null}
           <ul aria-label="Signed-in accounts" aria-busy={loadingAccounts} className="account-switcher-list">
             {accounts.map((account) => (
