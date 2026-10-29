@@ -989,7 +989,8 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
 }
 .settings-link { display: flex; text-decoration: none; }
 .sidebar-compose svg { flex: none; }
-.conversation-row-actions { display: flex; align-items: center; justify-content: flex-end; }
+.conversation-row-actions { position: static; display: flex; width: auto; gap: 0; align-items: center; justify-content: flex-end; border-radius: 0; background: transparent; padding: 0; box-shadow: none; }
+.conversation-row-actions button { width: 44px; height: 44px; padding: 0; }
 .conversation-quick-actions { display: none; }
 .conversation-pane .message-row .message-preview { padding-right: 20px; }
 .conversation-pane .message-row .message-date { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -997,7 +998,7 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
 /* The full-width inbox swaps the date for actions on pointer hover or focus. */
 @media (min-width: 761px) and (hover: hover) {
   .mail-workspace:not(.has-open-message) .has-row-actions .conversation-row-actions {
-    position: absolute; right: 6px; z-index: 1; visibility: hidden;
+    position: absolute; top: 50%; right: 6px; z-index: 1; transform: translateY(-50%); visibility: hidden;
   }
   .mail-workspace:not(.has-open-message) .has-row-actions:hover .conversation-row-actions,
   .mail-workspace:not(.has-open-message) .has-row-actions:focus-within .conversation-row-actions { visibility: visible; }
