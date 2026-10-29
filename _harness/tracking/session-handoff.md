@@ -5,6 +5,23 @@ scope: session-handoff
 
 # Session Handoff
 
+## 2026-10-30 composer link control
+
+The rich-text link editor was a nested form inside the compose form; applying
+a link could bubble a submit event to Send. It is now a labeled group with
+button actions and scoped Enter/Escape handling. Applying a URL with an empty
+selection inserts visible linked URL text; selected text and existing links
+are still updated in place. Invalid schemes remain rejected, errors are
+associated with the input, and controls respect disabled state.
+
+Local sample browser checks confirmed selected-text linking, changing an
+existing URL, removal while retaining text, empty-cursor insertion, mailto,
+invalid-scheme rejection, Enter to apply, Escape and keyboard Cancel. The
+compose form received zero submit events throughout. Preview HTML retained
+the anchor. A direct content-preparation check confirmed the link survives in
+outgoing HTML and plain text. Typecheck and 282 tests passed; the design
+detector returned no findings. No real message was sent or mailbox accessed.
+
 ## 2026-10-30 compose expanded/minimized controls
 
 Compose now has two window states: expanded on first open, and minimized.

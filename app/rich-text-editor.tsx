@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { OptionSelect } from "@/components/mail/option-select";
@@ -83,9 +83,8 @@ export function RichTextEditor({
     setLinkEditorOpen(true);
   }
 
-  function saveLink(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!editor) return;
+  function saveLink() {
+    if (!editor || disabled) return;
     try {
       const parsed = new URL(linkHref.trim());
       if (
@@ -93,7 +92,15 @@ export function RichTextEditor({
         parsed.username || parsed.password ||
         (parsed.protocol === "mailto:" && !parsed.pathname)
       ) throw new Error("invalid_link");
-      editor.chain().focus().extendMarkRange("link").setLink({ href: parsed.href }).run();
+      if (editor.state.selection.empty && !editor.isActive("link")) {
+        editor.chain().focus().insertContent({
+          type: "text",
+          text: parsed.href,
+          marks: [{ type: "link", attrs: { href: parsed.href } }],
+        }).run();
+      } else {
+        editor.chain().focus().extendMarkRange("link").setLink({ href: parsed.href }).run();
+      }
       setLinkEditorOpen(false);
     } catch {
       setLinkError("Enter a complete http, https, or mailto link.");
@@ -164,25 +171,41 @@ export function RichTextEditor({
         {toolbarButton("redo", "Redo", null, () => editor.chain().focus().redo().run())}
       </div>
       {linkEditorOpen ? (
-        <form className="rich-text-link-form" onSubmit={saveLink}>
+        <div className="rich-text-link-form" role="group" aria-label="Edit link"
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && event.target instanceof HTMLInputElement) {
+              // Applying a link must never submit the enclosing message form.
+              event.preventDefault();
+              event.stopPropagation();
+              saveLink();
+            } else if (event.key === "Escape") {
+              event.preventDefault();
+              event.stopPropagation();
+              setLinkEditorOpen(false);
+              editor.commands.focus();
+            }
+          }}>
           <label htmlFor={`${id}-link`}>Link address</label>
           <Input
             autoComplete="url"
             autoFocus
+            disabled={disabled}
+            aria-invalid={Boolean(linkError)}
+            aria-describedby={linkError ? `${id}-link-error` : undefined}
             id={`${id}-link`}
             onChange={(event) => setLinkHref(event.target.value)}
             placeholder="https://example.com"
             type="text"
             value={linkHref}
           />
-          <Button size="sm" type="submit">Apply link</Button>
-          <Button onClick={() => {
+          <Button disabled={disabled} onClick={saveLink} size="sm">Apply link</Button>
+          <Button disabled={disabled} onClick={() => {
             editor.chain().focus().extendMarkRange("link").unsetLink().run();
             setLinkEditorOpen(false);
           }} size="sm" variant="outline">Remove link</Button>
-          <Button onClick={() => setLinkEditorOpen(false)} size="sm" variant="outline">Cancel</Button>
-          {linkError ? <span role="alert">{linkError}</span> : null}
-        </form>
+          <Button disabled={disabled} onClick={() => { setLinkEditorOpen(false); editor.commands.focus(); }} size="sm" variant="outline">Cancel</Button>
+          {linkError ? <span id={`${id}-link-error`} role="alert">{linkError}</span> : null}
+        </div>
       ) : null}
       <EditorContent className="rich-text-content" editor={editor} />
     </div>
