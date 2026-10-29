@@ -1,31 +1,23 @@
-import Image from "next/image";
 import { PasswordChangeForm } from "@/app/password-change-form";
 import { SettingsProfilePicture } from "@/components/profile/settings-profile-picture";
-import { MailIcon } from "@/app/mail-icons";
 
-export function SettingsView({ accountName, pictureVersion, pictureAvailable }: {
+export function SettingsView({ accountName, pictureVersion, pictureAvailable, onPictureChange }: {
   accountName: string;
   pictureVersion: number | null;
   pictureAvailable: boolean;
+  onPictureChange?(version: number | null): void;
 }) {
   return (
-    <main className="settings-shell">
-      <header className="settings-header">
-        <a className="settings-brand" href="/" aria-label="rekad Mail home">
-          <Image src="/logo.png" width={38} height={39} alt="" />
-          <span>rekad</span><strong>Mail</strong>
-        </a>
-        <a className="settings-back" href="/"><MailIcon name="chevron-left" size={16} />Back to mail</a>
-      </header>
+    <section className="settings-card" aria-label="Account settings">
       <div className="settings-page">
-        <div className="settings-title"><h1>Settings</h1><p>Manage your account and security.</p></div>
+        <div className="settings-title"><p>Manage your account and security.</p></div>
         <section className="settings-section" id="profile" aria-labelledby="profile-title">
           <div className="settings-section-intro">
             <h2 id="profile-title">Profile picture</h2>
             <p>Choose the picture shown on your account in rekad Mail.</p>
           </div>
           {pictureAvailable ? (
-            <SettingsProfilePicture name={accountName} initialVersion={pictureVersion} />
+            <SettingsProfilePicture name={accountName} initialVersion={pictureVersion} onChange={onPictureChange} />
           ) : (
             <p className="settings-unavailable" role="status">Your profile picture is temporarily unavailable. Refresh to try again.</p>
           )}
@@ -38,6 +30,6 @@ export function SettingsView({ accountName, pictureVersion, pictureAvailable }: 
           <PasswordChangeForm />
         </section>
       </div>
-    </main>
+    </section>
   );
 }

@@ -1162,3 +1162,15 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
 .account-switcher-add { margin-top: 3px; }
 .account-switcher-sign-out-all { width: 100%; min-height: 44px; margin-top: 8px; background: var(--violet-light); color: var(--ink); font-size: var(--text-sm); font-weight: 600; }
 .account-switcher .sign-out-error { margin: 8px 10px; }
+
+/* Keep the selection checkbox aligned with the message checkboxes. */
+.conversation-pane .message-toolbar { padding-left: 6px; padding-right: 6px; }
+.account-switcher button:not(:disabled) { cursor: pointer; }
+.settings-card { min-height: 0; flex: 1 1 auto; overflow: auto; margin: 0 20px 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+.settings-card .settings-page { width: min(100% - 48px, 1040px); padding: 24px 0 48px; }
+.settings-card .settings-title { padding-bottom: 18px; }
+.settings-card .settings-title p { margin: 0; }
+@media (max-width: 760px) {
+  .settings-card { margin: 0 12px 16px; }
+  .settings-card .settings-page { width: min(100% - 32px, 1040px); padding: 20px 0 32px; }
+}

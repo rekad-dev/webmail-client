@@ -11,9 +11,11 @@ export default async function HomePage() {
 
   // A missing table or a database error must not stop the inbox from loading.
   let profilePictureVersion: number | null = null;
+  let profilePictureAvailable = false;
   if (isSignedIn && typeof session?.user?.id === "string") {
     try {
       profilePictureVersion = await getProfilePictureVersion(session.user.id);
+      profilePictureAvailable = true;
     } catch {
       profilePictureVersion = null;
     }
@@ -32,6 +34,7 @@ export default async function HomePage() {
           accountName={session?.user?.name}
           accountEmail={session?.user?.email}
           profilePictureVersion={profilePictureVersion}
+          profilePictureAvailable={profilePictureAvailable}
         />
       </>
     ) : (

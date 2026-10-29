@@ -16,6 +16,7 @@ import { ConversationThread } from "@/components/mail/conversation-thread";
 import { MailboxNav } from "@/components/mail/mailbox-nav";
 import { SharedAccountNav } from "@/components/mail/shared-account-nav";
 import { MailSearch, type SearchFilters } from "@/components/mail/mail-search";
+import { SettingsView } from "./settings/settings-view";
 import { useSessionGuard } from "@/components/mail/use-session-guard";
 import {
   applyOfflineSyncPage,
@@ -444,6 +445,8 @@ export function InboxClient({
   accountName,
   accountEmail,
   profilePictureVersion = null,
+  profilePictureAvailable = false,
+  initialSettings = false,
   localPreview = false,
   initialListing,
   initialThreads,
@@ -452,6 +455,8 @@ export function InboxClient({
   accountName?: string | null;
   accountEmail?: string | null;
   profilePictureVersion?: number | null;
+  profilePictureAvailable?: boolean;
+  initialSettings?: boolean;
   localPreview?: boolean;
   initialListing?: MailListing;
   initialThreads?: Record<string, ThreadView>;
@@ -459,7 +464,8 @@ export function InboxClient({
 }) {
   const previewId = useId();
   const [actionSessionEnded, setActionSessionEnded] = useState(false);
-  const pictureVersion = profilePictureVersion;
+  const [pictureVersion, setPictureVersion] = useState(profilePictureVersion);
+  const [showSettings, setShowSettings] = useState(initialSettings);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [favorites, setFavorites] = useState(false);
   const [sharedAccounts, setSharedAccounts] = useState<SharedAccount[]>([]);
@@ -529,6 +535,24 @@ export function InboxClient({
   const restoreMessageFocus = useRef(false);
   const lastOpenedThreadIdRef = useRef<string | null>(null);
   const restoreThreadFocus = useRef(false);
+
+  useEffect(() => {
+    const onHistory = () => setShowSettings(window.location.pathname === "/settings");
+    window.addEventListener("popstate", onHistory);
+    return () => window.removeEventListener("popstate", onHistory);
+  }, []);
+
+  function showMail() {
+    if (!showSettings) return;
+    setShowSettings(false);
+    window.history.pushState(null, "", localPreview ? "/local-preview" : "/");
+  }
+
+  function openSettings() {
+    if (showSettings) return;
+    setShowSettings(true);
+    window.history.pushState(null, "", "/settings");
+  }
 
   useEffect(() => {
     if (localPreview) return;
@@ -1087,7 +1111,11 @@ export function InboxClient({
   }
 
   function selectSharedAccount(nextAccountId: string | null) {
-    if (localPreview || nextAccountId === sharedAccountId) return;
+    if (localPreview) return;
+    if (nextAccountId === sharedAccountId) {
+      if (showSettings) { setOpenEmailId(null); setOpenThreadId(null); setEmailDetail(null); setThreadView(null); }
+      return;
+    }
     sharedReadOnlyRef.current = sharedAccounts.find((account) => account.id === nextAccountId)?.isReadOnly === true;
     setSharedAccountId(nextAccountId);
     setFavorites(false);
@@ -1110,7 +1138,11 @@ export function InboxClient({
   }
 
   function selectMailbox(nextMailboxId: string) {
-    if (localPreview || (nextMailboxId === mailboxId && !favorites)) return;
+    if (localPreview) return;
+    if (nextMailboxId === mailboxId && !favorites) {
+      if (showSettings) { setOpenEmailId(null); setOpenThreadId(null); setEmailDetail(null); setThreadView(null); }
+      return;
+    }
     setFavorites(false);
     setManualRefreshTarget(null);
     restoreMessageFocus.current = false;
@@ -1126,7 +1158,11 @@ export function InboxClient({
   }
 
   function selectFavorites() {
-    if (localPreview || favorites) return;
+    if (localPreview) return;
+    if (favorites) {
+      if (showSettings) { setOpenEmailId(null); setOpenThreadId(null); setEmailDetail(null); setThreadView(null); }
+      return;
+    }
     setFavorites(true);
     setListing(null);
     setPosition(0);
@@ -1552,9 +1588,9 @@ export function InboxClient({
           </a>
         <MailSearch
           inputRef={searchInputRef}
-          onChange={(value) => { setSearchInput(value); if (value.trim()) setFavorites(false); }}
+          onChange={(value) => { setSearchInput(value); if (value.trim()) { showMail(); setFavorites(false); } }}
           filters={searchFilters}
-          onFiltersChange={(filters) => { setPosition(0); setFavorites(false); setSearchFilters(filters); }}
+          onFiltersChange={(filters) => { showMail(); setPosition(0); setFavorites(false); setSearchFilters(filters); }}
           messages={listing?.messages ?? []}
           loading={isLoading || searchInput.trim() !== searchText}
           error={Boolean(error)}
@@ -1564,6 +1600,7 @@ export function InboxClient({
           canOpen={(message) => !localPreview || Boolean(initialDetails?.[message.id])}
           onOpen={(message) => {
             if (localPreview && !initialDetails?.[message.id]) return;
+            showMail();
             if (message.isDraft) openSavedDraft(message.id, undefined, message.subject);
             else { openThread(message.threadId); openMessage(message.id); }
           }}
@@ -1600,22 +1637,22 @@ export function InboxClient({
         <div className="sidebar-navigation">
         <SharedAccountNav
           accounts={sharedAccounts}
-          onSelect={selectSharedAccount}
+          onSelect={(id) => { showMail(); selectSharedAccount(id); }}
           selectedAccountId={sharedAccountId}
         />
         <MailboxNav
           isLoading={isLoading}
           localPreview={localPreview}
           mailboxes={mailboxes}
-          onSelect={selectMailbox}
-          selectedMailboxId={favorites ? undefined : mailboxId ?? undefined}
+          onSelect={(id) => { showMail(); selectMailbox(id); }}
+          selectedMailboxId={favorites || showSettings ? undefined : mailboxId ?? undefined}
         />
 
-        <Button aria-pressed={favorites} className={`mailbox-link${favorites ? " is-selected" : ""}`} disabled={localPreview} onClick={selectFavorites} variant="ghost">
+        <Button aria-pressed={favorites && !showSettings} className={`mailbox-link${favorites && !showSettings ? " is-selected" : ""}`} disabled={localPreview} onClick={() => { showMail(); selectFavorites(); }} variant="ghost">
           <MailIcon name="star" /><span className="mailbox-name">Favorites</span>
         </Button>
-        <Button asChild className="settings-link mailbox-link" variant="ghost">
-          <a href="/settings"><MailIcon name="settings" /><span className="mailbox-name">Settings</span></a>
+        <Button asChild className={`settings-link mailbox-link${showSettings ? " is-selected" : ""}`} variant="ghost">
+          <a aria-current={showSettings ? "page" : undefined} href="/settings" onClick={(event) => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) { event.preventDefault(); openSettings(); } }}><MailIcon name="settings" /><span className="mailbox-name">Settings</span></a>
         </Button>
         </div>
         <div className="sidebar-rail">
@@ -1634,15 +1671,8 @@ export function InboxClient({
       <section className="mail-content" aria-labelledby="mail-title">
         <header className="mail-header">
           <div className="mail-header-navigation">
-            {openEmailId || openThreadId ? (
-              <Button aria-label={openEmailId ? "Back to conversation" : "Back to messages"}
-                className="page-button" disabled={isLoading || actionPending}
-                onClick={() => openEmailId ? closeMessage() : closeThread()} size="icon" variant="ghost">
-                <MailIcon name="chevron-left" size={17} />
-              </Button>
-            ) : null}
-            <div className="mail-breadcrumb"><span>rekad Mail</span><MailIcon name="chevron-right" size={14} /><span className="reference-heading-icon"><img src="/figma-mail/mail.svg" alt="" /></span>
-              <h1 id="mail-title" ref={mailTitleRef} tabIndex={-1}>Mails</h1>
+            <div className="mail-breadcrumb"><span className="reference-heading-icon">{showSettings ? <MailIcon name="settings" size={16} /> : <img src="/figma-mail/mail.svg" alt="" />}</span>
+              <h1 id="mail-title" ref={mailTitleRef} tabIndex={-1}>{showSettings ? "Settings" : "Mails"}</h1>
             </div>
           </div>
           <span className="visually-hidden" role="status" aria-live="polite" aria-atomic="true">
@@ -1657,9 +1687,12 @@ export function InboxClient({
           </p>
         ) : null}
 
+        {showSettings ? (
+          <SettingsView accountName={displayAccount} pictureVersion={pictureVersion} pictureAvailable={profilePictureAvailable} onPictureChange={setPictureVersion} />
+        ) : <>
         <div className={`mail-workspace${openThreadId || openEmailId ? " has-open-message" : ""}`}>
         <section className="conversation-pane" aria-label="Message list">
-          <h2 className="conversation-pane-title">{searchText || searchFilters.hasAttachment || searchFilters.recent || searchFilters.fromMe ? "Search results" : favorites ? "Favorites" : selectedMailbox?.name ?? "Inbox"}</h2>
+          <h2 className="visually-hidden">{searchText || searchFilters.hasAttachment || searchFilters.recent || searchFilters.fromMe ? "Search results" : favorites ? "Favorites" : selectedMailbox?.name ?? "Inbox"}</h2>
         {listing ? (
           <BulkToolbar
             actionPending={actionPending}
@@ -1817,6 +1850,7 @@ export function InboxClient({
         {!openEmailId && !openThreadId && listing && error ? (
           <p className="stale-list-note">Showing the last successfully loaded page.</p>
         ) : null}
+        </>}
       </section>
       {isComposeOpen ? (
         <ComposeDialog

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getAuthSession } from "@/auth";
 import { getProfilePictureVersion } from "@/lib/profile/profile-picture-store.mts";
 import { AccountRequestScope } from "@/components/mail/account-request-scope";
-import { SettingsView } from "./settings-view";
+import { InboxClient } from "../inbox-client";
 
 export default async function SettingsPage() {
   const session = await getAuthSession();
@@ -23,7 +23,7 @@ export default async function SettingsPage() {
   return (
     <>
       {session.accountHandle ? <AccountRequestScope handle={session.accountHandle} /> : null}
-      <SettingsView accountName={accountName} pictureVersion={pictureVersion} pictureAvailable={pictureAvailable} />
+      <InboxClient accountName={accountName} accountEmail={session.user?.email} profilePictureVersion={pictureVersion} profilePictureAvailable={pictureAvailable} initialSettings />
     </>
   );
 }
