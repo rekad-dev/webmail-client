@@ -206,3 +206,48 @@ test("a tab opened for another account cannot add or sign out the active one", a
   assert.equal((await handlers.POST_add(stale("/api/account/add", {}))).status, 409);
   assert.deepEqual(revoked, []);
 });
+
+const labelRecord = (n: number, label: string) => `${token(n)}|${handle(n)}|${Buffer.from(label).toString("base64url")}`;
+const recordRequest = (path: string, active: number, records: string[], body?: unknown) => new Request(`https://webmail.rekad.id${path}`, {
+  method: body === undefined ? "GET" : "POST",
+  headers: {
+    cookie: `${AUTH}=${token(active)}; ${LINKED_ACCOUNTS_COOKIE_NAME}=${records.join("~")}`,
+    "content-type": "application/json",
+    origin: "https://webmail.rekad.id",
+  },
+  ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+});
+
+test("an expired linked account stays listed as logged out", async () => {
+  const { handlers } = setup({ valid: [1] });
+  const records = [labelRecord(1, "user-1@rekad.id"), labelRecord(2, "user-2@rekad.id")];
+  const response = await handlers.GET(recordRequest("/api/account/linked", 1, records));
+  const body = await response.json();
+  assert.deepEqual(body.accounts, [
+    { handle: handle(1), label: "user-1@rekad.id", active: true },
+    { handle: handle(2), label: "user-2@rekad.id", active: false, lapsed: true },
+  ]);
+  assert.match(cookieNamed(response, LINKED_ACCOUNTS_COOKIE_NAME) ?? "", new RegExp(token(2).replace(/\./g, "\\.")));
+});
+
+test("a logged-out account cannot be switched to", async () => {
+  const { handlers } = setup({ valid: [1] });
+  const response = await handlers.POST_switch(recordRequest("/api/account/switch", 1, [labelRecord(1, "a"), labelRecord(2, "b")], { handle: handle(2) }));
+  assert.equal(response.status, 409);
+  assert.equal(cookieNamed(response, AUTH), undefined);
+});
+
+test("adding an account clears logged-out marks to make room", async () => {
+  const { handlers } = setup({ valid: [1, 2] });
+  const response = await handlers.POST_add(recordRequest("/api/account/add", 1, [labelRecord(1, "a"), labelRecord(3, "c")], {}));
+  assert.equal(response.status, 200);
+  assert.doesNotMatch(cookieNamed(response, LINKED_ACCOUNTS_COOKIE_NAME) ?? "", new RegExp(token(3).replace(/\./g, "\\.")));
+});
+
+test("reconciling without labels reuses the stored names", async () => {
+  const { handlers } = setup({ valid: [1, 2] });
+  const response = await handlers.GET(new Request("https://webmail.rekad.id/api/account/linked?labels=0", {
+    headers: { cookie: `${AUTH}=${token(1)}; ${LINKED_ACCOUNTS_COOKIE_NAME}=${labelRecord(1, "Ana")}~${labelRecord(2, "Budi")}` },
+  }));
+  assert.deepEqual((await response.json()).accounts.map((account: { label: string }) => account.label), ["Ana", "Budi"]);
+});

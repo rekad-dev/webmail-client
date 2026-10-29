@@ -11,6 +11,15 @@ export const ADD_ACCOUNT_INTENT_COOKIE_NAME = `${prefix}rekad.add-account`;
 
 // An Auth.js session token is a five-part compact JWE; entries are joined with "~".
 const SESSION_TOKEN = /^[A-Za-z0-9_-]{1,1200}(\.[A-Za-z0-9_-]{0,1200}){4}$/;
+const HANDLE = /^[0-9a-f]{16}$/;
+const LABEL_MAX_LENGTH = 200;
+
+/** A linked session as stored in the browser: its token plus the handle and label it had while valid. */
+export interface LinkedRecord {
+  token: string;
+  handle: string | null;
+  label: string | null;
+}
 
 export function readCookie(request: Request, name: string): string | null {
   const header = request.headers.get("cookie");
@@ -23,19 +32,42 @@ export function readCookie(request: Request, name: string): string | null {
   return null;
 }
 
-export function parseLinkedTokens(value: string | null): string[] {
-  if (!value) return [];
-  const tokens: string[] = [];
-  for (const token of value.split("~")) {
-    if (!SESSION_TOKEN.test(token) || tokens.includes(token)) continue;
-    tokens.push(token);
-    if (tokens.length === MAX_LINKED_ACCOUNTS) break;
-  }
-  return tokens;
+function decodeLabel(value: string): string | null {
+  if (!/^[A-Za-z0-9_-]{1,400}$/.test(value)) return null;
+  const label = Buffer.from(value, "base64url").toString("utf8").slice(0, LABEL_MAX_LENGTH);
+  return label || null;
 }
 
-export function serializeLinkedTokens(tokens: string[]): string {
-  return tokens.slice(0, MAX_LINKED_ACCOUNTS).join("~");
+/** Each entry is `token|handle|base64url(label)`; the handle and label may be empty for older cookies. */
+export function parseLinkedRecords(value: string | null): LinkedRecord[] {
+  if (!value) return [];
+  const records: LinkedRecord[] = [];
+  for (const part of value.split("~")) {
+    const [token, handleValue = "", labelValue = ""] = part.split("|");
+    if (!SESSION_TOKEN.test(token) || records.some((record) => record.token === token)) continue;
+    records.push({
+      token,
+      handle: HANDLE.test(handleValue) ? handleValue : null,
+      label: decodeLabel(labelValue),
+    });
+    if (records.length === MAX_LINKED_ACCOUNTS) break;
+  }
+  return records;
+}
+
+export function parseLinkedTokens(value: string | null): string[] {
+  return parseLinkedRecords(value).map((record) => record.token);
+}
+
+export function serializeLinkedRecords(records: LinkedRecord[]): string {
+  return records
+    .slice(0, MAX_LINKED_ACCOUNTS)
+    .map((record) => [
+      record.token,
+      record.handle ?? "",
+      record.label ? Buffer.from(record.label, "utf8").toString("base64url") : "",
+    ].join("|"))
+    .join("~");
 }
 
 export function serializeCookie(
@@ -75,11 +107,20 @@ interface LinkedEntry {
   subject: string;
   expiresAt: Date;
   handle: string;
+  label: string | null;
+}
+
+/** A linked account whose session has ended. It stays listed, marked as logged out, until the user adds an account. */
+interface LapsedAccount {
+  token: string;
+  handle: string;
+  label: string;
 }
 
 interface LinkedState {
   entries: LinkedEntry[];
   active: LinkedEntry | null;
+  lapsed: LapsedAccount[];
   /** Sessions replaced by a newer login of the same person; they must be revoked. */
   superseded: string[];
   hadIntent: boolean;
@@ -126,6 +167,7 @@ export function createLinkedAccountsHandlers(deps: LinkedAccountsDependencies) {
       subject: summary.subject,
       expiresAt: summary.expiresAt,
       handle: accountHandle(sessionId),
+      label: null,
     };
   }
 
@@ -140,9 +182,14 @@ export function createLinkedAccountsHandlers(deps: LinkedAccountsDependencies) {
     const hadIntent = readCookie(request, ADD_ACCOUNT_INTENT_COOKIE_NAME) === "1";
 
     const entries: LinkedEntry[] = [];
-    for (const token of parseLinkedTokens(readCookie(request, LINKED_ACCOUNTS_COOKIE_NAME))) {
-      const entry = await resolveEntry(token);
-      if (entry) entries.push(entry);
+    const lapsedAccounts: LapsedAccount[] = [];
+    for (const record of parseLinkedRecords(readCookie(request, LINKED_ACCOUNTS_COOKIE_NAME))) {
+      const entry = await resolveEntry(record.token);
+      if (entry) {
+        entries.push({ ...entry, label: record.label });
+      } else if (record.handle && record.label) {
+        lapsedAccounts.push({ token: record.token, handle: record.handle, label: record.label });
+      }
     }
 
     const superseded: string[] = [];
@@ -150,7 +197,7 @@ export function createLinkedAccountsHandlers(deps: LinkedAccountsDependencies) {
     if (active) {
       const index = entries.findIndex((entry) => entry.sessionId === active.sessionId);
       if (index !== -1) {
-        entries[index] = active; // keep the freshest token
+        entries[index] = { ...active, label: entries[index].label }; // keep the freshest token
       } else if (hadIntent || entries.length === 0) {
         // A person who signs in again replaces their older session instead of duplicating it.
         const sameSubject = entries.findIndex((entry) => entry.subject === active.subject);
@@ -158,7 +205,7 @@ export function createLinkedAccountsHandlers(deps: LinkedAccountsDependencies) {
           superseded.push(entries[sameSubject].sessionId);
           entries.splice(sameSubject, 1);
         }
-        entries.push(active);
+        entries.push({ ...active, label: null });
       }
     }
     // Never exceed the cap; the active session always stays.
@@ -167,12 +214,18 @@ export function createLinkedAccountsHandlers(deps: LinkedAccountsDependencies) {
       superseded.push(entries[drop].sessionId);
       entries.splice(drop, 1);
     }
-    return { entries, active: current, superseded, hadIntent };
+    // Lapsed accounts only take the room that valid accounts leave free.
+    const lapsed = lapsedAccounts.slice(0, Math.max(0, MAX_LINKED_ACCOUNTS - entries.length));
+    return { entries, active: current, lapsed, superseded, hadIntent };
   }
 
-  function linkedCookie(entries: LinkedEntry[]): string[] {
-    return entries.length > 1
-      ? [serializeCookie(LINKED_ACCOUNTS_COOKIE_NAME, serializeLinkedTokens(entries.map((entry) => entry.token)), LINKED_ACCOUNTS_MAX_AGE_SECONDS)]
+  function linkedCookie(entries: LinkedEntry[], lapsed: LapsedAccount[] = []): string[] {
+    const records: LinkedRecord[] = [
+      ...entries.map((entry) => ({ token: entry.token, handle: entry.handle, label: entry.label })),
+      ...lapsed,
+    ];
+    return records.length > 1
+      ? [serializeCookie(LINKED_ACCOUNTS_COOKIE_NAME, serializeLinkedRecords(records), LINKED_ACCOUNTS_MAX_AGE_SECONDS)]
       : [deleteCookie(LINKED_ACCOUNTS_COOKIE_NAME)];
   }
 
@@ -194,25 +247,31 @@ export function createLinkedAccountsHandlers(deps: LinkedAccountsDependencies) {
     try {
       const state = await loadState(request);
       if (!state.active) return respond({ error: "sign_in_required" }, 401);
-      const cookies = [...linkedCookie(state.entries)];
-      if (state.hadIntent) cookies.push(deleteCookie(ADD_ACCOUNT_INTENT_COOKIE_NAME));
       if (state.superseded.length && !(await revokeAll(state.superseded))) {
         return respond({ error: "mail_unavailable" }, 503);
       }
       const list = state.entries.some((entry) => entry.sessionId === state.active?.sessionId)
         ? state.entries
         : [state.active];
-      // labels=0 only reconciles the list (cheap); the menu asks for labels when it opens.
+      // labels=0 only reconciles the list (cheap) and reuses the stored labels, so the menu opens with names at once.
       const withLabels = new URL(request.url).searchParams.get("labels") !== "0";
-      const accounts = await Promise.all(
-        list.map(async (entry) => ({
+      const resolved = await Promise.all(
+        list.map(async (entry) => {
+          const fresh = withLabels ? await deps.getAccountLabel(entry.sessionId).catch(() => null) : null;
+          return { entry, label: fresh ?? entry.label };
+        }),
+      );
+      for (const { entry, label } of resolved) entry.label = label;
+      const cookies = [...linkedCookie(state.entries, state.lapsed)];
+      if (state.hadIntent) cookies.push(deleteCookie(ADD_ACCOUNT_INTENT_COOKIE_NAME));
+      const accounts = [
+        ...resolved.map(({ entry, label }) => ({
           handle: entry.handle,
-          label: withLabels
-            ? (await deps.getAccountLabel(entry.sessionId).catch(() => null)) ?? "Account"
-            : "Account",
+          label: label ?? "Account",
           active: entry.sessionId === state.active?.sessionId,
         })),
-      );
+        ...state.lapsed.map((account) => ({ handle: account.handle, label: account.label, active: false, lapsed: true })),
+      ];
       return respond({ accounts, canAdd: list.length < MAX_LINKED_ACCOUNTS }, 200, cookies);
     } catch {
       return respond({ error: "mail_unavailable" }, 503);
@@ -229,8 +288,9 @@ export function createLinkedAccountsHandlers(deps: LinkedAccountsDependencies) {
         ? state.entries
         : [...state.entries, state.active];
       if (entries.length >= MAX_LINKED_ACCOUNTS) return respond({ error: "account_limit" }, 409);
+      // Adding an account replaces the logged-out marks, so the new account always has room.
       return respond({ ok: true }, 200, [
-        serializeCookie(LINKED_ACCOUNTS_COOKIE_NAME, serializeLinkedTokens(entries.map((entry) => entry.token)), LINKED_ACCOUNTS_MAX_AGE_SECONDS),
+        serializeCookie(LINKED_ACCOUNTS_COOKIE_NAME, serializeLinkedRecords(entries.map((entry) => ({ token: entry.token, handle: entry.handle, label: entry.label }))), LINKED_ACCOUNTS_MAX_AGE_SECONDS),
         serializeCookie(ADD_ACCOUNT_INTENT_COOKIE_NAME, "1", ADD_ACCOUNT_INTENT_MAX_AGE_SECONDS),
       ]);
     } catch {
@@ -248,11 +308,14 @@ export function createLinkedAccountsHandlers(deps: LinkedAccountsDependencies) {
       const state = await loadState(request);
       if (!state.active) return respond({ error: "sign_in_required" }, 401);
       const target = state.entries.find((entry) => entry.handle === body.handle);
-      if (!target) return respond({ error: "account_not_found" }, 404);
+      if (!target) {
+        if (state.lapsed.some((account) => account.handle === body.handle)) return respond({ error: "account_logged_out" }, 409);
+        return respond({ error: "account_not_found" }, 404);
+      }
       if (state.superseded.length && !(await revokeAll(state.superseded))) {
         return respond({ error: "mail_unavailable" }, 503);
       }
-      return respond({ ok: true }, 200, [...linkedCookie(state.entries), sessionCookie(target)]);
+      return respond({ ok: true }, 200, [...linkedCookie(state.entries, state.lapsed), sessionCookie(target)]);
     } catch {
       return respond({ error: "mail_unavailable" }, 503);
     }
@@ -310,7 +373,9 @@ export function createLinkedAccountsHandlers(deps: LinkedAccountsDependencies) {
         kept.push(state.active as LinkedEntry);
       }
       const nextActive = activeKept ? (state.active as LinkedEntry) : (kept[0] ?? null);
-      const cookies: string[] = [...linkedCookie(kept)];
+      // "Sign out of all" clears logged-out marks too; they only survive while another account is signed in.
+      const keptLapsed = body.all === true || !nextActive ? [] : state.lapsed;
+      const cookies: string[] = [...linkedCookie(kept, keptLapsed)];
       if (nextActive) {
         if (nextActive.sessionId !== activeId) cookies.push(sessionCookie(nextActive));
       } else {

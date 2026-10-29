@@ -570,7 +570,6 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
   .compose-dialog.is-minimized { width: calc(100vw - 24px); max-width: 400px; height: auto; margin: 0; border: 0; border-radius: var(--radius-xl); }
   .compose-header { min-height: 69px; padding: max(15px, env(safe-area-inset-top)) 18px 15px; }
   .compose-header h2 { font-size: var(--text-lg); }
-  .compose-expand { display: none; }
   .compose-form { padding: 0 18px max(15px, env(safe-area-inset-bottom)); }
   .compose-switch-request { margin-right: 18px; margin-left: 18px; }
   .compose-field { grid-template-columns: 48px minmax(0, 1fr); gap: 8px; }
@@ -1192,3 +1191,23 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
   .compose-backdrop:not(.is-minimized) .compose-dialog { height: 100%; max-height: none; }
 }
 .message-remote-images { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 12px; color: var(--muted); font-size: var(--text-xs); }
+
+/* Account switcher: rows respond at once, and logged-out accounts stay listed but inert. */
+.account-switcher-row:not(.is-current):not(.is-logged-out):not(:disabled) { cursor: pointer; }
+.account-switcher-row.is-logged-out { cursor: default; }
+.account-switcher-details > .account-switcher-logged-out { color: var(--danger-foreground); font-weight: 600; }
+.account-switcher-details > .account-switcher-opening { color: var(--violet-dark); font-weight: 600; }
+.account-switcher-updating { margin: 0 10px 6px; color: var(--muted); font-size: var(--text-xs); }
+.account-switcher-spinner { width: 18px; height: 18px; flex: none; border: 2px solid var(--violet-light); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.9s linear infinite; }
+
+/* The header refresh shows progress the moment it is pressed. */
+.refresh-button { cursor: pointer; }
+.refresh-button:disabled { cursor: progress; }
+.refresh-button[aria-busy="true"] svg { animation: spin 0.9s linear infinite; }
+
+/* Compose window: one toggle expands, minimizes, and restores. */
+.compose-window-toggle { cursor: pointer; }
+.compose-window-toggle:disabled { cursor: default; }
+
+/* A row's date and hover actions swap instantly; no fade may leave them both visible. */
+.conversation-row-actions, .conversation-row-actions * { transition: none; }

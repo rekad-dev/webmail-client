@@ -1141,14 +1141,20 @@ export function ComposeDialog({
             <h2 id="compose-title" ref={titleRef} tabIndex={-1}>{composeHeading}</h2>
           </div>
           <div className="compose-window-controls">
-            <Button size="icon" variant="ghost" disabled={isLeaving} aria-label={isMinimized ? "Restore compose" : "Minimize compose"}
+            {/* One toggle: expands a minimized or normal window, and minimizes an expanded one. */}
+            <Button className="compose-window-toggle" size="icon" variant="ghost" disabled={isLeaving}
+              aria-label={isExpanded && !isMinimized ? "Minimize compose" : "Expand compose"}
               aria-expanded={!isMinimized} aria-controls="compose-content"
-              onClick={() => { onMinimizedChange(!isMinimized); setIsExpanded(false); }} type="button">
-              <MailIcon name="minimize" size={19} />
-            </Button>
-            <Button className="compose-expand" size="icon" variant="ghost" disabled={isLeaving} aria-label={isExpanded ? "Exit expanded compose" : "Expand compose"}
-              aria-pressed={isExpanded} onClick={() => { onMinimizedChange(false); setIsExpanded((value) => !value); }} type="button">
-              <MailIcon name="expand" size={19} />
+              onClick={() => {
+                if (isExpanded && !isMinimized) {
+                  onMinimizedChange(true);
+                  setIsExpanded(false);
+                  return;
+                }
+                onMinimizedChange(false);
+                setIsExpanded(true);
+              }} type="button">
+              <MailIcon name={isExpanded && !isMinimized ? "minimize" : "expand"} size={19} />
             </Button>
             <Button aria-label="Close compose" className="compose-close" size="icon" variant="ghost"
               disabled={isSending || isLeaving || attachmentUploadPending} onClick={() => void closeCompose()} type="button">

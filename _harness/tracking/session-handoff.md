@@ -5,6 +5,20 @@ scope: session-handoff
 
 # Session Handoff
 
+## 2026-10-29 compose toggle, logged-out accounts, optimistic refresh (deploying)
+
+The compose header has one toggle: it expands a normal or minimized window and
+minimizes an expanded one. Linked-account cookie records now carry each
+account's handle and label (`token|handle|base64url(label)`), so an account
+whose session has ended stays in the switcher as "Logged out" instead of being
+dropped. Logged-out accounts cannot be switched to, and adding an account
+clears them to make room. The switcher stays usable while it refreshes, and a
+switch shows "Opening…" on its row at once. Refresh shows its loading state on
+click, and the hover actions in inbox rows no longer fade behind the date.
+Checked: typecheck, 263 tests (new linked-account tests included), build, and
+the compose toggle in the local preview. Not checked against a real account:
+the logged-out rows, the switcher, and refresh.
+
 ## 2026-10-29 compose discard warning and refresh guard (deploying)
 
 Leaving compose (close, mailbox, Favorites, shared account, Settings) saves

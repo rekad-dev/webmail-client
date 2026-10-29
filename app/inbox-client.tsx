@@ -1097,7 +1097,12 @@ export function InboxClient({
 
   function refresh() {
     if (localPreview) return;
-    setManualRefreshTarget(openEmailId ? "message" : openThreadId ? "thread" : "list");
+    const target = openEmailId ? "message" : openThreadId ? "thread" : "list";
+    setManualRefreshTarget(target);
+    // Progress shows on the click itself; the fetches below confirm it and clear it when they finish.
+    if (target === "message") setDetailLoading(true);
+    else if (target === "thread") setThreadLoading(true);
+    else setIsLoading(true);
     notificationPollRef.current?.();
     if (openEmailId) {
       setDetailRefreshVersion((value) => value + 1);

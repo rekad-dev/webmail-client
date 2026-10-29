@@ -16,6 +16,7 @@ interface LinkedAccount {
   handle: string;
   label: string;
   active: boolean;
+  lapsed: boolean;
 }
 
 const JSON_HEADERS = { accept: "application/json", "content-type": "application/json" };
@@ -45,6 +46,8 @@ export function AccountMenu({
   const [message, setMessage] = useState<string | null>(null);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [accountsError, setAccountsError] = useState(false);
+  // The handle being opened right now; its row shows progress before the server answers.
+  const [switchingHandle, setSwitchingHandle] = useState<string | null>(null);
   const requestVersion = useRef(0);
 
   const loadAccounts = useCallback(async (withLabels = true) => {
@@ -67,7 +70,7 @@ export function AccountMenu({
       setAccounts(
         list.flatMap((item): LinkedAccount[] =>
           item && typeof item.handle === "string" && typeof item.label === "string"
-            ? [{ handle: item.handle, label: item.label, active: item.active === true }]
+            ? [{ handle: item.handle, label: item.label, active: item.active === true, lapsed: item.lapsed === true }]
             : [],
         ),
       );
@@ -86,6 +89,7 @@ export function AccountMenu({
 
   async function switchTo(handle: string) {
     setPending(true);
+    setSwitchingHandle(handle);
     setMessage(null);
     try {
       const response = await postAccount("/api/account/switch", { handle });
@@ -94,6 +98,7 @@ export function AccountMenu({
       window.location.assign("/");
     } catch {
       setMessage("That account could not be opened. Sign in to it again.");
+      setSwitchingHandle(null);
       setPending(false);
       void loadAccounts();
     }
@@ -148,9 +153,11 @@ export function AccountMenu({
         </div>
         <div className="account-switcher-section">
           <p className="account-switcher-heading">Switch account</p>
-          {loadingAccounts ? <p className="account-switcher-status" role="status">Loading accounts…</p> : null}
+          {/* The list is usable at once; a background refresh only adds a quiet hint. */}
+          {loadingAccounts && accounts.length === 0 ? <p className="account-switcher-status" role="status">Loading accounts…</p> : null}
+          {loadingAccounts && accounts.length > 0 ? <p className="account-switcher-updating" aria-live="polite">Updating…</p> : null}
           {accountsError ? <p className="account-switcher-status" role="status">Accounts could not be loaded. Open the menu again to retry.</p> : null}
-          <ul aria-label="Signed-in accounts" className="account-switcher-list">
+          <ul aria-label="Signed-in accounts" aria-busy={loadingAccounts} className="account-switcher-list">
             {accounts.map((account) => (
               <li key={account.handle}>
                 {account.active ? (
@@ -160,18 +167,29 @@ export function AccountMenu({
                     <span className="account-switcher-indicator" aria-hidden="true" />
                     <span className="visually-hidden">Current account</span>
                   </div>
-                ) : (
-                  <Button aria-label={`Switch to ${account.label}`} className="account-switcher-row h-auto justify-start px-2" disabled={pending || loadingAccounts} onClick={() => void switchTo(account.handle)} variant="ghost">
+                ) : account.lapsed ? (
+                  <div aria-disabled="true" className="account-switcher-row is-logged-out">
                     <ProfileAvatar className="account-switcher-avatar size-10 rounded-md" fallbackClassName="rounded-md" name={account.label} version={null} />
-                    <span className="account-switcher-details"><strong>{account.label}</strong></span>
-                    <span className="account-switcher-indicator" aria-hidden="true" />
+                    <span className="account-switcher-details">
+                      <strong>{account.label}</strong>
+                      <span className="account-switcher-logged-out">Logged out</span>
+                    </span>
+                  </div>
+                ) : (
+                  <Button aria-label={`Switch to ${account.label}`} aria-busy={switchingHandle === account.handle || undefined} className="account-switcher-row h-auto justify-start px-2" disabled={pending} onClick={() => void switchTo(account.handle)} variant="ghost">
+                    <ProfileAvatar className="account-switcher-avatar size-10 rounded-md" fallbackClassName="rounded-md" name={account.label} version={null} />
+                    <span className="account-switcher-details">
+                      <strong>{account.label}</strong>
+                      {switchingHandle === account.handle ? <span className="account-switcher-opening">Opening…</span> : null}
+                    </span>
+                    {switchingHandle === account.handle ? <span className="account-switcher-spinner" aria-hidden="true" /> : <span className="account-switcher-indicator" aria-hidden="true" />}
                   </Button>
                 )}
               </li>
             ))}
           </ul>
           {canAdd ? (
-            <Button className="account-switcher-add justify-start px-2" disabled={pending || loadingAccounts} onClick={() => void addAccount()} variant="ghost">
+            <Button className="account-switcher-add justify-start px-2" disabled={pending} onClick={() => void addAccount()} variant="ghost">
               <MailIcon name="plus" size={18} /> Add account
             </Button>
           ) : null}
