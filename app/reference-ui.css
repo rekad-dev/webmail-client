@@ -406,7 +406,6 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
 .rich-text-heading-label { position: absolute !important; width: 1px !important; height: 1px !important; overflow: hidden !important; clip-path: inset(50%) !important; white-space: nowrap !important; }
 .rich-text-content { min-height: 170px; flex: 1 0 auto; padding: 13px 14px; color: var(--ink); font-size: var(--text-sm); line-height: 1.65; }
 .rich-text-content .tiptap { min-height: 145px; outline: none; }
-.rich-text-content .tiptap:focus-visible { outline: 3px solid var(--ring); outline-offset: 2px; border-radius: 4px; }
 .rich-text-content .tiptap > :first-child { margin-top: 0; }
 .rich-text-content .tiptap > :last-child { margin-bottom: 0; }
 .rich-text-content .tiptap p { margin: 0 0 11px; }

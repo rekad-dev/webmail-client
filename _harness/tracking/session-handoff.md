@@ -5,21 +5,19 @@ scope: session-handoff
 
 # Session Handoff
 
-## 2026-10-29 safe email rendering and compose (deployed)
+## 2026-10-29 compose discard warning and refresh guard (deploying)
 
-Messages keep a safe subset of inline styling; embedded (cid) raster images load
-through the account-bound attachment download route, and remote images stay
-blocked until "Show images" is chosen per message. Compose: the editor no longer
-carries the managed banner, has a Preview toggle (sandboxed iframe) and fills
-the remaining height with only its content scrolling; helper/status text was
-removed. Switching mailbox, Favorites, shared account or Settings while composing
-saves the draft first and stays in compose with an error if the save fails
-(checked in an isolated sample preview, both outcomes). Conversation row actions
-now replace the kebab and time inline. Typecheck, 259 tests and build passed.
-Deployed as webmail-client-6mykddjrp-rekad.vercel.app (Ready, aliased to
-webmail.rekad.id; home 200, anonymous settings redirects). The first attempt
-returned "Not authorized"; an immediate retry succeeded.
-Not checked: live embedded images and draft saves against a real account.
+Leaving compose (close, mailbox, Favorites, shared account, Settings) saves
+typed changes first. If there is no sender identity or the save fails, a modal
+asks whether to keep editing or discard the message. Untouched or erased
+messages close without a warning. Refresh and tab close show the browser's own
+"Leave site?" prompt when there are edits, because a custom modal cannot run
+there. The Tiptap editor no longer emits an update when its editable state
+changes, which had made untouched drafts look edited. The editor shows no
+purple focus outline. Checked in a scratch copy with stubbed draft routes:
+untouched, erased, typed with identity, no sender, keep editing, discard, failed
+save, and the refresh guard. Typecheck, 259 tests and build passed. Not checked
+against a real account.
 
 ## 2026-10-29 settings workspace (deployed)
 

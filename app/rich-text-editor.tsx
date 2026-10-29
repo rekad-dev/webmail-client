@@ -72,7 +72,8 @@ export function RichTextEditor({
   }, [editor, value]);
 
   useEffect(() => {
-    editor?.setEditable(!disabled);
+    // Toggling editability is not an edit, so it must not emit an update.
+    editor?.setEditable(!disabled, false);
   }, [disabled, editor]);
 
   function openLinkEditor() {

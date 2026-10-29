@@ -10,6 +10,15 @@ import {
 } from "react";
 import { MailIcon } from "./mail-icons";
 import { OptionSelect } from "@/components/mail/option-select";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { plainTextEditorContent, RichTextEditor } from "./rich-text-editor";
@@ -79,6 +88,18 @@ interface ComposeAttachment {
   name: string;
   type: string;
   size: number;
+}
+
+/** Compares only what the person can change, so an untouched draft is not treated as edited. */
+function draftSnapshot(fields: ComposeFields, attachments: ComposeAttachment[]): string {
+  return JSON.stringify({
+    to: fields.to.trim(),
+    cc: fields.cc.trim(),
+    bcc: fields.bcc.trim(),
+    subject: fields.subject.trim(),
+    body: fields.body.trim(),
+    attachments: attachments.map((attachment) => attachment.blobId),
+  });
 }
 
 interface LoadedDraft extends ComposeFields {
@@ -466,6 +487,11 @@ export function ComposeDialog({
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   const switchPromptRef = useRef<HTMLParagraphElement | null>(null);
   const handledMailboxNavigationRef = useRef<number | null>(null);
+  const draftBaselineRef = useRef<string | null>(null);
+  const [discardPrompt, setDiscardPrompt] = useState<{
+    reason: "identity" | "save_failed";
+    onDiscard(): void;
+  } | null>(null);
   const skipFocusRestoreRef = useRef(false);
 
   useEffect(() => {
@@ -578,6 +604,10 @@ export function ComposeDialog({
           htmlBody: initialFields?.htmlBody ?? plainTextEditorContent(initialFields?.body ?? signature),
         });
         setAttachments(loadedDraft?.attachments ?? []);
+        // A new message starts blank, so prefilled reply text still counts as an edit.
+        draftBaselineRef.current = loadedDraft
+          ? draftSnapshot(loadedDraft, loadedDraft.attachments)
+          : draftSnapshot({ fromEmail: "", to: "", cc: "", bcc: "", subject: "", body: signature }, []);
         hasBodyEditsRef.current = Boolean(loadedDraft || initialFields?.body);
         draftRevisionRef.current = loadedDraft
           ? 0
@@ -690,10 +720,15 @@ export function ComposeDialog({
     });
   }
 
-  async function saveDraftNow(refreshManagedContent = false): Promise<void> {
+  function hasDraftEdits(): boolean {
+    const baseline = draftBaselineRef.current;
+    return baseline !== null && draftSnapshot(fields, attachments) !== baseline;
+  }
+
+  async function saveDraftNow(refreshManagedContent = false, forceSave = false): Promise<void> {
     if (localPreview) return;
     let revision = draftRevisionRef.current;
-    if (revision <= savedDraftRevisionRef.current && draftIdRef.current && !refreshManagedContent) return;
+    if (revision <= savedDraftRevisionRef.current && draftIdRef.current && !refreshManagedContent && !forceSave) return;
     if (refreshManagedContent && revision <= savedDraftRevisionRef.current) {
       revision = savedDraftRevisionRef.current + 1;
       draftRevisionRef.current = revision;
@@ -711,7 +746,7 @@ export function ComposeDialog({
       if (!latest) throw new Error("banner_settings_unavailable");
       setManagedBanners(latest);
     }
-    await queueDraftSave(fields, attachments, selectedIdentity.id, revision, refreshManagedContent);
+    await queueDraftSave(fields, attachments, selectedIdentity.id, revision, refreshManagedContent || forceSave);
     if (!draftIdRef.current) throw new Error("draft_save_failed");
   }
 
@@ -728,26 +763,30 @@ export function ComposeDialog({
       setFormError("Finish loading or check the send status before switching mailboxes.");
       return;
     }
+    // An empty or untouched message is discarded without a warning.
+    if (!hasDraftEdits() && !draftIdRef.current) {
+      onLeave();
+      return;
+    }
     const hasUnsavedChanges = draftRevisionRef.current > savedDraftRevisionRef.current;
-    if (hasUnsavedChanges && !selectedIdentity) {
-      setFormError("Choose a sender identity so this draft can be saved before closing or switching.");
+    const messageSubmitted = sendState === "submitted" || sendState === "submitted_sent_update_pending";
+    if (!hasUnsavedChanges || messageSubmitted) {
+      onLeave();
+      return;
+    }
+    if (!selectedIdentity) {
+      setDiscardPrompt({ reason: "identity", onDiscard: onLeave });
       return;
     }
     setIsLeaving(true);
-    if (
-      selectedIdentity &&
-      sendState !== "submitted" &&
-      sendState !== "submitted_sent_update_pending" &&
-      hasUnsavedChanges
-    ) {
-      try {
-        await saveDraftNow();
-        if (draftRevisionRef.current > savedDraftRevisionRef.current) throw new Error("draft_changed_during_save");
-      } catch {
-        setFormError("This draft could not be saved. Keep it open and try again.");
-        setIsLeaving(false);
-        return;
-      }
+    try {
+      // Editing is locked while leaving, so this snapshot is the final content.
+      await saveDraftNow(false, true);
+      if (draftRevisionRef.current > savedDraftRevisionRef.current) throw new Error("draft_changed_during_save");
+    } catch {
+      setIsLeaving(false);
+      setDiscardPrompt({ reason: "save_failed", onDiscard: onLeave });
+      return;
     }
     onLeave();
   }
@@ -762,6 +801,18 @@ export function ComposeDialog({
     void leaveCompose(() => { skipFocusRestoreRef.current = true; onMailboxNavigationReady(); }, true).finally(onMailboxNavigationSettled);
   }, [mailboxNavigationId]);
 
+  // Refresh and tab close cannot show the in-app dialog, so the browser's own prompt covers unsaved edits.
+  useEffect(() => {
+    const messageSubmitted = sendState === "submitted" || sendState === "submitted_sent_update_pending";
+    if (localPreview || messageSubmitted || !hasDraftEdits()) return;
+    function warnBeforeUnload(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, [fields, attachments, localPreview, sendState]);
+
   useEffect(() => {
     if (
       localPreview ||
@@ -772,7 +823,8 @@ export function ComposeDialog({
       sendState === "submitted_sent_update_pending" ||
       isSending ||
       isLeaving ||
-      draftRevisionRef.current <= savedDraftRevisionRef.current
+      draftRevisionRef.current <= savedDraftRevisionRef.current ||
+      (!draftIdRef.current && !hasDraftEdits())
     ) return;
     const snapshot = fields;
     const attachmentsSnapshot = attachments;
@@ -1457,6 +1509,26 @@ export function ComposeDialog({
         ) : null}
         </div>
       </section>
+      <AlertDialog open={Boolean(discardPrompt)} onOpenChange={(open) => { if (!open) setDiscardPrompt(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{discardPrompt?.reason === "save_failed" ? "This draft isn't saved" : "Discard this message?"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {discardPrompt?.reason === "save_failed"
+                ? "Your changes couldn't be saved to Drafts. If you leave now, they will be lost."
+                : "No sender identity is available, so this message can't be saved to Drafts. If you leave now, your changes will be lost."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <Button variant="destructive" onClick={() => {
+              const leave = discardPrompt?.onDiscard;
+              setDiscardPrompt(null);
+              leave?.();
+            }} type="button">Discard message</Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
