@@ -515,6 +515,8 @@ export function InboxClient({
   const notificationPollRef = useRef<(() => void) | null>(null);
   const [readUpdateError, setReadUpdateError] = useState(false);
   const [isComposeOpen, setIsComposeOpen] = useState(false);
+  const [pendingMailboxNavigation, setPendingMailboxNavigation] = useState<{ id: number; action: () => void } | null>(null);
+  const mailboxNavigationSequence = useRef(0);
   const [isComposeMinimized, setIsComposeMinimized] = useState(false);
   const [composeInstance, setComposeInstance] = useState(0);
   const [pendingComposeRequest, setPendingComposeRequest] = useState<ComposeRequest | null>(null);
@@ -552,6 +554,13 @@ export function InboxClient({
     if (showSettings) return;
     setShowSettings(true);
     window.history.pushState(null, "", "/settings");
+  }
+
+  function requestMailboxNavigation(action: () => void) {
+    if (!isComposeOpen) { action(); return; }
+    if (pendingMailboxNavigation) return;
+    setIsComposeMinimized(false);
+    setPendingMailboxNavigation({ id: ++mailboxNavigationSequence.current, action });
   }
 
   useEffect(() => {
@@ -1637,22 +1646,22 @@ export function InboxClient({
         <div className="sidebar-navigation">
         <SharedAccountNav
           accounts={sharedAccounts}
-          onSelect={(id) => { showMail(); selectSharedAccount(id); }}
+          onSelect={(id) => requestMailboxNavigation(() => { showMail(); selectSharedAccount(id); })}
           selectedAccountId={sharedAccountId}
         />
         <MailboxNav
           isLoading={isLoading}
           localPreview={localPreview}
           mailboxes={mailboxes}
-          onSelect={(id) => { showMail(); selectMailbox(id); }}
+          onSelect={(id) => requestMailboxNavigation(() => { showMail(); selectMailbox(id); })}
           selectedMailboxId={favorites || showSettings ? undefined : mailboxId ?? undefined}
         />
 
-        <Button aria-pressed={favorites && !showSettings} className={`mailbox-link${favorites && !showSettings ? " is-selected" : ""}`} disabled={localPreview} onClick={() => { showMail(); selectFavorites(); }} variant="ghost">
+        <Button aria-pressed={favorites && !showSettings} className={`mailbox-link${favorites && !showSettings ? " is-selected" : ""}`} disabled={localPreview} onClick={() => requestMailboxNavigation(() => { showMail(); selectFavorites(); })} variant="ghost">
           <MailIcon name="star" /><span className="mailbox-name">Favorites</span>
         </Button>
         <Button asChild className={`settings-link mailbox-link${showSettings ? " is-selected" : ""}`} variant="ghost">
-          <a aria-current={showSettings ? "page" : undefined} href="/settings" onClick={(event) => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) { event.preventDefault(); openSettings(); } }}><MailIcon name="settings" /><span className="mailbox-name">Settings</span></a>
+          <a aria-current={showSettings ? "page" : undefined} href="/settings" onClick={(event) => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) { event.preventDefault(); requestMailboxNavigation(openSettings); } }}><MailIcon name="settings" /><span className="mailbox-name">Settings</span></a>
         </Button>
         </div>
         <div className="sidebar-rail">
@@ -1855,6 +1864,9 @@ export function InboxClient({
       {isComposeOpen ? (
         <ComposeDialog
           key={composeInstance}
+          mailboxNavigationId={pendingMailboxNavigation?.id ?? null}
+          onMailboxNavigationReady={() => { const action = pendingMailboxNavigation?.action; setPendingMailboxNavigation(null); closeComposeDialog(); action?.(); }}
+          onMailboxNavigationSettled={() => setPendingMailboxNavigation(null)}
           pendingRequestLabel={pendingComposeRequest?.label ?? null}
           onCancelSwitch={() => setPendingComposeRequest(null)}
           onConfirmSwitch={() => { if (pendingComposeRequest) startComposeRequest(pendingComposeRequest); }}

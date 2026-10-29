@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { sanitizeEmailHtml } from "../lib/mail/sanitize-email-html.mts";
 
-test("removes executable markup, remote resources, styles, and inline handlers", () => {
+test("removes executable markup and dangerous styles while keeping remote URLs inert", () => {
   const result = sanitizeEmailHtml(
     '<div onclick="run()" style="background:url(https://tracker.example/pixel)">' +
       '<strong>Hello</strong><img src="https://tracker.example/pixel" onerror="run()">' +
@@ -12,8 +12,22 @@ test("removes executable markup, remote resources, styles, and inline handlers",
   );
 
   assert.match(result.html, /<strong>Hello<\/strong>/);
-  assert.doesNotMatch(result.html, /<script|<style|<iframe|<img|onclick|onerror|url\(/i);
+  assert.doesNotMatch(result.html, /<script|<style|<iframe|\ssrc=|onclick|onerror|url\(/i);
+  assert.match(result.html, /data-remote-src="https:\/\/tracker\.example\/pixel"/);
   assert.deepEqual(result.externalLinks, []);
+});
+
+test("allows bounded safe inline styling and inert embedded images", () => {
+  const result = sanitizeEmailHtml('<p style="color:#123456;font-weight:bold;background-image:url(https://bad.test/a);position:fixed">Hello <img src="cid:logo@example.test" onerror="run()" style="width:120px"></p><img src="javascript:alert(1)">');
+  assert.match(result.html, /color:#123456/);
+  assert.match(result.html, /font-weight:bold/);
+  assert.match(result.html, /data-cid="logo@example\.test"/);
+  assert.doesNotMatch(result.html, /background-image|position:|onerror|javascript:|\ssrc=/i);
+});
+
+test("never enables image URLs targeting local or credentialed hosts", () => {
+  const result = sanitizeEmailHtml('<img src="http://127.0.0.1/admin"><img src="http://router.local/status"><img src="https://user:pass@example.test/a"><img src="//example.test/x">');
+  assert.doesNotMatch(result.html, /data-remote-src|127\.0\.0\.1|router\.local|user:pass/i);
 });
 
 test("keeps only safe links, with a normalized href and no-referrer rel", () => {

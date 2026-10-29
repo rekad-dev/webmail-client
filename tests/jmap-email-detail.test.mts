@@ -157,12 +157,13 @@ test("retrieves bounded message detail and returns sanitized HTML only", async (
     inReplyTo: [],
     references: [],
     textBody: "Plain body\nSecond line",
-    htmlBody: '<div>Hello <a href="https://example.test/" rel="noopener noreferrer nofollow">Open</a></div>',
+    htmlBody: '<div>Hello <a href="https://example.test/" rel="noopener noreferrer nofollow">Open</a><img data-remote-src="https://tracker.example/pixel" /></div>',
     externalLinks: ["https://example.test/"],
     bodyTruncated: false,
     attachments: [
       { attachmentIndex: 0, name: "report.txt", type: "text/plain", size: 120 },
     ],
+    inlineImages: [],
     mailboxIds: ["inbox-id", "archive-id"],
   });
 
@@ -268,4 +269,17 @@ test("reports when JMAP refuses the read-state update", async () => {
     runJmapOAuthMarkEmailRead({ ...commonOptions, fetchImpl }),
     JmapEmailNotFoundError,
   );
+});
+
+test("exposes only bounded raster content-id parts for the requested message", async () => {
+  const emailResponse = { methodResponses: [["Email/get", { state: "state-1", list: [{
+    id: "email-1", attachments: [
+      { cid: "logo@example.test", disposition: "inline", type: "image/png", size: 123 },
+      { cid: "vector@example.test", disposition: "inline", type: "image/svg+xml", size: 12 },
+      { cid: "huge@example.test", disposition: "inline", type: "image/jpeg", size: 5 * 1024 * 1024 },
+    ],
+  }], notFound: [] }, "phase3-email-detail-get"]] };
+  const { fetchImpl } = createFetch({ emailResponse });
+  const detail = await runJmapOAuthEmailDetail({ ...commonOptions, fetchImpl });
+  assert.deepEqual(detail.inlineImages, [{ cid: "logo@example.test", attachmentIndex: 0, type: "image/png", size: 123 }]);
 });

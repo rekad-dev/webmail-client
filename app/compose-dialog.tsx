@@ -372,12 +372,6 @@ function attachmentSizeLabel(size: number): string {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function visibleFocusables(dialog: HTMLElement): HTMLElement[] {
-  return Array.from(dialog.querySelectorAll<HTMLElement>(
-    'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
-  )).filter((element) => element.getClientRects().length > 0);
-}
-
 export function ComposeDialog({
   onClose,
   onInspectSent,
@@ -387,6 +381,9 @@ export function ComposeDialog({
   pendingRequestLabel,
   onConfirmSwitch,
   onCancelSwitch,
+  mailboxNavigationId,
+  onMailboxNavigationReady,
+  onMailboxNavigationSettled,
   fallbackFocusRef,
   triggerRef,
   mode = "new",
@@ -403,6 +400,9 @@ export function ComposeDialog({
   pendingRequestLabel: string | null;
   onConfirmSwitch(): void;
   onCancelSwitch(): void;
+  mailboxNavigationId: number | null;
+  onMailboxNavigationReady(): void;
+  onMailboxNavigationSettled(): void;
   fallbackFocusRef: RefObject<HTMLHeadingElement | null>;
   triggerRef: RefObject<HTMLButtonElement | null>;
   mode?: "new" | "reply" | "forward" | "draft";
@@ -412,6 +412,7 @@ export function ComposeDialog({
   localPreview?: boolean;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
   const [showCc, setShowCc] = useState(false);
   const [showBcc, setShowBcc] = useState(false);
@@ -464,10 +465,13 @@ export function ComposeDialog({
   const toFieldRef = useRef<HTMLInputElement | null>(null);
   const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   const switchPromptRef = useRef<HTMLParagraphElement | null>(null);
+  const handledMailboxNavigationRef = useRef<number | null>(null);
+  const skipFocusRestoreRef = useRef(false);
 
   useEffect(() => {
     titleRef.current?.focus();
     return () => {
+      if (skipFocusRestoreRef.current) return;
       const trigger = triggerRef.current;
       if (trigger && !trigger.disabled) trigger.focus();
       else fallbackFocusRef.current?.focus();
@@ -716,8 +720,14 @@ export function ComposeDialog({
       onLeave();
       return;
     }
-    if (isLeaving || isSending || attachmentUploadPending) return;
-    if (preserveUnsaved && (isLoading || loadError || sendState === "unknown" || sendState === "in_progress")) return;
+    if (isLeaving || isSending || attachmentUploadPending) {
+      if (preserveUnsaved) setFormError("Please wait until the current operation finishes before switching mailboxes.");
+      return;
+    }
+    if (preserveUnsaved && (isLoading || loadError || sendState === "unknown" || sendState === "in_progress")) {
+      setFormError("Finish loading or check the send status before switching mailboxes.");
+      return;
+    }
     const hasUnsavedChanges = draftRevisionRef.current > savedDraftRevisionRef.current;
     if (hasUnsavedChanges && !selectedIdentity) {
       setFormError("Choose a sender identity so this draft can be saved before closing or switching.");
@@ -732,6 +742,7 @@ export function ComposeDialog({
     ) {
       try {
         await saveDraftNow();
+        if (draftRevisionRef.current > savedDraftRevisionRef.current) throw new Error("draft_changed_during_save");
       } catch {
         setFormError("This draft could not be saved. Keep it open and try again.");
         setIsLeaving(false);
@@ -744,6 +755,12 @@ export function ComposeDialog({
   async function closeCompose(): Promise<void> {
     await leaveCompose(onClose);
   }
+
+  useEffect(() => {
+    if (mailboxNavigationId === null || handledMailboxNavigationRef.current === mailboxNavigationId) return;
+    handledMailboxNavigationRef.current = mailboxNavigationId;
+    void leaveCompose(() => { skipFocusRestoreRef.current = true; onMailboxNavigationReady(); }, true).finally(onMailboxNavigationSettled);
+  }, [mailboxNavigationId]);
 
   useEffect(() => {
     if (
@@ -1038,23 +1055,6 @@ export function ComposeDialog({
       if (!isSending && !isLeaving) void closeCompose();
       return;
     }
-    if (event.key !== "Tab" || isMinimized || !dialogRef.current) return;
-
-    const focusables = visibleFocusables(dialogRef.current);
-    if (focusables.length === 0) {
-      event.preventDefault();
-      titleRef.current?.focus();
-      return;
-    }
-    const first = focusables[0];
-    const last = focusables[focusables.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
   }
 
   const currentMessageSubmitted = sendState === "submitted" || sendState === "submitted_sent_update_pending";
@@ -1077,7 +1077,6 @@ export function ComposeDialog({
     <div className={`compose-backdrop${isMinimized ? " is-minimized" : ""}`}>
       <section
         aria-labelledby="compose-title"
-        aria-modal={!isMinimized}
         className={`compose-dialog${isExpanded ? " is-expanded" : ""}${isMinimized ? " is-minimized" : ""}`}
         onKeyDown={handleKeyDown}
         ref={dialogRef}
@@ -1311,13 +1310,7 @@ export function ComposeDialog({
             </div>
             <div className="compose-field compose-body-field">
               <label htmlFor="compose-body">Message</label>
-              <img
-                alt="rekad header, added to every message"
-                className="managed-banner-preview"
-                height={150}
-                src="/mail-header.png"
-                width={600}
-              />
+              <div className="compose-editor-pane" hidden={showPreview}>
               <RichTextEditor
                 disabled={!canEdit}
                 id="compose-body"
@@ -1328,9 +1321,24 @@ export function ComposeDialog({
                 }}
                 value={fields.htmlBody ?? plainTextEditorContent(fields.body)}
               />
-              <span className="compose-help">
-                Formatting is preserved in drafts and sent messages. The rekad header and footer are added automatically.
-              </span>
+              </div>
+              {showPreview ? (
+                <iframe
+                  className="compose-message-preview"
+                  title="Message preview"
+                  sandbox=""
+                  referrerPolicy="no-referrer"
+                  srcDoc={(() => {
+                    const header = managedBanners?.headerHtml ?? '<div style="padding:24px;background:#f6f6f6"><table style="max-width:600px;width:100%;margin:auto;background:white"><tr><td><img src="cid:rekad-header" alt="rekad" style="width:100%"></td></tr><tr><td style="padding:24px">';
+                    const footer = managedBanners?.footerHtml ?? '</td></tr><tr><td style="text-align:center;padding:24px;color:#777">rekad</td></tr></table></div>';
+                    const origin = typeof window === "undefined" ? "" : window.location.origin;
+                    const content = `${header}${fields.htmlBody ?? plainTextEditorContent(fields.body)}${footer}`
+                      .replaceAll("cid:rekad-header", `${origin}/mail-header.png`)
+                      .replaceAll("cid:rekad-instagram", `${origin}/mail-instagram.png`);
+                    return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${origin}; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'"></head><body>${content}</body></html>`;
+                  })()}
+                />
+              ) : null}
             </div>
 
             <div className="compose-attachment-help">
@@ -1338,7 +1346,7 @@ export function ComposeDialog({
                 id="compose-attachments" multiple hidden onChange={(event) => {
                   void uploadSelectedFiles(event.currentTarget.files); event.currentTarget.value = "";
                 }} ref={attachmentInputRef} type="file" />
-              <p id="compose-attachments-help">Up to 10 attachments · 4 MiB each · 20 MiB total</p>
+              <p id="compose-attachments-help" className="visually-hidden">Up to 10 attachments · 4 MiB each · 20 MiB total</p>
             </div>
             {attachmentUploadProgress ? (
               <p className="attachment-upload-status" role="status" aria-live="polite">
@@ -1399,7 +1407,7 @@ export function ComposeDialog({
               <p className="compose-send-error" role="alert">{formError}</p>
             ) : null}
 
-            <p className={`draft-save-status${draftSaveError ? " is-error" : ""}`} role="status" aria-live="polite">
+            <p className={draftSaveError || draftSaveState === "cleanup_pending" ? `draft-save-status${draftSaveError ? " is-error" : ""}` : "visually-hidden"} role="status" aria-live="polite">
               {localPreview
                 ? "Drafts are disabled in this local preview."
                 : !selectedIdentity
@@ -1411,7 +1419,7 @@ export function ComposeDialog({
                   : draftSaveState === "cleanup_pending"
                     ? "Draft saved. An older revision may still appear in Drafts."
                     : draftSaveState === "error"
-                      ? "Draft could not be saved. It remains in this window until you close it."
+                      ? "Draft could not be saved. Keep editing and try again."
                       : draftId
                         ? "Draft is stored in Drafts."
                         : "Changes save to Drafts automatically."}
@@ -1426,6 +1434,7 @@ export function ComposeDialog({
                 disabled={localPreview || !canEdit || attachmentUploadPending} onClick={() => attachmentInputRef.current?.click()} type="button" title={localPreview ? "Attachments are disabled in the local preview" : "Attach files"}>
                 <MailIcon name="paperclip" size={21} />
               </Button>
+              <Button className="compose-secondary-action" variant="ghost" aria-pressed={showPreview} onClick={() => setShowPreview((value) => !value)} type="button">{showPreview ? "Edit message" : "Preview"}</Button>
               <span className="compose-format-label">Rich text</span>
               <span className="compose-action-spacer" />
               {(sendState === "unknown" || sendState === "in_progress") ? (

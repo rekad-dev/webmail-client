@@ -38,6 +38,7 @@ const detail: JmapEmailDetail = {
   externalLinks: [],
   bodyTruncated: false,
   attachments: [],
+  inlineImages: [],
   mailboxIds: ["inbox-id"],
 };
 

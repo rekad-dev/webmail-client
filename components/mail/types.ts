@@ -71,6 +71,7 @@ export interface EmailDetail {
   externalLinks: string[];
   bodyTruncated: boolean;
   attachments: EmailAttachment[];
+  inlineImages?: Array<{ cid: string; attachmentIndex: number; type: string; size: number }>;
   mailboxIds: string[];
 }
 

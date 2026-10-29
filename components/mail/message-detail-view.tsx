@@ -149,7 +149,7 @@ export function MessageDetailView({
           </p>
         ) : null}
 
-        <MessageBody detail={detail} />
+        <MessageBody key={`${accountId ?? "personal"}:${detail.id}`} accountId={accountId} detail={detail} />
         <MessageAttachments accountId={accountId} attachments={detail.attachments} emailId={detail.id} />
       </article>
     </section>

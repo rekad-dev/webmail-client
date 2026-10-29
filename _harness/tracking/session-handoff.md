@@ -5,6 +5,19 @@ scope: session-handoff
 
 # Session Handoff
 
+## 2026-10-29 safe email rendering and compose (deploying)
+
+Messages keep a safe subset of inline styling; embedded (cid) raster images load
+through the account-bound attachment download route, and remote images stay
+blocked until "Show images" is chosen per message. Compose: the editor no longer
+carries the managed banner, has a Preview toggle (sandboxed iframe) and fills
+the remaining height with only its content scrolling; helper/status text was
+removed. Switching mailbox, Favorites, shared account or Settings while composing
+saves the draft first and stays in compose with an error if the save fails
+(checked in an isolated sample preview, both outcomes). Conversation row actions
+now replace the kebab and time inline. Typecheck, 259 tests and build passed.
+Not checked: live embedded images and draft saves against a real account.
+
 ## 2026-10-29 settings workspace (deployed)
 
 Commit `a6f93c6` is deployed as `dpl_F9ZCsLwt8mL2k6UHWM5N4WNcBZAk`,

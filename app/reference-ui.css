@@ -1175,3 +1175,21 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
   .settings-card { margin: 0 12px 16px; }
   .settings-card .settings-page { width: min(100% - 32px, 1040px); padding: 20px 0 32px; }
 }
+
+/* The editor fills available compose space; only its contents scroll. */
+.compose-body-field { flex: 1 1 0; min-height: 190px; }
+.compose-editor-pane { display: flex; min-height: 0; flex: 1 1 0; flex-direction: column; }
+.compose-editor-pane[hidden] { display: none; }
+.compose-editor-pane .rich-text-editor { min-height: 0; flex: 1 1 0; }
+.compose-editor-pane .rich-text-content { min-height: 0; flex: 1 1 0; overflow-y: auto; }
+.compose-editor-pane .rich-text-content .tiptap { min-height: 100%; }
+.compose-message-preview { display: block; width: 100%; min-height: 190px; flex: 1 1 0; border: 0; background: white; }
+@media (max-width: 760px) {
+  .mail-shell:has(.compose-backdrop:not(.is-minimized)) { display: flex; height: 100dvh; min-height: 0; flex-direction: column; overflow: hidden; }
+  .mail-shell:has(.compose-backdrop:not(.is-minimized)) .workspace-header,
+  .mail-shell:has(.compose-backdrop:not(.is-minimized)) .mail-sidebar { flex: none; }
+  .mail-shell:has(.compose-backdrop:not(.is-minimized)) .mail-content { display: none; }
+  .compose-backdrop:not(.is-minimized) { position: relative; inset: auto; min-height: 0; flex: 1 1 0; }
+  .compose-backdrop:not(.is-minimized) .compose-dialog { height: 100%; max-height: none; }
+}
+.message-remote-images { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 12px; color: var(--muted); font-size: var(--text-xs); }

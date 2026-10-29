@@ -351,6 +351,7 @@ export interface JmapEmailDetail {
   externalLinks: string[];
   bodyTruncated: boolean;
   attachments: JmapEmailAttachmentSummary[];
+  inlineImages: Array<{ cid: string; attachmentIndex: number; type: string; size: number }>;
   mailboxIds: string[];
 }
 
@@ -1780,6 +1781,18 @@ function parseEmailAttachments(value: unknown): JmapEmailAttachmentSummary[] {
   });
 }
 
+function parseInlineImages(value: unknown): JmapEmailDetail["inlineImages"] {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, MAX_EMAIL_ATTACHMENT_PARTS).flatMap((candidate, attachmentIndex) => {
+    const part = objectValue(candidate);
+    if (!part || (part.disposition !== "inline" && part.disposition != null) || typeof part.cid !== "string" || typeof part.type !== "string" || typeof part.size !== "number") return [];
+    const cid = part.cid.replace(/^<|>$/g, "");
+    const type = part.type.toLowerCase();
+    if (!/^[a-z0-9._@+-]{1,256}$/i.test(cid) || !["image/png", "image/jpeg", "image/gif", "image/webp"].includes(type) || !Number.isSafeInteger(part.size) || part.size < 0 || part.size > MAX_MAIL_ATTACHMENT_BYTES) return [];
+    return [{ cid, attachmentIndex, type, size: part.size }];
+  }).slice(0, 20);
+}
+
 function parseEmailMailboxIds(value: unknown): string[] {
   if (!value || typeof value !== "object" || Array.isArray(value)) return [];
   return Object.keys(value as Record<string, unknown>)
@@ -1918,6 +1931,7 @@ function parseJmapEmailDetail(
     externalLinks: safeHtml?.externalLinks ?? [],
     bodyTruncated: text.truncated || rawHtml.truncated,
     attachments: parseEmailAttachments(email.attachments),
+    inlineImages: parseInlineImages(email.attachments),
     mailboxIds: parseEmailMailboxIds(email.mailboxIds),
   };
 }
