@@ -5,7 +5,7 @@ scope: session-handoff
 
 # Session Handoff
 
-## 2026-10-29 safe email rendering and compose (deploying)
+## 2026-10-29 safe email rendering and compose (deployed)
 
 Messages keep a safe subset of inline styling; embedded (cid) raster images load
 through the account-bound attachment download route, and remote images stay
@@ -16,6 +16,9 @@ removed. Switching mailbox, Favorites, shared account or Settings while composin
 saves the draft first and stays in compose with an error if the save fails
 (checked in an isolated sample preview, both outcomes). Conversation row actions
 now replace the kebab and time inline. Typecheck, 259 tests and build passed.
+Deployed as webmail-client-6mykddjrp-rekad.vercel.app (Ready, aliased to
+webmail.rekad.id; home 200, anonymous settings redirects). The first attempt
+returned "Not authorized"; an immediate retry succeeded.
 Not checked: live embedded images and draft saves against a real account.
 
 ## 2026-10-29 settings workspace (deployed)
