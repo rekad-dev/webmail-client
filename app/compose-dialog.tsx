@@ -369,7 +369,6 @@ export function ComposeDialog({
   initialReplyHeaders?: ReplyHeaders;
   localPreview?: boolean;
 }) {
-  const [isExpanded, setIsExpanded] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
   const [showCc, setShowCc] = useState(false);
@@ -997,7 +996,7 @@ export function ComposeDialog({
     <div className={`compose-backdrop${isMinimized ? " is-minimized" : ""}`}>
       <section
         aria-labelledby="compose-title"
-        className={`compose-dialog${isExpanded ? " is-expanded" : ""}${isMinimized ? " is-minimized" : ""}`}
+        className={`compose-dialog${isMinimized ? " is-minimized" : " is-expanded"}`}
         onKeyDown={handleKeyDown}
         ref={dialogRef}
         role="dialog"
@@ -1009,20 +1008,11 @@ export function ComposeDialog({
             <h2 id="compose-title" ref={titleRef} tabIndex={-1}>{composeHeading}</h2>
           </div>
           <div className="compose-window-controls">
-            {/* One toggle: expands a minimized or normal window, and minimizes an expanded one. */}
             <Button className="compose-window-toggle" size="icon" variant="ghost" disabled={isLeaving}
-              aria-label={isExpanded && !isMinimized ? "Minimize compose" : "Expand compose"}
+              aria-label={isMinimized ? "Expand compose" : "Minimize compose"}
               aria-expanded={!isMinimized} aria-controls="compose-content"
-              onClick={() => {
-                if (isExpanded && !isMinimized) {
-                  onMinimizedChange(true);
-                  setIsExpanded(false);
-                  return;
-                }
-                onMinimizedChange(false);
-                setIsExpanded(true);
-              }} type="button">
-              <MailIcon name={isExpanded && !isMinimized ? "minimize" : "expand"} size={19} />
+              onClick={() => onMinimizedChange(!isMinimized)} type="button">
+              <MailIcon name={isMinimized ? "expand" : "minimize"} size={19} />
             </Button>
             <Button aria-label="Close compose" className="compose-close" size="icon" variant="ghost"
               disabled={isSending || isLeaving || attachmentUploadPending} onClick={() => void closeCompose()} type="button">

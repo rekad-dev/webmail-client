@@ -1672,11 +1672,11 @@ export function InboxClient({
           </div>
       </header>
       <aside className="mail-sidebar" aria-label="Mail navigation">
-        <Button className="sidebar-compose" disabled={!listing || isLoading} size="lg"
+        <Button className="sidebar-compose" disabled={!listing || isLoading || (isComposeOpen && !isComposeMinimized)} size="lg"
           onClick={(event) => openCompose("new", undefined, undefined, event.currentTarget)} ref={composeButtonRef}
-          aria-label={isComposeOpen ? "Restore open message" : "Compose new message"}>
+          aria-label="Compose" aria-controls={isComposeOpen ? "compose-content" : undefined}>
           <MailIcon name="plus" size={18} />
-          {isComposeOpen ? "Restore Message" : "Compose"}
+          Compose
         </Button>
 
         <div className="sidebar-navigation">

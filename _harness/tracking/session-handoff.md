@@ -5,6 +5,21 @@ scope: session-handoff
 
 # Session Handoff
 
+## 2026-10-30 compose expanded/minimized controls
+
+Compose now has two window states: expanded on first open, and minimized.
+The control next to Close shows Minimize immediately and switches to Expand
+when minimized. The sidebar button always says Compose; it is disabled while
+the composer is expanded and restores the existing mounted composer when
+minimized, preserving its fields and draft state.
+
+Validation: typecheck and all 282 tests passed. In the development-only sample
+inbox, checked initial Minimize, disabled/enabled Compose states, pointer cursor,
+keyboard Enter on Compose to expand, and expansion through the header control.
+Recipient, subject and body survived minimizing/restoring; desktop and 390px
+checks showed no document horizontal overflow. No real mailbox was accessed.
+Impeccable's detector returned no findings for the two changed files.
+
 ## 2026-10-29 sliding sessions and signing in again to a logged-out account (deployed)
 
 Commit `bb729c0` was deployed from a clean Git archive to the existing
