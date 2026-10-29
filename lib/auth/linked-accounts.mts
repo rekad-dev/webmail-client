@@ -1,7 +1,8 @@
 import { accountHandle, accountHandleMismatch } from "./account-handle.mts";
+import { APP_SESSION_MAX_AGE_SECONDS } from "./session-policy.mts";
 
 export const MAX_LINKED_ACCOUNTS = 4;
-export const LINKED_ACCOUNTS_MAX_AGE_SECONDS = 8 * 60 * 60;
+export const LINKED_ACCOUNTS_MAX_AGE_SECONDS = APP_SESSION_MAX_AGE_SECONDS;
 export const ADD_ACCOUNT_INTENT_MAX_AGE_SECONDS = 10 * 60;
 
 const prefix = process.env.NODE_ENV === "production" ? "__Host-" : "";

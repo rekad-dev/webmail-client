@@ -10,10 +10,10 @@ import {
   revokeOAuthSession,
 } from "./lib/auth/session-store.mts";
 import { createOAuthSessionCallback } from "./lib/auth/session-callback.mts";
+import { APP_SESSION_MAX_AGE_SECONDS } from "./lib/auth/session-policy.mts";
 import { getStalwartClientId } from "./lib/auth/stalwart-client-id.mts";
 import { runJmapOAuthAccessCheck } from "./lib/jmap/client.mts";
 
-const SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
 const STALWART_ISSUER = "https://mail.rekad.id";
 const STALWART_CLIENT_ID = getStalwartClientId();
 const MAIL_SCOPE = "urn:ietf:params:oauth:scope:mail";
@@ -88,7 +88,7 @@ const auth = NextAuth({
   ],
   session: {
     strategy: "jwt",
-    maxAge: SESSION_MAX_AGE_SECONDS,
+    maxAge: APP_SESSION_MAX_AGE_SECONDS,
   },
   cookies: {
     sessionToken: {

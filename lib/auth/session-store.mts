@@ -10,12 +10,12 @@ import {
 } from "./token-crypto.mts";
 import { encodeOAuthClientBasicCredentials } from "./oauth-client-auth.mts";
 import { getStalwartClientId } from "./stalwart-client-id.mts";
+import { sessionExpiry } from "./session-policy.mts";
 import {
   isInvalidGrantOAuthError,
   OAuthTokenRefreshError,
 } from "./oauth-refresh-errors.mts";
 
-const APP_SESSION_MAX_AGE_SECONDS = 8 * 60 * 60;
 const ACCESS_TOKEN_REFRESH_SKEW_MS = 45_000;
 const TOKEN_REQUEST_TIMEOUT_MS = 10_000;
 const DEFAULT_ISSUER = "https://mail.rekad.id";
@@ -263,12 +263,7 @@ export async function createOAuthSession({
   }
 
   const now = Date.now();
-  const absoluteExpiry = now + APP_SESSION_MAX_AGE_SECONDS * 1000;
-  const expiresAt = new Date(
-    refreshToken
-      ? absoluteExpiry
-      : Math.min(absoluteExpiry, accessTokenExpiresAt),
-  );
+  const expiresAt = sessionExpiry(now, accessTokenExpiresAt, Boolean(refreshToken));
   if (expiresAt.getTime() <= now) {
     throw new Error("The Stalwart access token is already expired.");
   }
