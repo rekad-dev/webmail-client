@@ -5,6 +5,25 @@ scope: session-handoff
 
 # Session Handoff
 
+## 2026-10-29 quote formatting and account switcher
+
+Compose preview now styles blockquotes, and outgoing managed message HTML adds
+trusted inline quote styling after sanitization so recipients' mail clients can
+display it. The account switcher no longer shows the background "Updating…"
+hint. Typecheck, build, and 263 tests passed. No browser or real-mail check was
+performed. These changes are local, not deployed.
+
+Still requested: return to the inbox immediately after send, continue sending
+asynchronously, and surface reliable success/failure in a toast; correlate
+Stalwart and Mailjet delivery events and retain drafts until the agreed success
+point. Existing behavior saves first and moves the draft to Sent when Stalwart
+accepts submission, retaining it on rejection or uncertainty. Mailjet's sent
+event means the destination SMTP server accepted the message, not that a human
+read it. Internal sender avatars and other linked-account avatars also remain
+unimplemented: pictures are currently private and keyed by OAuth subject, and
+there is no authorized address-to-subject directory. Preserve account isolation
+and avoid exposing credentials or private pictures when designing that flow.
+
 ## 2026-10-29 compose toggle, logged-out accounts, optimistic refresh (deploying)
 
 The compose header has one toggle: it expands a normal or minimized window and
