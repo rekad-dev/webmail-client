@@ -5,6 +5,33 @@ scope: session-handoff
 
 # Session Handoff
 
+## 2026-10-29 background sending and colleague pictures (local until deployed)
+
+Send is asynchronous. The composer saves the draft, then hands the exact
+`/api/mail/send` request to `components/mail/background-send.ts` and closes; the
+inbox opens. A sonner toast ("Sending message…" then "Message sent" or "Message
+not sent") reports the outcome. "Sent" means Stalwart accepted the submission,
+not that the recipient server received it. Unclear results (network loss,
+`unknown`, `in_progress`) are rechecked up to three times with the same attempt
+key, which the server treats as a status check; after that a persistent warning
+says to check Sent. The draft is saved before sending and only moves to Sent
+once Stalwart accepts, so every failure leaves it in Drafts ("Open draft" action
+on the toast). A leave-page warning shows while a send is in flight. Not done,
+by the user's choice: SMTP/Mailjet delivery tracking (header correlation and
+webhooks) is deferred.
+
+Pictures: migration `0005-profile-picture-email.sql` adds an `email` column to
+`app_profile_pictures` (additive; set on upload from the verified sign-in, and
+backfilled when the owner next opens the home page). Signed-in users can ask
+`GET /api/profile/pictures?address=…` (max 50) which addresses have a picture
+and fetch `GET /api/profile/picture?address=…&v=<version>`; a URL whose version
+matches is cached privately for a day, otherwise `no-cache` with an ETag. Message
+detail and thread senders use `SenderAvatar`; the account switcher uses the
+picture address and version that `/api/account/linked` now returns. Pictures
+only match the address in the sign-in's email claim, not aliases. The migration
+must run on the production database before the code that selects `email` is
+deployed.
+
 ## 2026-10-29 quote formatting and account switcher
 
 Compose preview now styles blockquotes, and outgoing managed message HTML adds

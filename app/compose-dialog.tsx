@@ -9,6 +9,7 @@ import {
   type RefObject,
 } from "react";
 import { MailIcon } from "./mail-icons";
+import type { BackgroundSendJob } from "@/components/mail/background-send";
 import { OptionSelect } from "@/components/mail/option-select";
 import {
   AlertDialog,
@@ -112,18 +113,6 @@ interface LoadedDraft extends ComposeFields {
 const MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024;
 const MAX_ATTACHMENT_TOTAL_BYTES = 20 * 1024 * 1024;
 const MAX_ATTACHMENTS = 10;
-
-type SendState =
-  | "submitted"
-  | "submitted_sent_update_pending"
-  | "rejected"
-  | "in_progress"
-  | "unknown";
-
-interface SendResponse {
-  state?: SendState;
-  error?: string;
-}
 
 function objectValue(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -329,57 +318,6 @@ function attachmentErrorMessage(error: string): string {
   return "An attachment could not be uploaded. Try choosing it again.";
 }
 
-function sendErrorMessage(error: string | undefined): string {
-  switch (error) {
-    case "sign_in_required":
-      return "Your mail session has ended. Sign in again before sending.";
-    case "invalid_request":
-    case "recipient_invalid":
-      return "Check the recipient addresses and try again.";
-    case "no_recipients":
-      return "Add at least one recipient before sending.";
-    case "too_many_recipients":
-      return "This message has too many recipients.";
-    case "message_too_large":
-      return "This message is too large to submit.";
-    case "attachment_too_large":
-      return "Each attachment must be 4 MiB or smaller, with no more than 20 MiB total.";
-    case "sender_forbidden":
-      return "Stalwart does not allow this From address.";
-    case "identity_invalid":
-      return "This sender identity is no longer available. Reload compose and try again.";
-    case "submission_unavailable":
-    case "send_forbidden":
-      return "This account is not currently allowed to submit mail through Stalwart.";
-    case "origin_not_allowed":
-      return "The request could not be verified. Reload rekad Mail and try again.";
-    case "server_rejected":
-    case "send_rejected":
-      return "Stalwart rejected this message. Check its details and try again.";
-    case "draft_changed":
-      return "This saved draft changed on the server. Reopen it before sending.";
-    case "banner_settings_unavailable":
-      return "Managed banner settings are unavailable. Your message was not submitted; try again later.";
-    default:
-      return "The message could not be submitted. Check your connection and try again.";
-  }
-}
-
-function stateMessage(state: SendState): string {
-  switch (state) {
-    case "submitted":
-      return "Submitted to Stalwart. This confirms server acceptance, not recipient delivery.";
-    case "submitted_sent_update_pending":
-      return "Stalwart accepted the submission. The Sent copy is still being updated.";
-    case "rejected":
-      return "Stalwart did not accept the message. Your text is still here.";
-    case "in_progress":
-      return "This send attempt is still being processed. Check its status before starting another.";
-    case "unknown":
-      return "Submission could not be confirmed. Check Sent before taking another action.";
-  }
-}
-
 function safeAttachmentName(value: string): string {
   return value.replace(/[\u0000-\u001f\u007f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "")
     .replace(/[\\/]/g, "_")
@@ -395,8 +333,7 @@ function attachmentSizeLabel(size: number): string {
 
 export function ComposeDialog({
   onClose,
-  onInspectSent,
-  onSubmitted,
+  onSend,
   isMinimized,
   onMinimizedChange,
   pendingRequestLabel,
@@ -414,8 +351,8 @@ export function ComposeDialog({
   localPreview = false,
 }: {
   onClose(): void;
-  onInspectSent(): void;
-  onSubmitted(): void;
+  /** Hands the saved draft to the background sender; the composer then closes. */
+  onSend(job: BackgroundSendJob): void;
   isMinimized: boolean;
   onMinimizedChange(minimized: boolean): void;
   pendingRequestLabel: string | null;
@@ -463,8 +400,6 @@ export function ComposeDialog({
     total: number;
   } | null>(null);
   const [attachmentUploadError, setAttachmentUploadError] = useState<string | null>(null);
-  const [sendState, setSendState] = useState<SendState | null>(null);
-  const [sendError, setSendError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [draftId, setDraftId] = useState<string | null>(initialDraftId ?? null);
@@ -644,11 +579,7 @@ export function ComposeDialog({
   const selectedIdentity = preflight?.identities.find(
     (identity) => identity.id === identityId,
   ) ?? null;
-  const canEdit = !isSending && !isLeaving &&
-    sendState !== "in_progress" &&
-    sendState !== "unknown" &&
-    sendState !== "submitted" &&
-    sendState !== "submitted_sent_update_pending";
+  const canEdit = !isSending && !isLeaving;
   const canSend = Boolean(
     preflight?.submissionAvailable &&
     preflight.draftsMailboxId &&
@@ -658,9 +589,6 @@ export function ComposeDialog({
     !attachmentUploadPending &&
     !attachmentUploadError,
   );
-  const canCheckStatus =
-    (sendState === "unknown" || sendState === "in_progress") &&
-    attemptKeyRef.current !== null;
 
   function queueDraftSave(
     snapshot: ComposeFields,
@@ -759,8 +687,8 @@ export function ComposeDialog({
       if (preserveUnsaved) setFormError("Please wait until the current operation finishes before switching mailboxes.");
       return;
     }
-    if (preserveUnsaved && (isLoading || loadError || sendState === "unknown" || sendState === "in_progress")) {
-      setFormError("Finish loading or check the send status before switching mailboxes.");
+    if (preserveUnsaved && (isLoading || loadError)) {
+      setFormError("Finish loading before switching mailboxes.");
       return;
     }
     // An empty or untouched message is discarded without a warning.
@@ -769,8 +697,7 @@ export function ComposeDialog({
       return;
     }
     const hasUnsavedChanges = draftRevisionRef.current > savedDraftRevisionRef.current;
-    const messageSubmitted = sendState === "submitted" || sendState === "submitted_sent_update_pending";
-    if (!hasUnsavedChanges || messageSubmitted) {
+    if (!hasUnsavedChanges) {
       onLeave();
       return;
     }
@@ -803,15 +730,14 @@ export function ComposeDialog({
 
   // Refresh and tab close cannot show the in-app dialog, so the browser's own prompt covers unsaved edits.
   useEffect(() => {
-    const messageSubmitted = sendState === "submitted" || sendState === "submitted_sent_update_pending";
-    if (localPreview || messageSubmitted || !hasDraftEdits()) return;
+    if (localPreview || !hasDraftEdits()) return;
     function warnBeforeUnload(event: BeforeUnloadEvent) {
       event.preventDefault();
       event.returnValue = "";
     }
     window.addEventListener("beforeunload", warnBeforeUnload);
     return () => window.removeEventListener("beforeunload", warnBeforeUnload);
-  }, [fields, attachments, localPreview, sendState]);
+  }, [fields, attachments, localPreview]);
 
   useEffect(() => {
     if (
@@ -819,8 +745,6 @@ export function ComposeDialog({
       !selectedIdentity ||
       !preflight?.draftsMailboxId ||
       isLoading ||
-      sendState === "submitted" ||
-      sendState === "submitted_sent_update_pending" ||
       isSending ||
       isLeaving ||
       draftRevisionRef.current <= savedDraftRevisionRef.current ||
@@ -834,7 +758,7 @@ export function ComposeDialog({
       void queueDraftSave(snapshot, attachmentsSnapshot, identityIdSnapshot, revision).catch(() => undefined);
     }, 700);
     return () => window.clearTimeout(timer);
-  }, [attachments, fields, identityId, isLoading, isSending, isLeaving, localPreview, preflight?.draftsMailboxId, sendState]);
+  }, [attachments, fields, identityId, isLoading, isSending, isLeaving, localPreview, preflight?.draftsMailboxId]);
 
   function updateFields(patch: Partial<ComposeFields>) {
     setFields((current) => ({ ...current, ...patch }));
@@ -842,8 +766,6 @@ export function ComposeDialog({
     setDraftSaveState("idle");
     setDraftSaveError(false);
     attemptKeyRef.current = null;
-    setSendState(null);
-    setSendError(null);
     setFormError(null);
   }
 
@@ -853,8 +775,6 @@ export function ComposeDialog({
     );
     setIdentityId(nextIdentityId);
     attemptKeyRef.current = null;
-    setSendState(null);
-    setSendError(null);
     setFormError(null);
     if (!nextIdentity) return;
     setFields((current) => ({
@@ -881,8 +801,6 @@ export function ComposeDialog({
     setDraftSaveState("idle");
     setDraftSaveError(false);
     attemptKeyRef.current = null;
-    setSendState(null);
-    setSendError(null);
     setFormError(null);
   }
 
@@ -1000,9 +918,7 @@ export function ComposeDialog({
     }
 
     setIsSending(true);
-    setSendError(null);
     setFormError(null);
-    if (sendState === "rejected") setSendState(null);
     try {
       await saveDraftNow(true);
     } catch {
@@ -1027,78 +943,31 @@ export function ComposeDialog({
     }
     attemptKeyRef.current = attemptKey;
 
-    try {
-      const response = await fetch("/api/mail/send", {
-        method: "POST",
-        credentials: "same-origin",
-        cache: "no-store",
-        headers: {
-          accept: "application/json",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          attemptKey,
-          draftId: savedDraftId,
-          identityId: selectedIdentity.id,
-          ...(selectedIdentity.isWildcard
-            ? { fromEmail: fields.fromEmail.trim() }
-            : {}),
-          to,
-          cc,
-          bcc,
-          subject: fields.subject,
-          body: fields.body,
-          formattedBody: fields.htmlBody ?? plainTextEditorContent(fields.body),
-          attachments,
-          inReplyTo: replyHeaders.inReplyTo,
-          references: replyHeaders.references,
-        }),
-      });
-      const body: unknown = await response.json();
-      const result = objectValue(body) as SendResponse | null;
-      if (
-        result?.state === "submitted" ||
-        result?.state === "submitted_sent_update_pending" ||
-        result?.state === "rejected" ||
-        result?.state === "in_progress" ||
-        result?.state === "unknown"
-      ) {
-        setSendState(result.state);
-        if (result.state === "rejected") {
-          // A definitive rejection is terminal for this key. A retry will
-          // first refresh the saved draft, then reserve a new send attempt.
-          attemptKeyRef.current = null;
-        }
-        setSendError(result.state === "rejected"
-          ? sendErrorMessage(result.error)
-          : null);
-        if (
-          result.state === "submitted" ||
-          result.state === "submitted_sent_update_pending"
-        ) {
-          onSubmitted();
-        }
-      } else if (response.status === 400 || response.status === 413) {
-        setSendError(sendErrorMessage(
-          typeof result?.error === "string" ? result.error : "invalid_request",
-        ));
-      } else if (response.status === 401 || response.status === 403) {
-        setSendError(sendErrorMessage(
-          typeof result?.error === "string" ? result.error : "mail_unavailable",
-        ));
-      } else if (response.status === 503 && result?.error === "banner_settings_unavailable") {
-        attemptKeyRef.current = null;
-        setSendError(sendErrorMessage("banner_settings_unavailable"));
-      } else {
-        setSendState("unknown");
-        setSendError(null);
-      }
-    } catch {
-      setSendState("unknown");
-      setSendError(null);
-    } finally {
-      setIsSending(false);
-    }
+    // The send continues in the background; the composer closes and the inbox shows the result as a toast.
+    const sentTo = [...to, ...cc, ...bcc];
+    onSend({
+      attemptKey,
+      draftId: savedDraftId,
+      subject: fields.subject,
+      recipients: sentTo,
+      body: {
+        attemptKey,
+        draftId: savedDraftId,
+        identityId: selectedIdentity.id,
+        ...(selectedIdentity.isWildcard
+          ? { fromEmail: fields.fromEmail.trim() }
+          : {}),
+        to,
+        cc,
+        bcc,
+        subject: fields.subject,
+        body: fields.body,
+        formattedBody: fields.htmlBody ?? plainTextEditorContent(fields.body),
+        attachments,
+        inReplyTo: replyHeaders.inReplyTo,
+        references: replyHeaders.references,
+      },
+    });
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
@@ -1109,8 +978,7 @@ export function ComposeDialog({
     }
   }
 
-  const currentMessageSubmitted = sendState === "submitted" || sendState === "submitted_sent_update_pending";
-  const switchNeedsIdentity = Boolean(pendingRequestLabel) && !currentMessageSubmitted &&
+  const switchNeedsIdentity = Boolean(pendingRequestLabel) &&
     !selectedIdentity && draftRevisionRef.current > savedDraftRevisionRef.current;
   const preflightUnavailable = !isLoading && !loadError && preflight &&
     (!localPreview && (!preflight.submissionAvailable ||
@@ -1172,7 +1040,7 @@ export function ComposeDialog({
           <section className="compose-switch-request" aria-label="Pending compose action">
             <p ref={switchPromptRef} role="status" tabIndex={-1}>
               <strong title={pendingRequestLabel}>{pendingRequestLabel}</strong>
-              {currentMessageSubmitted ? "The current message was submitted. Open the requested action, or keep this window." : "Save the current draft before switching, or keep editing it."}
+              Save the current draft before switching, or keep editing it.
             </p>
             {switchNeedsIdentity ? (
               <p id="compose-switch-identity-requirement">
@@ -1181,15 +1049,14 @@ export function ComposeDialog({
                   : "This draft needs an available sender identity before it can be saved and switched."}
               </p>
             ) : null}
-            {sendState === "unknown" || sendState === "in_progress" ? <p>Check the current send status before switching.</p> : null}
             <div>
               <Button className="compose-switch-confirm" type="button"
                 aria-describedby={switchNeedsIdentity ? "compose-switch-identity-requirement" : undefined}
-                disabled={switchNeedsIdentity || isLoading || Boolean(loadError) || isLeaving || isSending || attachmentUploadPending || sendState === "unknown" || sendState === "in_progress"}
+                disabled={switchNeedsIdentity || isLoading || Boolean(loadError) || isLeaving || isSending || attachmentUploadPending}
                 onClick={() => void leaveCompose(onConfirmSwitch, true)}>
-                {isLeaving ? "Saving current draft…" : currentMessageSubmitted ? "Open requested action" : "Save & switch"}
+                {isLeaving ? "Saving current draft…" : "Save & switch"}
               </Button>
-              <Button className="compose-switch-cancel" variant="outline" disabled={isLeaving} onClick={onCancelSwitch} type="button">{currentMessageSubmitted ? "Keep this window" : "Keep current draft"}</Button>
+              <Button className="compose-switch-cancel" variant="outline" disabled={isLeaving} onClick={onCancelSwitch} type="button">Keep current draft</Button>
             </div>
           </section>
         ) : null}
@@ -1444,23 +1311,6 @@ export function ComposeDialog({
               </ul>
             ) : null}
 
-            {sendError ? (
-              <p className="compose-send-error" role="alert">{sendError}</p>
-            ) : null}
-            {sendState ? (
-              <div
-                className={`compose-send-state${sendState === "rejected" ? " is-error" : ""}`}
-                role={sendState === "rejected" ? "alert" : "status"}
-                aria-live="polite"
-              >
-                <p>{stateMessage(sendState)}</p>
-                {sendState === "unknown" || sendState === "in_progress" ? (
-                  <p className="compose-help">
-                    This status check reuses the same attempt and will not start a second submission.
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
             {formError ? (
               <p className="compose-send-error" role="alert">{formError}</p>
             ) : null}
@@ -1484,8 +1334,8 @@ export function ComposeDialog({
             </p>
 
             <footer className="compose-actions">
-              <Button className="compose-send-button" size="lg" disabled={localPreview || isSending || isLeaving || (!canSend && !canCheckStatus)} title={localPreview ? "Sending is disabled in the local preview" : undefined} type="submit">
-                {isSending ? "Sending…" : sendState === "unknown" || sendState === "in_progress" ? "Check status" : "Send"}
+              <Button className="compose-send-button" size="lg" disabled={localPreview || isSending || isLeaving || !canSend} title={localPreview ? "Sending is disabled in the local preview" : undefined} type="submit">
+                {isSending ? "Sending…" : "Send"}
                 <MailIcon name="send" size={17} />
               </Button>
               <Button className="compose-attach-button" size="icon" variant="ghost" aria-label="Attach files" aria-describedby="compose-attachments-help"
@@ -1495,17 +1345,11 @@ export function ComposeDialog({
               <Button className="compose-secondary-action" variant="ghost" aria-pressed={showPreview} onClick={() => setShowPreview((value) => !value)} type="button">{showPreview ? "Edit message" : "Preview"}</Button>
               <span className="compose-format-label">Rich text</span>
               <span className="compose-action-spacer" />
-              {(sendState === "unknown" || sendState === "in_progress") ? (
-                <Button className="compose-secondary-action" variant="outline" disabled={isLeaving || isSending} onClick={onInspectSent} type="button">Open Sent</Button>
-              ) : (
-                <Button className="compose-secondary-action" variant="outline" disabled={isSending || isLeaving || attachmentUploadPending} onClick={() => void closeCompose()} type="button">
-                  {isLeaving
-                    ? localPreview ? "Closing…" : "Saving…"
-                    : localPreview || sendState === "submitted" || sendState === "submitted_sent_update_pending"
-                      ? "Close composer"
-                      : "Save & close"}
-                </Button>
-              )}
+              <Button className="compose-secondary-action" variant="outline" disabled={isSending || isLeaving || attachmentUploadPending} onClick={() => void closeCompose()} type="button">
+                {isLeaving
+                  ? localPreview ? "Closing…" : "Saving…"
+                  : localPreview ? "Close composer" : "Save & close"}
+              </Button>
             </footer>
           </form>
         ) : !isLoading && !loadError && !preflightUnavailable ? (

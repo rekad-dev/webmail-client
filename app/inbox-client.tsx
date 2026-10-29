@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState, type RefObject } from "react";
 import Image from "next/image";
 import { ComposeDialog } from "./compose-dialog";
+import { startBackgroundSend, type BackgroundSendJob } from "@/components/mail/background-send";
 import type { ComposeFields } from "./compose-dialog";
 import { plainTextEditorContent } from "./rich-text-editor";
 import { MailIcon, type MailIconName } from "./mail-icons";
@@ -1337,23 +1338,53 @@ export function InboxClient({
     setPosition(nextPosition);
   }
 
-  function selectSentMailbox() {
+  function selectMailboxByRole(role: "inbox" | "sent") {
     if (localPreview) return;
     setManualRefreshTarget(null);
-    const sentMailbox = listing?.mailboxes.find((mailbox) => mailbox.role === "sent");
-    if (!sentMailbox) return;
+    const target = listing?.mailboxes.find((mailbox) => mailbox.role === role);
+    if (!target) return;
     setListing(null);
     setError(null);
     setActionError(null);
     setPosition(0);
     setSearchInput("");
     setSearchText("");
-    setMailboxId(sentMailbox.id);
+    setMailboxId(target.id);
     setRefreshVersion((value) => value + 1);
     setOpenThreadId(null);
     setOpenEmailId(null);
     setThreadView(null);
     setEmailDetail(null);
+  }
+
+  /** Opens a saved draft, for example from a "Message not sent" notice. */
+  function openDraftById(draftId: string) {
+    const request: ComposeRequest = {
+      mode: "draft",
+      draftId,
+      trigger: composeButtonRef.current,
+      label: "Draft",
+    };
+    if (isComposeOpen) {
+      setPendingComposeRequest(request);
+      setIsComposeMinimized(false);
+      return;
+    }
+    startComposeRequest(request);
+  }
+
+  // The send outlives the composer, so its notices call back into whatever is current.
+  const sendActionsRef = useRef({ openDraftById, selectMailboxByRole });
+  sendActionsRef.current = { openDraftById, selectMailboxByRole };
+
+  function sendInBackground(job: BackgroundSendJob) {
+    startBackgroundSend(job, {
+      onSettled: () => setRefreshVersion((value) => value + 1),
+      onOpenDraft: (draftId) => sendActionsRef.current.openDraftById(draftId),
+      onOpenSent: () => sendActionsRef.current.selectMailboxByRole("sent"),
+    });
+    closeComposeDialog();
+    selectMailboxByRole("inbox");
   }
 
   function closeMessage() {
@@ -1879,11 +1910,7 @@ export function InboxClient({
           onMinimizedChange={setIsComposeMinimized}
           fallbackFocusRef={mailTitleRef}
           onClose={closeComposeDialog}
-          onInspectSent={() => {
-            closeComposeDialog();
-            selectSentMailbox();
-          }}
-          onSubmitted={selectSentMailbox}
+          onSend={sendInBackground}
           triggerRef={composeTriggerRef}
           mode={composeMode}
           initialDraftId={composeDraftId}
