@@ -5,6 +5,26 @@ scope: session-handoff
 
 # Session Handoff
 
+## 2026-10-29 sliding sessions and signing in again to a logged-out account (local, not deployed)
+
+Sessions now idle out after 7 days of non-use; `getAuthenticatedOAuthSession`
+(any mailbox call, and the 2-minute `/api/auth/status` poll) pushes `expires_at`
+back to 7 days from now, at most hourly, and never past 30 days from
+`created_at` (`lib/auth/session-policy.mts`). Sessions without a refresh token
+do not slide. `/api/auth/status` re-sends the browser's session cookie with a
+fresh Max-Age. The Auth.js JWT and cookie lifetime is now 30 days (the database
+row is what ends a session earlier), so only sessions created after this ships
+get the longer window; existing ones end at their original 7 days.
+
+A "Logged out" row in the account switcher is now a button: it posts
+`/api/account/add` with its handle (keeping the other logged-out marks), then
+starts the Stalwart sign-in with `prompt=login` and `login_hint=<label>`.
+Stalwart's `/login` page script reads `login_hint` into its username field
+(read from the page source; not exercised in a browser). Once the person signs
+in, the old mark is removed by label on the next full account list. If the
+label (JMAP username) differs from what Stalwart accepts as a username, the
+field will not be prefilled correctly.
+
 ## 2026-10-29 background sending and colleague pictures (deployed)
 
 Send is asynchronous. The composer saves the draft, then hands the exact

@@ -1194,9 +1194,8 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
 }
 .message-remote-images { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 12px; color: var(--muted); font-size: var(--text-xs); }
 
-/* Account switcher: rows respond at once, and logged-out accounts stay listed but inert. */
-.account-switcher-row:not(.is-current):not(.is-logged-out):not(:disabled) { cursor: pointer; }
-.account-switcher-row.is-logged-out { cursor: default; }
+/* Account switcher: rows respond at once; a logged-out account opens its sign-in again. */
+.account-switcher-row:not(.is-current):not(:disabled) { cursor: pointer; }
 .account-switcher-details > .account-switcher-logged-out { color: var(--danger-foreground); font-weight: 600; }
 .account-switcher-details > .account-switcher-opening { color: var(--violet-dark); font-weight: 600; }
 .account-switcher-updating { margin: 0 10px 6px; color: var(--muted); font-size: var(--text-xs); }

@@ -113,16 +113,23 @@ export function AccountMenu({
     }
   }
 
-  async function addAccount() {
+  /** Starts a new sign-in. For a logged-out account the login page opens with its address filled in. */
+  async function addAccount(returning?: LinkedAccount) {
     setPending(true);
+    setSwitchingHandle(returning?.handle ?? null);
     setMessage(null);
     try {
-      const response = await postAccount("/api/account/add", {});
+      const response = await postAccount("/api/account/add", returning ? { handle: returning.handle } : {});
       if (!response.ok) throw new Error("add_failed");
       // The new sign-in replaces this tab's cookie; other tabs reload when it finishes.
-      await signIn("stalwart", { redirectTo: "/" }, { prompt: "login" });
+      await signIn(
+        "stalwart",
+        { redirectTo: "/" },
+        { prompt: "login", ...(returning ? { login_hint: returning.label } : {}) },
+      );
     } catch {
-      setMessage("Another account could not be added. Try again.");
+      setMessage(returning ? "That account could not be signed in again. Try again." : "Another account could not be added. Try again.");
+      setSwitchingHandle(null);
       setPending(false);
     }
   }
@@ -176,13 +183,14 @@ export function AccountMenu({
                     <span className="visually-hidden">Current account</span>
                   </div>
                 ) : account.lapsed ? (
-                  <div aria-disabled="true" className="account-switcher-row is-logged-out">
+                  <Button aria-busy={switchingHandle === account.handle || undefined} aria-label={`Sign in again as ${account.label}`} className="account-switcher-row is-logged-out h-auto justify-start px-2" disabled={pending} onClick={() => void addAccount(account)} variant="ghost">
                     <ProfileAvatar className="account-switcher-avatar size-10 rounded-md" fallbackClassName="rounded-md" name={account.label} version={null} />
                     <span className="account-switcher-details">
                       <strong>{account.label}</strong>
-                      <span className="account-switcher-logged-out">Logged out</span>
+                      <span className="account-switcher-logged-out">{switchingHandle === account.handle ? "Opening sign-in…" : "Logged out · sign in again"}</span>
                     </span>
-                  </div>
+                    {switchingHandle === account.handle ? <span className="account-switcher-spinner" aria-hidden="true" /> : null}
+                  </Button>
                 ) : (
                   <Button aria-label={`Switch to ${account.label}`} aria-busy={switchingHandle === account.handle || undefined} className="account-switcher-row h-auto justify-start px-2" disabled={pending} onClick={() => void switchTo(account.handle)} variant="ghost">
                     <ProfileAvatar address={account.pictureAddress} className="account-switcher-avatar size-10 rounded-md" fallbackClassName="rounded-md" name={account.label} version={account.pictureVersion} />

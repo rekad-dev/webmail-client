@@ -86,7 +86,9 @@ production, Auth.js completed the registered OAuth callback, `/api/auth/session`
 returned an active session, and `/api/auth/status` returned `200` with
 `authenticated: true` and `mailboxAccess: true`; the status check performs
 read-only OAuth-token `Mailbox/get`. The returned session expiry was in the
-future and within the eight-hour app cap. After normal sign-out, the session
+future (that check predates the current policy: sessions now idle out after
+seven days of non-use, each mailbox access pushes the end back, and none lasts
+longer than thirty days from sign-in). After normal sign-out, the session
 endpoint returned `200` anonymously, status returned `401`, and a read-only
 database aggregate confirmed the recent app session row was deleted.
 

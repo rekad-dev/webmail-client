@@ -267,3 +267,19 @@ test("lists each account's picture address and version, and survives a picture l
     [handle(2), undefined, undefined],
   ]);
 });
+
+test("signing in again to a logged-out account keeps its mark until the sign-in finishes", async () => {
+  const { handlers } = setup({ valid: [1] });
+  const response = await handlers.POST_add(recordRequest("/api/account/add", 1, [labelRecord(1, "a"), labelRecord(3, "c")], { handle: handle(3) }));
+  assert.equal(response.status, 200);
+  assert.match(cookieNamed(response, LINKED_ACCOUNTS_COOKIE_NAME) ?? "", new RegExp(token(3).replace(/\./g, "\\.")));
+  assert.ok(cookieNamed(response, ADD_ACCOUNT_INTENT_COOKIE_NAME));
+});
+
+test("a logged-out mark disappears once the same person is signed in again", async () => {
+  // Session 1 ended; session 2 is the same person's new login (the stub labels it user-2@rekad.id).
+  const { handlers } = setup({ valid: [2] });
+  const response = await handlers.GET(recordRequest("/api/account/linked", 2, [labelRecord(1, "user-2@rekad.id"), labelRecord(2, "user-2@rekad.id")]));
+  const body = await response.json();
+  assert.deepEqual(body.accounts.map((account: { handle: string }) => account.handle), [handle(2)]);
+});

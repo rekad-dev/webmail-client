@@ -266,6 +266,9 @@ export function createLinkedAccountsHandlers(deps: LinkedAccountsDependencies) {
         }),
       );
       for (const { entry, label } of resolved) entry.label = label;
+      // Someone who signed in again is no longer logged out, so their old mark goes.
+      const signedInLabels = new Set(resolved.flatMap(({ label }) => label ? [label] : []));
+      state.lapsed = state.lapsed.filter((account) => !signedInLabels.has(account.label));
       const cookies = [...linkedCookie(state.entries, state.lapsed)];
       if (state.hadIntent) cookies.push(deleteCookie(ADD_ACCOUNT_INTENT_COOKIE_NAME));
       const accounts = [
@@ -293,10 +296,17 @@ export function createLinkedAccountsHandlers(deps: LinkedAccountsDependencies) {
       const entries = state.entries.some((entry) => entry.sessionId === state.active?.sessionId)
         ? state.entries
         : [...state.entries, state.active];
+      // Signing in again to a logged-out account keeps the marks, so cancelling the sign-in loses nothing.
+      const body = await readJsonBody(request);
+      const relogin = typeof body?.handle === "string" && state.lapsed.some((account) => account.handle === body.handle);
       if (entries.length >= MAX_LINKED_ACCOUNTS) return respond({ error: "account_limit" }, 409);
-      // Adding an account replaces the logged-out marks, so the new account always has room.
+      // Adding a new account replaces the logged-out marks, so it always has room.
+      const records: LinkedRecord[] = [
+        ...entries.map((entry) => ({ token: entry.token, handle: entry.handle, label: entry.label })),
+        ...(relogin ? state.lapsed : []),
+      ];
       return respond({ ok: true }, 200, [
-        serializeCookie(LINKED_ACCOUNTS_COOKIE_NAME, serializeLinkedRecords(entries.map((entry) => ({ token: entry.token, handle: entry.handle, label: entry.label }))), LINKED_ACCOUNTS_MAX_AGE_SECONDS),
+        serializeCookie(LINKED_ACCOUNTS_COOKIE_NAME, serializeLinkedRecords(records), LINKED_ACCOUNTS_MAX_AGE_SECONDS),
         serializeCookie(ADD_ACCOUNT_INTENT_COOKIE_NAME, "1", ADD_ACCOUNT_INTENT_MAX_AGE_SECONDS),
       ]);
     } catch {

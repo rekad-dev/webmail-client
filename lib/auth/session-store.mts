@@ -10,7 +10,7 @@ import {
 } from "./token-crypto.mts";
 import { encodeOAuthClientBasicCredentials } from "./oauth-client-auth.mts";
 import { getStalwartClientId } from "./stalwart-client-id.mts";
-import { sessionExpiry } from "./session-policy.mts";
+import { sessionExpiry, slidingExpiry } from "./session-policy.mts";
 import {
   isInvalidGrantOAuthError,
   OAuthTokenRefreshError,
@@ -26,6 +26,7 @@ interface SessionRow {
   session_hash: string;
   subject: string;
   encrypted_tokens: string;
+  created_at: Date | string;
   expires_at: Date | string;
 }
 
@@ -339,7 +340,7 @@ export async function getAuthenticatedOAuthSession(
 
   return sql.begin(async (transaction) => {
     const rows = await transaction<SessionRow[]>`
-      SELECT session_hash, subject, encrypted_tokens, expires_at
+      SELECT session_hash, subject, encrypted_tokens, created_at, expires_at
       FROM app_oauth_sessions
       WHERE session_hash = ${sessionHash}
         AND expires_at > now()
@@ -348,9 +349,24 @@ export async function getAuthenticatedOAuthSession(
     const row = rows[0];
     if (!row) return null;
 
-    const expiresAt = dateFromDatabase(row.expires_at);
+    let expiresAt = dateFromDatabase(row.expires_at);
     const tokens = decryptOAuthTokens(row.session_hash, row.encrypted_tokens);
     const now = Date.now();
+
+    // Using the session keeps it alive: push its end back, within the absolute limit.
+    const extended = slidingExpiry({
+      now,
+      createdAt: dateFromDatabase(row.created_at),
+      expiresAt,
+      hasRefreshToken: Boolean(tokens.refreshToken),
+    });
+    if (extended) {
+      await transaction`
+        UPDATE app_oauth_sessions SET expires_at = ${extended}
+        WHERE session_hash = ${sessionHash}
+      `;
+      expiresAt = extended;
+    }
 
     if (tokens.accessTokenExpiresAt > now + ACCESS_TOKEN_REFRESH_SKEW_MS) {
       return {

@@ -4,6 +4,8 @@ import {
 } from "@/lib/auth/session-store.mts";
 import { accountHandleMismatch } from "@/lib/auth/account-handle.mts";
 import { readCookieOAuthSessionId } from "@/lib/auth/request-session.mts";
+import { AUTH_SESSION_COOKIE_NAME } from "@/lib/auth/cookie.mts";
+import { readCookie, serializeCookie } from "@/lib/auth/linked-accounts.mts";
 import { runJmapOAuthAccessCheck } from "@/lib/jmap/client.mts";
 
 export const runtime = "nodejs";
@@ -63,10 +65,17 @@ export async function GET(request: Request): Promise<Response> {
       );
     }
 
-    return jsonResponse(
+    const response = jsonResponse(
       { authenticated: true, mailboxAccess: true },
       200,
     );
+    // Using the app also keeps the browser's copy of the session cookie alive for as long as the server session.
+    const token = readCookie(request, AUTH_SESSION_COOKIE_NAME);
+    const secondsLeft = Math.floor((session.expiresAt.getTime() - Date.now()) / 1000);
+    if (token && secondsLeft > 0) {
+      response.headers.append("Set-Cookie", serializeCookie(AUTH_SESSION_COOKIE_NAME, token, secondsLeft));
+    }
+    return response;
   } catch {
     return jsonResponse(
       {
