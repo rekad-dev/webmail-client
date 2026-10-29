@@ -22,6 +22,11 @@ the anchor. A direct content-preparation check confirmed the link survives in
 outgoing HTML and plain text. Typecheck and 282 tests passed; the design
 detector returned no findings. No real message was sent or mailbox accessed.
 
+Deployed commit `511373d` from a clean archive to `webmail.rekad.id` as
+`dpl_3Et2CbW9EohJyoVYcg5uLFAmU1MJ` (READY). Vercel production build passed;
+anonymous HTTP checks returned home 200 and identities 401. The link flow was
+verified in the local sample, not against an authenticated production mailbox.
+
 ## 2026-10-30 compose expanded/minimized controls
 
 Compose now has two window states: expanded on first open, and minimized.
