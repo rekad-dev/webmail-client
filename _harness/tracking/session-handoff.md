@@ -5,7 +5,7 @@ scope: session-handoff
 
 # Session Handoff
 
-## 2026-10-29 background sending and colleague pictures (local until deployed)
+## 2026-10-29 background sending and colleague pictures (deployed)
 
 Send is asynchronous. The composer saves the draft, then hands the exact
 `/api/mail/send` request to `components/mail/background-send.ts` and closes; the
@@ -29,8 +29,12 @@ matches is cached privately for a day, otherwise `no-cache` with an ETag. Messag
 detail and thread senders use `SenderAvatar`; the account switcher uses the
 picture address and version that `/api/account/linked` now returns. Pictures
 only match the address in the sign-in's email claim, not aliases. The migration
-must run on the production database before the code that selects `email` is
-deployed.
+was run on the production database (verified: `email` column exists) with the
+user's approval, then the code was deployed as `webmail-client-1t8vcdmqv`
+(Ready, aliased to webmail.rekad.id; home 200, `/settings` redirects, picture
+routes 401 anonymously). Checked only in a local preview: the toast position
+(desktop). Not checked against a real account: a real send, the toasts after
+it, and colleague pictures.
 
 ## 2026-10-29 quote formatting and account switcher
 
