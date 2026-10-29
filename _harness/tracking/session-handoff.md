@@ -5,6 +5,15 @@ scope: session-handoff
 
 # Session Handoff
 
+## 2026-10-29 settings workspace (deployed)
+
+Commit `a6f93c6` is deployed as `dpl_F9ZCsLwt8mL2k6UHWM5N4WNcBZAk`,
+Ready and aliased to `https://webmail.rekad.id`. The production build passed;
+anonymous checks returned 200 for home and redirected `/settings` to sign-in.
+The earlier local build, typecheck and 254 tests passed, and the sample preview
+was checked on desktop and mobile. Authenticated settings actions have not
+been checked on production.
+
 ## 2026-10-29 account switcher visual correction (deployed)
 
 Commit `3cef79b` fixes account menu styling overridden by Tailwind utilities.
