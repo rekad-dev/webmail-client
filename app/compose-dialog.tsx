@@ -1393,7 +1393,7 @@ export function ComposeDialog({
                     const content = `${header}${fields.htmlBody ?? plainTextEditorContent(fields.body)}${footer}`
                       .replaceAll("cid:rekad-header", `${origin}/mail-header.png`)
                       .replaceAll("cid:rekad-instagram", `${origin}/mail-instagram.png`);
-                    return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${origin}; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'"></head><body>${content}</body></html>`;
+                    return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${origin}; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'"><style>blockquote { margin:0.75em 0; border-left:3px solid #b4b4bd; padding-left:12px; color:#555555; }</style></head><body>${content}</body></html>`;
                   })()}
                 />
               ) : null}

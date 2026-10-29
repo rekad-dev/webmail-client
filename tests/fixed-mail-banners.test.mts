@@ -89,5 +89,6 @@ test("the responsive branded table keeps reply history inside its centered frame
   const footer = htmlBody.indexOf("Copyright");
   const end = htmlBody.indexOf("</table>");
   assert.ok(frame < reply && reply < history && history < footer && footer < end);
-  assert.match(htmlBody, /<blockquote><p>Previous reply<\/p><blockquote><p>Earlier message<\/p><\/blockquote><\/blockquote>/);
+  assert.match(htmlBody, /<blockquote style="[^"]*border-left:3px solid #b4b4bd;[^"]*"><p>Previous reply<\/p><blockquote style="[^"]*border-left:3px solid #b4b4bd;[^"]*"><p>Earlier message<\/p><\/blockquote><\/blockquote>/);
+  assert.equal(stripManagedBannerHtml(htmlBody), "<p>New reply</p><p>On Monday, Sender wrote:</p><blockquote><p>Previous reply</p><blockquote><p>Earlier message</p></blockquote></blockquote>");
 });

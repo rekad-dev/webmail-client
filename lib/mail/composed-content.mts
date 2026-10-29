@@ -104,7 +104,9 @@ export function buildManagedMessageHtml(
   return [
     versionMarker(banners.version),
     wrapBanner("header", banners.headerHtml),
-    userHtml,
+    // Apply trusted inline styling after sanitization so mail clients that
+    // strip stylesheets still display quoted text distinctly.
+    userHtml.replace(/<blockquote>/g, '<blockquote style="margin:0.75em 0;border-left:3px solid #b4b4bd;padding-left:12px;color:#555555;">'),
     wrapBanner("footer", banners.footerHtml),
   ].join("");
 }
