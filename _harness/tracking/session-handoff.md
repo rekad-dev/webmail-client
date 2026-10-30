@@ -22,6 +22,13 @@ overflow. The existing phone footer can overlap editor content until scrolled.
 No real mail was accessed or sent. The design detector returned no findings
 for the changed editor component.
 
+Code commit `5abc116` is ready but NOT deployed. A clean archive at
+`/tmp/rekad-link-label-release.bMmhNO` was linked to the existing
+`rekad/webmail-client` project; `vercel deploy --prod --yes` returned
+`Not authorized`. `vercel whoami` returned `dev-31894631`. Local production
+build passed afterward. Restore access to that existing project, then retry
+this exact release; do not change account, token, or project as a workaround.
+
 ## 2026-10-30 composer link control
 
 The rich-text link editor was a nested form inside the compose form; applying
