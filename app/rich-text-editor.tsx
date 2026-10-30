@@ -36,6 +36,7 @@ export function RichTextEditor({
   const lastExternalValue = useRef(value);
   const [linkEditorOpen, setLinkEditorOpen] = useState(false);
   const [linkHref, setLinkHref] = useState("");
+  const [linkText, setLinkText] = useState("");
   const [linkError, setLinkError] = useState("");
   const editor = useEditor({
     extensions: [
@@ -78,7 +79,10 @@ export function RichTextEditor({
 
   function openLinkEditor() {
     if (!editor || disabled) return;
+    editor.chain().extendMarkRange("link").run();
+    const { from, to } = editor.state.selection;
     setLinkHref(editor.getAttributes("link").href ?? "");
+    setLinkText(editor.state.doc.textBetween(from, to, " "));
     setLinkError("");
     setLinkEditorOpen(true);
   }
@@ -92,11 +96,17 @@ export function RichTextEditor({
         parsed.username || parsed.password ||
         (parsed.protocol === "mailto:" && !parsed.pathname)
       ) throw new Error("invalid_link");
-      if (editor.state.selection.empty && !editor.isActive("link")) {
+      const { from, to, empty } = editor.state.selection;
+      const selectedText = editor.state.doc.textBetween(from, to, " ");
+      const displayText = linkText.trim();
+      if ((displayText && displayText !== selectedText) || (empty && !editor.isActive("link"))) {
         editor.chain().focus().insertContent({
           type: "text",
-          text: parsed.href,
-          marks: [{ type: "link", attrs: { href: parsed.href } }],
+          text: displayText || parsed.href,
+          marks: [
+            ...editor.state.selection.$from.marks().filter((mark) => mark.type.name !== "link").map((mark) => mark.toJSON()),
+            { type: "link", attrs: { href: parsed.href } },
+          ],
         }).run();
       } else {
         editor.chain().focus().extendMarkRange("link").setLink({ href: parsed.href }).run();
@@ -185,6 +195,7 @@ export function RichTextEditor({
               editor.commands.focus();
             }
           }}>
+          <div className="rich-text-link-field">
           <label htmlFor={`${id}-link`}>Link address</label>
           <Input
             autoComplete="url"
@@ -198,6 +209,19 @@ export function RichTextEditor({
             type="text"
             value={linkHref}
           />
+          </div>
+          <div className="rich-text-link-field">
+            <label htmlFor={`${id}-link-text`}>Display text (optional)</label>
+            <Input
+              autoComplete="off"
+              disabled={disabled}
+              id={`${id}-link-text`}
+              onChange={(event) => setLinkText(event.target.value)}
+              placeholder="Selected text or link address"
+              type="text"
+              value={linkText}
+            />
+          </div>
           <Button disabled={disabled} onClick={saveLink} size="sm">Apply link</Button>
           <Button disabled={disabled} onClick={() => {
             editor.chain().focus().extendMarkRange("link").unsetLink().run();

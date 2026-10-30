@@ -5,6 +5,23 @@ scope: session-handoff
 
 # Session Handoff
 
+## 2026-10-30 optional hyperlink display text
+
+The link editor now includes Display text (optional). Opening it preloads the
+selected text or the full existing link text. Custom text replaces that range
+with a safely encoded link while preserving inline marks at its start. If
+blank, selected/existing text stays unchanged; with no selection, the URL is
+inserted. Link address and display text have separate labeled inputs.
+
+Typecheck and 282 tests passed. Local sample browser checks confirmed custom
+text (including literal HTML characters), editing and prefilling an existing
+label, blank-field fallback for selected text and an empty cursor, Enter from
+both inputs, and zero enclosing-form submit events. Desktop and 390px layouts
+were inspected; phone input/application worked without document horizontal
+overflow. The existing phone footer can overlap editor content until scrolled.
+No real mail was accessed or sent. The design detector returned no findings
+for the changed editor component.
+
 ## 2026-10-30 composer link control
 
 The rich-text link editor was a nested form inside the compose form; applying

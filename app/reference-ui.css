@@ -421,6 +421,7 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
 .rich-text-content .tiptap p.is-editor-empty:first-child::before { float: left; height: 0; color: var(--muted); content: attr(data-placeholder); pointer-events: none; }
 .rich-text-link-form { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; border-bottom: 1px solid var(--line); padding: 7px; }
 .rich-text-link-form label { font-size: var(--text-xs); }
+.rich-text-link-field { display: flex; flex: 1 1 220px; min-width: 0; flex-direction: column; gap: 4px; }
 .rich-text-link-form input { min-width: 150px; min-height: 40px; flex: 1; border: 1px solid var(--input); border-radius: var(--radius-sm); padding: 0 8px; }
 .rich-text-link-form [role="alert"] { width: 100%; color: var(--danger-foreground); font-size: var(--text-xs); }
 .managed-banner-preview { display: block; flex: none; width: 100%; max-width: 600px; height: auto; border: 1px solid var(--line); border-radius: var(--radius-md); }
