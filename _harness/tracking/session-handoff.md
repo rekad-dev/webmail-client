@@ -24,6 +24,12 @@ stripping/rebuilding without duplication, ordinary quotes and invalid/nested
 markers. The design detector reported no findings. No real mailbox was
 accessed or message sent.
 
+Local production build passed. Code commit `4b22868` is NOT deployed:
+`vercel deploy --prod --yes` from the clean release archive at
+`/tmp/rekad-reply-layout-release.Loa0p9` returned `Not authorized` for the
+existing `rekad/webmail-client` project on 2026-11-03. Restore access before
+retrying; no alternate account, token, or project was attempted.
+
 ## 2026-10-30 optional hyperlink display text
 
 The link editor now includes Display text (optional). Opening it preloads the
