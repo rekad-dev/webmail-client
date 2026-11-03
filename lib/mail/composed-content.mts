@@ -2,14 +2,10 @@ import { convert } from "html-to-text";
 import sanitizeHtml from "sanitize-html";
 
 import { getFixedMailBanners } from "./fixed-mail-banners.mts";
+import { buildManagedMessageHtml, type ManagedMailBanners } from "./message-layout.mts";
+export { buildManagedMessageHtml, type ManagedMailBanners } from "./message-layout.mts";
 
 export const MAX_COMPOSED_HTML_BYTES = 256 * 1024;
-
-export interface ManagedMailBanners {
-  headerHtml: string;
-  footerHtml: string;
-  version: number;
-}
 
 const COMPOSE_TAGS = [
   "a",
@@ -37,7 +33,10 @@ const COMPOSE_TAGS = [
 function sanitizeHtmlValue(value: string): string {
   return sanitizeHtml(value, {
     allowedTags: [...COMPOSE_TAGS],
-    allowedAttributes: { a: ["href"] },
+    allowedAttributes: {
+      a: ["href"],
+      blockquote: [{ name: "data-rekad-reply-history", values: ["true"] }],
+    },
     allowedSchemes: ["http", "https", "mailto"],
     allowedSchemesByTag: { a: ["http", "https", "mailto"] },
     allowedSchemesAppliedToAttributes: ["href"],
@@ -82,33 +81,6 @@ export function plainTextToComposedHtml(value: string): string {
   return value.split(/\n{2,}/).map((paragraph) =>
     `<p>${paragraph.split("\n").map(escapeHtml).join("<br>") || "<br>"}</p>`,
   ).join("");
-}
-
-function versionMarker(version: number): string {
-  return `<!--rekad-banner-version:${version}-->`;
-}
-
-function wrapBanner(
-  placement: "header" | "footer",
-  html: string,
-): string {
-  if (!html) return "";
-  return `<!--rekad-banner-${placement}-start-->${html}<!--/rekad-banner-${placement}-->`;
-}
-
-/** Banner markup must come from fixed-mail-banners.mts; it is not sanitized here. */
-export function buildManagedMessageHtml(
-  userHtml: string,
-  banners: ManagedMailBanners,
-): string {
-  return [
-    versionMarker(banners.version),
-    wrapBanner("header", banners.headerHtml),
-    // Apply trusted inline styling after sanitization so mail clients that
-    // strip stylesheets still display quoted text distinctly.
-    userHtml.replace(/<blockquote>/g, '<blockquote style="margin:0.75em 0;border-left:3px solid #b4b4bd;padding-left:12px;color:#555555;">'),
-    wrapBanner("footer", banners.footerHtml),
-  ].join("");
 }
 
 export function stripManagedBannerHtml(value: string): string {

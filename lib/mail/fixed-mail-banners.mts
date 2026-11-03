@@ -7,7 +7,7 @@ import { HEADER_IMAGE_CID, INSTAGRAM_ICON_CID } from "./fixed-mail-images.mts";
  * added after message content is sanitized. Bump the version whenever this
  * markup changes so older saved drafts are rebuilt before they can be sent.
  */
-export const FIXED_BANNER_VERSION = 3;
+export const FIXED_BANNER_VERSION = 4;
 
 const WEBSITE_URL = "https://www.rekad.id";
 const INSTAGRAM_URL = "https://www.instagram.com/rekad.id";

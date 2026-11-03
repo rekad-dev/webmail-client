@@ -5,6 +5,25 @@ scope: session-handoff
 
 # Session Handoff
 
+## 2026-11-03 footer before quoted reply history
+
+New replies now assemble as header, authored reply, footer, then reply
+attribution and quoted history outside the closed branded frame. The app
+marks its generated reply blockquote; Tiptap preserves that marker while
+editing, and the draft sanitizer allows only its exact `true` value.
+`lib/mail/message-layout.mts` provides one layout function for preview and
+outgoing HTML. Plain text follows the same order. Banner version is now 4.
+Ordinary authored quotes, forwards, and older unmarked reply drafts retain
+their existing layout; no heuristic guesses which unmarked text is history.
+
+Typecheck, 285 tests, and local sample browser checks passed. The browser
+confirmed attribution is marked, preview history is outside/after the frame,
+footer precedes history, and the marker survives minimizing/restoring.
+Regression tests cover HTML/plain text order, nested quotes, draft banner
+stripping/rebuilding without duplication, ordinary quotes and invalid/nested
+markers. The design detector reported no findings. No real mailbox was
+accessed or message sent.
+
 ## 2026-10-30 optional hyperlink display text
 
 The link editor now includes Display text (optional). Opening it preloads the

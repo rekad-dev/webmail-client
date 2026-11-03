@@ -23,6 +23,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { plainTextEditorContent, RichTextEditor } from "./rich-text-editor";
+import { buildManagedMessageHtml } from "@/lib/mail/message-layout.mts";
 
 interface EmailAddress {
   name: string | null;
@@ -1247,7 +1248,9 @@ export function ComposeDialog({
                     const header = managedBanners?.headerHtml ?? '<div style="padding:24px;background:#f6f6f6"><table style="max-width:600px;width:100%;margin:auto;background:white"><tr><td><img src="cid:rekad-header" alt="rekad" style="width:100%"></td></tr><tr><td style="padding:24px">';
                     const footer = managedBanners?.footerHtml ?? '</td></tr><tr><td style="text-align:center;padding:24px;color:#777">rekad</td></tr></table></div>';
                     const origin = typeof window === "undefined" ? "" : window.location.origin;
-                    const content = `${header}${fields.htmlBody ?? plainTextEditorContent(fields.body)}${footer}`
+                    const content = buildManagedMessageHtml(fields.htmlBody ?? plainTextEditorContent(fields.body), {
+                      headerHtml: header, footerHtml: footer, version: managedBanners?.version ?? 0,
+                    })
                       .replaceAll("cid:rekad-header", `${origin}/mail-header.png`)
                       .replaceAll("cid:rekad-instagram", `${origin}/mail-instagram.png`);
                     return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${origin}; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'"><style>blockquote { margin:0.75em 0; border-left:3px solid #b4b4bd; padding-left:12px; color:#555555; }</style></head><body>${content}</body></html>`;

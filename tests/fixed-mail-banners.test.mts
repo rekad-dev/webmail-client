@@ -6,6 +6,7 @@ import {
   composedHtmlToText,
   managedBannerVersion,
   prepareManagedMessageContent,
+  sanitizeComposedHtml,
   sanitizeStoredManagedMessageHtml,
   stripManagedBannerHtml,
 } from "../lib/mail/composed-content.mts";
@@ -77,7 +78,7 @@ test("stored banner sections are replaced by the fixed markup", () => {
 });
 
 
-test("the responsive branded table keeps reply history inside its centered frame", () => {
+test("unmarked quotations stay inside the branded message before the footer", () => {
   const { htmlBody } = prepareManagedMessageContent({
     body: "",
     htmlBody: "<p>New reply</p><p>On Monday, Sender wrote:</p><blockquote><p>Previous reply</p><blockquote><p>Earlier message</p></blockquote></blockquote>",
@@ -91,4 +92,35 @@ test("the responsive branded table keeps reply history inside its centered frame
   assert.ok(frame < reply && reply < history && history < footer && footer < end);
   assert.match(htmlBody, /<blockquote style="[^"]*border-left:3px solid #b4b4bd;[^"]*"><p>Previous reply<\/p><blockquote style="[^"]*border-left:3px solid #b4b4bd;[^"]*"><p>Earlier message<\/p><\/blockquote><\/blockquote>/);
   assert.equal(stripManagedBannerHtml(htmlBody), "<p>New reply</p><p>On Monday, Sender wrote:</p><blockquote><p>Previous reply</p><blockquote><p>Earlier message</p></blockquote></blockquote>");
+});
+
+test("reply attribution and nested history follow the footer and closed branded frame", () => {
+  const userHtml = '<p>New reply</p><blockquote data-rekad-reply-history="true"><p>On Monday, Sender wrote:</p><p>Previous reply</p><blockquote><p>Earlier message</p></blockquote></blockquote>';
+  const { htmlBody, body } = prepareManagedMessageContent({ body: "", htmlBody: userHtml }, banners);
+  assert.ok(htmlBody.indexOf("New reply") < htmlBody.indexOf("Copyright"));
+  assert.ok(htmlBody.indexOf("Copyright") < htmlBody.indexOf("</table>"));
+  assert.ok(htmlBody.indexOf("</table>") < htmlBody.indexOf("On Monday"));
+  assert.ok(htmlBody.indexOf("On Monday") < htmlBody.indexOf("Earlier message"));
+  assert.ok(body.indexOf("New reply") < body.indexOf("Copyright"));
+  assert.ok(body.indexOf("Copyright") < body.indexOf("On Monday"));
+  assert.equal(stripManagedBannerHtml(htmlBody), userHtml);
+  const rebuilt = sanitizeStoredManagedMessageHtml(htmlBody);
+  assert.equal(stripManagedBannerHtml(rebuilt), userHtml);
+  assert.equal((rebuilt.match(/Copyright/g) ?? []).length, 1);
+  assert.ok(rebuilt.indexOf("Copyright") < rebuilt.indexOf("On Monday"));
+});
+
+test("a nested reply marker cannot split the surrounding authored quote or break the frame", () => {
+  const html = '<p>New text</p><blockquote><p>Authored quote</p><blockquote data-rekad-reply-history="true"><p>Nested history</p></blockquote></blockquote>';
+  const { htmlBody } = prepareManagedMessageContent({ body: "", htmlBody: html }, banners);
+  assert.ok(htmlBody.indexOf("Nested history") < htmlBody.indexOf("Copyright"));
+  assert.equal(stripManagedBannerHtml(htmlBody), html);
+});
+
+test("invalid reply markers cannot move text outside the frame or retain arbitrary attributes", () => {
+  const userHtml = sanitizeComposedHtml('<blockquote data-rekad-reply-history="false" onclick="bad()"><p>Text</p></blockquote>');
+  assert.doesNotMatch(userHtml, /onclick|="true"/);
+  const { htmlBody } = prepareManagedMessageContent({ body: "", htmlBody: userHtml }, banners);
+  assert.ok(htmlBody.indexOf("Text") < htmlBody.indexOf("Copyright"));
+  assert.equal(sanitizeComposedHtml('<p data-rekad-reply-history="true">Text</p>'), '<p>Text</p>');
 });

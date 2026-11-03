@@ -1295,14 +1295,12 @@ export function InboxClient({
     const quote = (detail.textBody ?? "").split("\n").map((line) => `> ${line}`).join("\n");
     const date = formatDetailDate(detail.sentAt ?? detail.receivedAt) ?? "the previous message";
     const author = detail.from[0] ? addressLabel(detail.from[0]) : "the sender";
-    const quotedHtml = detail.htmlBody
-      ? `<blockquote>${detail.htmlBody}</blockquote>`
-      : `<blockquote>${plainTextEditorContent(detail.textBody ?? "")}</blockquote>`;
+    const quotedHtml = `<blockquote data-rekad-reply-history="true">${plainTextEditorContent(`On ${date}, ${author} wrote:`)}${detail.htmlBody ?? plainTextEditorContent(detail.textBody ?? "")}</blockquote>`;
     openCompose("reply", {
       to: targets.map((address) => address.email).join(", "),
       subject: replySubject,
       body: `\n\nOn ${date}, ${author} wrote:\n${quote}`,
-      htmlBody: `<p><br></p>${plainTextEditorContent(`On ${date}, ${author} wrote:`)}${quotedHtml}`,
+      htmlBody: `<p><br></p>${quotedHtml}`,
     }, {
       inReplyTo: originalId ? [originalId] : [],
       references,

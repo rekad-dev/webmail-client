@@ -1,11 +1,29 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { EditorContent, useEditor } from "@tiptap/react";
+import { EditorContent, Extension, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { OptionSelect } from "@/components/mail/option-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { REPLY_HISTORY_ATTRIBUTE } from "@/lib/mail/message-layout.mts";
+
+// Preserve the reply boundary through editing and draft save/reopen cycles.
+const ReplyHistory = Extension.create({
+  name: "replyHistory",
+  addGlobalAttributes() {
+    return [{
+      types: ["blockquote"],
+      attributes: {
+        replyHistory: {
+          default: null,
+          parseHTML: (element) => element.getAttribute(REPLY_HISTORY_ATTRIBUTE) === "true" ? true : null,
+          renderHTML: (attributes) => attributes.replyHistory ? { [REPLY_HISTORY_ATTRIBUTE]: "true" } : {},
+        },
+      },
+    }];
+  },
+});
 
 interface RichTextEditorProps {
   id: string;
@@ -40,6 +58,7 @@ export function RichTextEditor({
   const [linkError, setLinkError] = useState("");
   const editor = useEditor({
     extensions: [
+      ReplyHistory,
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
         link: { openOnClick: false },
