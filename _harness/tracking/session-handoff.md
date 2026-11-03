@@ -5,6 +5,22 @@ scope: session-handoff
 
 # Session Handoff
 
+## 2026-11-03 production deployment after access restoration
+
+The user restored Vercel access and explicitly requested deployment. Code
+commit `4b22868` was deployed from a clean Git archive to the existing
+`rekad/webmail-client` project, excluding untracked `reference.png`.
+Deployment `dpl_6aYrGcYzbM863rSFYk5Qu6UYbznh` is READY and aliased to
+`https://webmail.rekad.id`; generated URL:
+`https://webmail-client-1yam5v0bb-rekad.vercel.app`.
+
+This releases both the reply-footer ordering and the previously pending
+optional hyperlink display text. Vercel's production build passed. Anonymous
+HTTP checks: home 200, settings 307 to home, and identities 401. The unchanged
+code already passed 285 tests, typecheck, local build and sample-browser
+checks. No signed-in production compose check or real send was performed.
+The deployment blockers recorded below are historical and resolved.
+
 ## 2026-11-03 footer before quoted reply history
 
 New replies now assemble as header, authored reply, footer, then reply
