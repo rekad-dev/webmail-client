@@ -30,6 +30,15 @@ function makeHandler(overrides: Partial<MailNotificationDependencies> = {}) {
     getChanges: async () => ({
       emailState: "state-2",
       newInboxEmailIds: ["email-1"],
+      newInboxMessages: [
+        {
+          id: "email-1",
+          threadId: "thread-1",
+          senderName: "Alice",
+          senderEmail: "alice@example.test",
+          subject: "Hello",
+        },
+      ],
       hasMore: false,
       hasInboxChanges: true,
       reset: false,
@@ -58,6 +67,15 @@ test("authenticates and returns only bounded inbox change metadata", async () =>
       return {
         emailState: "state-2",
         newInboxEmailIds: ["email-1"],
+        newInboxMessages: [
+          {
+            id: "email-1",
+            threadId: "thread-1",
+            senderName: "Alice",
+            senderEmail: "alice@example.test",
+            subject: "Hello",
+          },
+        ],
         hasMore: false,
         hasInboxChanges: true,
         reset: false,
@@ -70,6 +88,15 @@ test("authenticates and returns only bounded inbox change metadata", async () =>
     cacheScope: "opaque-scope",
     emailState: "state-2",
     newInboxEmailIds: ["email-1"],
+    newInboxMessages: [
+      {
+        id: "email-1",
+        threadId: "thread-1",
+        senderName: "Alice",
+        senderEmail: "alice@example.test",
+        subject: "Hello",
+      },
+    ],
     hasMore: false,
     hasInboxChanges: true,
     reset: false,

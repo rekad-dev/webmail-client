@@ -19,17 +19,16 @@ import { SharedAccountNav } from "@/components/mail/shared-account-nav";
 import { MailSearch, type SearchFilters } from "@/components/mail/mail-search";
 import { SettingsView } from "./settings/settings-view";
 import { useSessionGuard } from "@/components/mail/use-session-guard";
+import { useMailNotifications } from "@/components/mail/use-mail-notifications";
 import {
   applyOfflineSyncPage,
   clearOtherOfflineAccounts,
-  commitOfflineNotificationChanges,
   getOfflineNotificationState,
   getOfflineCache,
   MAX_OFFLINE_MESSAGES,
   OfflineCacheLimitError,
   removeOfflineMessage,
   saveOfflineMessage,
-  setOfflineNotificationsEnabled,
   setActiveOfflineScope,
   type OfflineMessageContent,
 } from "../lib/offline/mail-cache.mts";
@@ -76,15 +75,6 @@ interface OfflineSyncBody {
   updated: OfflineUpdatedEmail[];
   destroyed: string[];
   hasMore: boolean;
-  reset: boolean;
-}
-
-interface InboxChangesBody {
-  cacheScope: string;
-  emailState: string;
-  newInboxEmailIds: string[];
-  hasMore: boolean;
-  hasInboxChanges: boolean;
   reset: boolean;
 }
 
@@ -221,56 +211,6 @@ function parseOfflineSyncBody(value: unknown, expectedScope: string): OfflineSyn
     hasMore: body.hasMore,
     reset: body.reset,
   };
-}
-
-function parseInboxChangesBody(value: unknown, expectedScope: string): InboxChangesBody | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const body = value as Record<string, unknown>;
-  if (
-    body.cacheScope !== expectedScope ||
-    typeof body.emailState !== "string" ||
-    !Array.isArray(body.newInboxEmailIds) ||
-    body.newInboxEmailIds.length > 100 ||
-    !body.newInboxEmailIds.every((id) => typeof id === "string" && id.length > 0 && id.length <= 256) ||
-    typeof body.hasMore !== "boolean" ||
-    typeof body.hasInboxChanges !== "boolean" ||
-    typeof body.reset !== "boolean"
-  ) return null;
-  return body as unknown as InboxChangesBody;
-}
-
-async function requestInboxChanges(
-  cacheScope: string,
-  sinceState: string | null,
-  signal?: AbortSignal,
-): Promise<InboxChangesBody> {
-  const response = await fetch("/api/mail/notifications", {
-    method: "POST",
-    credentials: "same-origin",
-    cache: "no-store",
-    signal,
-    headers: {
-      accept: "application/json",
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({ sinceState }),
-  });
-  let body: unknown = null;
-  try {
-    body = await response.json();
-  } catch {
-    // Keep the service error generic.
-  }
-  if (!response.ok) {
-    const error = body && typeof body === "object" && "error" in body &&
-        typeof body.error === "string"
-      ? body.error
-      : "notification_sync_failed";
-    throw new Error(error);
-  }
-  const parsed = parseInboxChangesBody(body, cacheScope);
-  if (!parsed) throw new Error("notification_sync_failed");
-  return parsed;
 }
 
 function textFromSanitizedHtml(html: string): string {
@@ -509,11 +449,9 @@ export function InboxClient({
   const [offlineSavePendingId, setOfflineSavePendingId] = useState<string | null>(null);
   const [offlineSaveError, setOfflineSaveError] = useState<string | null>(null);
   const [notificationsReady, setNotificationsReady] = useState(false);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
-  const [notificationsSupported, setNotificationsSupported] = useState(false);
-  const [notificationStatus, setNotificationStatus] = useState<string | null>(null);
+  const [initialNotificationsEnabled, setInitialNotificationsEnabled] = useState(false);
+  const [notificationStorageAvailable, setNotificationStorageAvailable] = useState(false);
   const offlineSyncPending = useRef(false);
-  const notificationPollRef = useRef<(() => void) | null>(null);
   const [readUpdateError, setReadUpdateError] = useState(false);
   const [isComposeOpen, setIsComposeOpen] = useState(false);
   const [pendingMailboxNavigation, setPendingMailboxNavigation] = useState<{ id: number; action: () => void } | null>(null);
@@ -566,7 +504,6 @@ export function InboxClient({
 
   useEffect(() => {
     if (localPreview) return;
-    setNotificationsSupported("Notification" in window);
     let active = true;
     if (!("serviceWorker" in navigator)) {
       if (OFFLINE_COPIES_ENABLED) setOfflineStatus("Offline copies are available, but this browser does not support an offline page.");
@@ -582,6 +519,7 @@ export function InboxClient({
     }
 
     async function prepareOfflineStorage() {
+      let scope: string;
       try {
         const response = await fetch("/api/mail/offline-scope", {
           method: "GET",
@@ -590,22 +528,34 @@ export function InboxClient({
           headers: { accept: "application/json" },
         });
         const body: unknown = await response.json();
-        const scope = body && typeof body === "object" && "cacheScope" in body
+        const candidate = body && typeof body === "object" && "cacheScope" in body
           ? (body as { cacheScope?: unknown }).cacheScope
           : null;
-        if (!response.ok || typeof scope !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(scope)) {
+        if (!response.ok || typeof candidate !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(candidate)) {
           throw new Error("Offline storage could not be prepared.");
         }
+        scope = candidate;
+      } catch {
+        if (!active) return;
+        setOfflineReady(false);
+        setOfflineStatus("Offline storage is unavailable. Sign in online and try again.");
+        return;
+      }
+
+      if (!active) return;
+      setOfflineScope(scope);
+
+      try {
         await clearOtherOfflineAccounts(scope);
         setActiveOfflineScope(scope);
         const cache = await getOfflineCache(scope);
         const notificationState = await getOfflineNotificationState(scope);
         if (!active) return;
-        setOfflineScope(scope);
         setOfflineCount(cache.messages.length);
         setOfflineSavedIds(new Set(cache.messages.map((message) => message.emailId)));
         setOfflineReady(true);
-        setNotificationsEnabled(notificationState?.enabled ?? false);
+        setNotificationStorageAvailable(true);
+        setInitialNotificationsEnabled(notificationState?.enabled ?? false);
         setNotificationsReady(true);
         setOfflineStatus(cache.messages.length === 0
           ? "Choose Save offline on a message to keep a copy on this device."
@@ -613,6 +563,9 @@ export function InboxClient({
       } catch {
         if (!active) return;
         setOfflineReady(false);
+        setNotificationStorageAvailable(false);
+        setInitialNotificationsEnabled(false);
+        setNotificationsReady(true);
         setOfflineStatus("Offline storage is unavailable. Sign in online and try again.");
       }
     }
@@ -699,81 +652,60 @@ export function InboxClient({
     };
   }, [localPreview, offlineReady, offlineScope, refreshVersion]);
 
+  function openNotificationTarget(target: { emailId: string; threadId: string } | null) {
+    if (localPreview) return;
+    if (isComposeOpen) setIsComposeMinimized(true);
+    showMail();
+    if (sharedAccountId !== null) selectSharedAccount(null);
+    if (target) {
+      openThread(target.threadId);
+      openMessage(target.emailId);
+      return;
+    }
+    const inbox = sharedAccountId === null
+      ? mailboxes?.find((mailbox) => mailbox.role === "inbox")
+      : undefined;
+    if (inbox) {
+      selectMailbox(inbox.id);
+    } else {
+      setFavorites(false);
+      setMailboxId(null);
+      setPosition(0);
+      setOpenEmailId(null);
+      setOpenThreadId(null);
+      setThreadView(null);
+      setEmailDetail(null);
+    }
+  }
+
+  const {
+    notificationsEnabled,
+    notificationsSupported,
+    notificationPermission,
+    notificationStatus,
+    notificationTransport,
+    toggleNotifications,
+    sendTestNotification,
+    pollNow: pollNotificationsNow,
+  } = useMailNotifications({
+    localPreview,
+    offlineScope,
+    notificationsReady,
+    initialEnabled: initialNotificationsEnabled,
+    storageAvailable: notificationStorageAvailable,
+    onInboxChanged: () => setRefreshVersion((value) => value + 1),
+    onOpenTarget: openNotificationTarget,
+    onSessionEnded: () => setActionSessionEnded(true),
+  });
+
   useEffect(() => {
     if (localPreview) return;
-    if (!notificationsReady || !offlineScope) return;
-    let active = true;
-    let running = false;
-    const controller = new AbortController();
-
-    async function pollInboxChanges() {
-      if (
-        running ||
-        !navigator.onLine ||
-        document.visibilityState !== "visible" ||
-        controller.signal.aborted
-      ) return;
-      running = true;
-      try {
-        const state = await getOfflineNotificationState(offlineScope!);
-        let sinceState = state?.emailState || null;
-        for (let pageIndex = 0; pageIndex < 5; pageIndex += 1) {
-          const page = await requestInboxChanges(offlineScope!, sinceState, controller.signal);
-          const committed = await commitOfflineNotificationChanges(
-            offlineScope!,
-            sinceState,
-            page.emailState,
-            page.newInboxEmailIds,
-          );
-          if (!committed.committed) break;
-          if (!active) return;
-          if (page.hasInboxChanges) setRefreshVersion((value) => value + 1);
-          if (
-            notificationsSupported &&
-            committed.enabled &&
-            committed.notifyEmailIds.length > 0 &&
-            Notification.permission === "granted"
-          ) {
-            const count = committed.notifyEmailIds.length;
-            try {
-              new Notification("New mail", {
-                body: count === 1 ? "A new message arrived." : `${count} new messages arrived.`,
-                tag: `rekad-new-mail-${Date.now()}`,
-              });
-            } catch {
-              // Polling and list refresh continue when the browser blocks a notification.
-            }
-          }
-          sinceState = page.emailState;
-          if (!page.hasMore) break;
-        }
-        if (active) setNotificationStatus(null);
-      } catch {
-        if (active && !controller.signal.aborted) {
-          setNotificationStatus("New mail checks are temporarily unavailable. Use Refresh to retry.");
-        }
-      } finally {
-        running = false;
-      }
-    }
-
-    const onVisible = () => {
-      if (document.visibilityState === "visible") void pollInboxChanges();
-    };
-    notificationPollRef.current = () => void pollInboxChanges();
-    window.addEventListener("online", pollInboxChanges);
-    document.addEventListener("visibilitychange", onVisible);
-    const interval = window.setInterval(() => void pollInboxChanges(), 60_000);
-    void pollInboxChanges();
+    const inboxUnread = mailboxes?.find((mailbox) => mailbox.role === "inbox")?.unreadEmails ?? 0;
+    document.title = inboxUnread > 0 ? `(${inboxUnread}) rekad Mail` : "rekad Mail";
     return () => {
-      active = false;
-      controller.abort();
-      window.clearInterval(interval);
-      window.removeEventListener("online", pollInboxChanges);
-      document.removeEventListener("visibilitychange", onVisible);
-      if (notificationPollRef.current) notificationPollRef.current = null;
+      document.title = "rekad Mail";
     };
-  }, [localPreview, notificationsReady, notificationsSupported, offlineScope]);
+  }, [localPreview, mailboxes]);
 
   useEffect(() => {
     if (localPreview) return;
@@ -1104,7 +1036,7 @@ export function InboxClient({
     if (target === "message") setDetailLoading(true);
     else if (target === "thread") setThreadLoading(true);
     else setIsLoading(true);
-    notificationPollRef.current?.();
+    pollNotificationsNow();
     if (openEmailId) {
       setDetailRefreshVersion((value) => value + 1);
       setRefreshVersion((value) => value + 1);
@@ -1547,39 +1479,6 @@ export function InboxClient({
     }
   }
 
-  async function toggleNewMailNotifications(): Promise<void> {
-    if (localPreview) return;
-    if (!offlineScope || !notificationsReady) return;
-    setNotificationStatus(null);
-    try {
-      if (notificationsEnabled) {
-        await setOfflineNotificationsEnabled(offlineScope, false);
-        setNotificationsEnabled(false);
-        setNotificationStatus("New mail alerts are off for this account.");
-        return;
-      }
-      if (!notificationsSupported) {
-        setNotificationStatus("This browser does not support notifications.");
-        return;
-      }
-      let permission = Notification.permission;
-      if (permission === "default") {
-        permission = await Notification.requestPermission();
-      }
-      if (permission !== "granted") {
-        setNotificationStatus(permission === "denied"
-          ? "Notifications are blocked in browser settings."
-          : "Notifications were not enabled.");
-        return;
-      }
-      await setOfflineNotificationsEnabled(offlineScope, true);
-      setNotificationsEnabled(true);
-      setNotificationStatus("New mail alerts are on for this account.");
-    } catch {
-      setNotificationStatus("The notification preference could not be saved.");
-    }
-  }
-
   function closeComposeDialog() {
     setIsComposeOpen(false);
     setIsComposeMinimized(false);
@@ -1654,9 +1553,9 @@ export function InboxClient({
             <Button className="refresh-button" disabled={localPreview || currentViewLoading} aria-busy={currentViewLoading}
               onClick={refresh} aria-label={refreshLabel} size="icon" variant="ghost"
               title={refreshLabel}><MailIcon name="refresh" size={18} /></Button>
-            <Button className="header-notification" disabled={localPreview || !notificationsSupported || !notificationsReady}
+            <Button className="header-notification" disabled={localPreview || !notificationsReady || (!notificationsEnabled && !notificationsSupported)}
               aria-label={notificationsEnabled ? "Turn off new mail alerts" : "Enable new mail alerts"}
-              aria-pressed={notificationsEnabled} onClick={() => void toggleNewMailNotifications()} size="icon" variant="ghost"
+              aria-pressed={notificationsEnabled} onClick={() => void toggleNotifications()} size="icon" variant="ghost"
               title={!notificationsSupported ? "Browser notifications are unavailable" : notificationsEnabled ? "New mail alerts are enabled" : "Enable new mail alerts"}>
               <MailIcon name="bell" size={18} />
             </Button>
@@ -1731,7 +1630,21 @@ export function InboxClient({
         ) : null}
 
         {showSettings ? (
-          <SettingsView accountName={displayAccount} pictureVersion={pictureVersion} pictureAvailable={profilePictureAvailable} onPictureChange={setPictureVersion} />
+          <SettingsView
+            accountName={displayAccount}
+            pictureVersion={pictureVersion}
+            pictureAvailable={profilePictureAvailable}
+            onPictureChange={setPictureVersion}
+            notifications={localPreview ? undefined : {
+              ready: notificationsReady,
+              supported: notificationsSupported,
+              enabled: notificationsEnabled,
+              permission: notificationPermission,
+              transport: notificationTransport,
+              onToggle: () => void toggleNotifications(),
+              onSendTest: sendTestNotification,
+            }}
+          />
         ) : <>
         <div className={`mail-workspace${openThreadId || openEmailId ? " has-open-message" : ""}`}>
         <section className="conversation-pane" aria-label="Message list">

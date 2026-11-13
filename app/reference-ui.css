@@ -1041,6 +1041,11 @@ input[type="checkbox"]:disabled { cursor: default; opacity: .45; }
 .settings-section .password-change-field input { font-size: var(--text-sm); font-weight: 400; }
 .settings-section .password-change-submit { justify-self: start; padding: 0 18px; }
 .settings-unavailable { margin: 0; color: var(--muted); font-size: var(--text-sm); line-height: 1.5; }
+.settings-notifications { display: grid; align-content: start; gap: 10px; }
+.settings-notifications-status { margin: 0; color: var(--ink); font-size: var(--text-sm); line-height: 1.5; }
+.settings-notifications-meta { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
+.settings-notifications-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
+.settings-notifications-actions button { min-height: 44px; }
 @media (max-width: 760px) {
   .settings-header { min-height: 64px; padding: 0 16px; }
   .settings-page { width: min(100% - 32px, 1040px); padding: 32px 0 56px; }

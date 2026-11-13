@@ -22,6 +22,7 @@ import {
   createMailAttachmentReceipt,
   resolveMailAttachmentReceipts,
 } from "./mail-attachment-receipt.mts";
+import { expandJmapEventSourceUrl } from "./event-source.mts";
 
 const CORE_CAPABILITY = "urn:ietf:params:jmap:core";
 const MAIL_CAPABILITY = "urn:ietf:params:jmap:mail";
@@ -363,9 +364,18 @@ export interface JmapOfflineSyncResult {
   reset: boolean;
 }
 
+export interface JmapNewInboxMessage {
+  id: string;
+  threadId: string;
+  senderName: string;
+  senderEmail: string;
+  subject: string;
+}
+
 export interface JmapInboxChangesResult {
   emailState: string;
   newInboxEmailIds: string[];
+  newInboxMessages: JmapNewInboxMessage[];
   hasMore: boolean;
   hasInboxChanges: boolean;
   reset: boolean;
@@ -2358,6 +2368,82 @@ async function getInboxMembershipForEmails(
   return inInbox;
 }
 
+const MAX_NOTIFICATION_MESSAGES = 10;
+
+function sanitizeNotificationText(value: unknown, maxLength: number): string {
+  const bounded = boundedString(value, maxLength);
+  if (!bounded) return "";
+  return bounded.replace(/[\u0000-\u001f\u007f]+/g, " ").trim();
+}
+
+function notificationSummaryRequest(accountId: string, ids: string[], callId: string) {
+  return {
+    using: [CORE_CAPABILITY, MAIL_CAPABILITY],
+    methodCalls: [[
+      "Email/get",
+      { accountId, ids, properties: ["id", "threadId", "from", "subject"] },
+      callId,
+    ]],
+  };
+}
+
+async function getNewInboxMessageSummaries(
+  context: JmapApiContext,
+  emailIds: string[],
+): Promise<JmapNewInboxMessage[]> {
+  if (emailIds.length === 0) return [];
+  const targetIds = emailIds.slice(-MAX_NOTIFICATION_MESSAGES);
+  const byId = new Map<string, JmapNewInboxMessage>();
+  const batchSize = maxObjectsInGet(context);
+
+  for (let start = 0; start < targetIds.length; start += batchSize) {
+    const requestedIds = targetIds.slice(start, start + batchSize);
+    const callId = `phase8-notification-summary-${start}`;
+    const responseJson = await postJmapApi({
+      apiUrl: context.apiUrl,
+      authorization: context.authorization,
+      requestBody: notificationSummaryRequest(context.accountId, requestedIds, callId),
+      methodName: "Email/get notification summaries",
+      fetchImpl: context.fetchImpl,
+      maxResponseBytes: 256 * 1024,
+    });
+    const { payload } = getMethodResponse(responseJson, callId, "Email/get");
+    if (
+      payload.accountId !== context.accountId ||
+      !Array.isArray(payload.list) ||
+      !Array.isArray(payload.notFound)
+    ) {
+      throw new JmapPocError("The JMAP API returned invalid notification summaries.");
+    }
+    const requested = new Set(requestedIds);
+    for (const candidate of payload.list) {
+      const email = objectValue(candidate);
+      if (!email || typeof email.id !== "string" || !requested.has(email.id) || byId.has(email.id)) {
+        continue;
+      }
+      const from = parseEmailAddresses(email.from)[0];
+      const threadId =
+        typeof email.threadId === "string" &&
+        email.threadId.length > 0 &&
+        email.threadId.length <= 256
+          ? email.threadId
+          : email.id;
+      byId.set(email.id, {
+        id: email.id,
+        threadId,
+        senderName: sanitizeNotificationText(from?.name, 128),
+        senderEmail: sanitizeNotificationText(from?.email, 256),
+        subject: sanitizeNotificationText(email.subject, 256),
+      });
+    }
+  }
+
+  return targetIds.flatMap((id) => {
+    const message = byId.get(id);
+    return message ? [message] : [];
+  });
+}
+
 export async function runJmapOAuthInboxChanges({
   accessToken,
   expectedAccountId,
@@ -2394,6 +2480,7 @@ export async function runJmapOAuthInboxChanges({
     return {
       emailState,
       newInboxEmailIds: [],
+      newInboxMessages: [],
       hasMore: false,
       hasInboxChanges: false,
       reset: true,
@@ -2420,6 +2507,7 @@ export async function runJmapOAuthInboxChanges({
     return {
       emailState: await getCurrentEmailState(context, EMAIL_NOTIFICATION_STATE_GET_CALL_ID),
       newInboxEmailIds: [],
+      newInboxMessages: [],
       hasMore: false,
       hasInboxChanges: false,
       reset: true,
@@ -2446,12 +2534,16 @@ export async function runJmapOAuthInboxChanges({
   }
 
   let newInboxEmailIds: string[] = [];
+  let newInboxMessages: JmapNewInboxMessage[] = [];
   const candidateIds = [...new Set([...created, ...updated])];
   if (candidateIds.length > 0) {
     const inboxId = (await fetchMailboxList(context)).find((mailbox) => mailbox.role === "inbox")?.id;
     if (inboxId) {
       const inInbox = await getInboxMembershipForEmails(context, candidateIds, inboxId);
       newInboxEmailIds = created.filter((emailId) => inInbox.has(emailId));
+      if (newInboxEmailIds.length > 0) {
+        newInboxMessages = await getNewInboxMessageSummaries(context, newInboxEmailIds);
+      }
     }
   }
   if (isJmapOperationDeadlineExceeded(operationFetchImpl)) {
@@ -2460,10 +2552,80 @@ export async function runJmapOAuthInboxChanges({
   return {
     emailState,
     newInboxEmailIds,
+    newInboxMessages,
     hasMore: changesPayload.hasMoreChanges,
     hasInboxChanges: allIds.size > 0,
     reset: false,
   };
+}
+
+export type JmapEventStreamResult =
+  | { supported: false }
+  | { supported: true; accountId: string; response: Response };
+
+export async function openJmapOAuthEventStream({
+  accessToken,
+  expectedAccountId,
+  sessionUrl = "https://mail.rekad.id/.well-known/jmap",
+  trustedOrigins = ["https://mail.rekad.id"],
+  allowInsecureHttp = false,
+  signal,
+  fetchImpl = fetch,
+}: {
+  accessToken: string;
+  expectedAccountId: string;
+  sessionUrl?: string;
+  trustedOrigins?: string[];
+  allowInsecureHttp?: boolean;
+  signal?: AbortSignal;
+  fetchImpl?: typeof fetch;
+}): Promise<JmapEventStreamResult> {
+  const parsedSessionUrl = parseUrl(sessionUrl, undefined, allowInsecureHttp);
+  const allowedOrigins = parseTrustedOrigins(trustedOrigins, parsedSessionUrl, allowInsecureHttp);
+  const context = await createOAuthJmapContext({
+    accessToken,
+    expectedAccountId,
+    sessionUrl,
+    trustedOrigins,
+    allowInsecureHttp,
+    fetchImpl,
+  });
+  if (!context.eventSourceUrl) {
+    return { supported: false };
+  }
+
+  let targetUrl: URL;
+  try {
+    targetUrl = expandJmapEventSourceUrl(context.eventSourceUrl, allowedOrigins, allowInsecureHttp);
+  } catch {
+    return { supported: false };
+  }
+
+  const response = await fetchImpl(targetUrl, {
+    method: "GET",
+    headers: {
+      authorization: context.authorization,
+      accept: "text/event-stream",
+      "cache-control": "no-cache",
+    },
+    redirect: "error",
+    signal,
+  });
+
+  if (response.status === 404 || response.status === 405 || response.status === 501) {
+    void response.body?.cancel().catch(() => undefined);
+    return { supported: false };
+  }
+  if (!response.ok || !response.body) {
+    void response.body?.cancel().catch(() => undefined);
+    throw new JmapPocError(`JMAP EventSource failed with HTTP ${response.status}.`);
+  }
+  const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
+  if (contentType !== "text/event-stream") {
+    void response.body.cancel().catch(() => undefined);
+    return { supported: false };
+  }
+  return { supported: true, accountId: context.accountId, response };
 }
 
 function emailMarkReadRequest(accountId: string, emailId: string) {
@@ -2517,6 +2679,7 @@ interface JmapApiContext {
   apiUrl: URL;
   uploadUrl: URL;
   downloadUrl: URL;
+  eventSourceUrl?: URL;
   accountId: string;
   /** The OAuth session's own account; accountId differs only for a shared account. */
   primaryAccountId: string;
@@ -2595,6 +2758,7 @@ async function createJmapApiContext({
     apiUrl: endpoints.apiUrl,
     uploadUrl: endpoints.uploadUrl,
     downloadUrl: endpoints.downloadUrl,
+    ...(endpoints.eventSourceUrl ? { eventSourceUrl: endpoints.eventSourceUrl } : {}),
     accountId,
     primaryAccountId,
     readOnly,

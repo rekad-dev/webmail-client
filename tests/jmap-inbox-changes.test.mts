@@ -27,6 +27,7 @@ function makeFetch(options: {
   accountId?: string;
   changes?: unknown;
   memberships?: Record<string, string[]>;
+  summaries?: Record<string, { threadId?: string; from?: Array<{ name?: string; email: string }>; subject?: string }>;
 } = {}) {
   const requests: Array<Record<string, unknown>> = [];
   const fetchImpl: typeof fetch = async (input, init) => {
@@ -73,11 +74,21 @@ function makeFetch(options: {
           callId,
         ]] });
       }
-      const list = ids.map((id) => ({
-        id,
-        mailboxIds: (options.memberships?.[id] ?? (id === "new-inbox" ? ["inbox-id"] : []))
-          .reduce<Record<string, boolean>>((result, mailboxId) => ({ ...result, [mailboxId]: true }), {}),
-      }));
+      const list = ids.map((id) => {
+        const summary = options.summaries?.[id];
+        return {
+          id,
+          mailboxIds: (options.memberships?.[id] ?? (id === "new-inbox" ? ["inbox-id"] : []))
+            .reduce<Record<string, boolean>>((result, mailboxId) => ({ ...result, [mailboxId]: true }), {}),
+          ...(summary ?? (id === "new-inbox"
+            ? {
+                threadId: "thread-1",
+                from: [{ name: "Alice\n", email: "alice@example.test" }],
+                subject: "Quarterly\tupdate",
+              }
+            : {})),
+        };
+      });
       return Response.json({ methodResponses: [[
         "Email/get",
         { accountId: "account-1", state: "metadata-state", list, notFound: [] },
@@ -101,6 +112,7 @@ test("establishes a no-notification baseline for historical mail", async () => {
   assert.deepEqual(result, {
     emailState: "baseline-state",
     newInboxEmailIds: [],
+    newInboxMessages: [],
     hasMore: false,
     hasInboxChanges: false,
     reset: true,
@@ -111,27 +123,45 @@ test("establishes a no-notification baseline for historical mail", async () => {
   assert.deepEqual(args.ids, []);
 });
 
-test("classifies only newly created Inbox membership without requesting message content", async () => {
+test("classifies newly created Inbox membership and fetches bounded metadata without message bodies", async () => {
   const { fetchImpl, requests } = makeFetch();
   const result = await runJmapOAuthInboxChanges({ ...common, sinceState: "state-1", fetchImpl });
   assert.deepEqual(result, {
     emailState: "state-2",
     newInboxEmailIds: ["new-inbox"],
+    newInboxMessages: [
+      {
+        id: "new-inbox",
+        threadId: "thread-1",
+        senderName: "Alice",
+        senderEmail: "alice@example.test",
+        subject: "Quarterly update",
+      },
+    ],
     hasMore: false,
     hasInboxChanges: true,
     reset: false,
   });
-  const emailGet = requests.find((request) => {
+  const emailGets = requests.filter((request) => {
     const call = (request.methodCalls as unknown[][])[0];
     return call?.[0] === "Email/get";
   });
-  assert.ok(emailGet);
-  const [method, args] = (emailGet.methodCalls as unknown[][])[0] as [string, Record<string, unknown>];
-  assert.equal(method, "Email/get");
-  assert.deepEqual(args.properties, ["id", "mailboxIds"]);
-  assert.equal("bodyProperties" in args, false);
-  assert.equal("fetchTextBodyValues" in args, false);
-  assert.deepEqual(args.ids, ["new-inbox", "updated-outside"]);
+  assert.equal(emailGets.length, 2);
+
+  const [, membershipArgs] = (emailGets[0]!.methodCalls as unknown[][])[0] as [string, Record<string, unknown>];
+  assert.deepEqual(membershipArgs.properties, ["id", "mailboxIds"]);
+  assert.deepEqual(membershipArgs.ids, ["new-inbox", "updated-outside"]);
+
+  const [, summaryArgs] = (emailGets[1]!.methodCalls as unknown[][])[0] as [string, Record<string, unknown>];
+  assert.deepEqual(summaryArgs.properties, ["id", "threadId", "from", "subject"]);
+  assert.deepEqual(summaryArgs.ids, ["new-inbox"]);
+
+  for (const req of emailGets) {
+    const [, args] = (req.methodCalls as unknown[][])[0] as [string, Record<string, unknown>];
+    assert.equal("bodyProperties" in args, false);
+    assert.equal("fetchTextBodyValues" in args, false);
+    assert.equal("fetchHTMLBodyValues" in args, false);
+  }
 });
 
 test("re-baselines when JMAP cannot calculate an old cursor", async () => {
@@ -141,6 +171,7 @@ test("re-baselines when JMAP cannot calculate an old cursor", async () => {
   const result = await runJmapOAuthInboxChanges({ ...common, sinceState: "old-state", fetchImpl });
   assert.equal(result.emailState, "baseline-state");
   assert.deepEqual(result.newInboxEmailIds, []);
+  assert.deepEqual(result.newInboxMessages, []);
   assert.equal(result.reset, true);
 });
 
