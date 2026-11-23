@@ -2,8 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+const REMOTE_IMAGE_PROXY = "/api/mail/remote-image";
+
 function policy(showRemoteImages: boolean) {
-  return `default-src 'none'; script-src 'none'; img-src blob:${showRemoteImages ? " https: http:" : ""}; style-src 'unsafe-inline'; font-src 'none'; media-src 'none'; connect-src 'none'; object-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'`;
+  // Remote images only load through this app's proxy, never straight from the sender.
+  return `default-src 'none'; script-src 'none'; img-src blob:${showRemoteImages ? " 'self'" : ""}; style-src 'unsafe-inline'; font-src 'none'; media-src 'none'; connect-src 'none'; object-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'`;
 }
 
 const READING_STYLES = `
@@ -89,7 +92,7 @@ export function MessageHtmlFrame({
     for (const image of doc.querySelectorAll<HTMLImageElement>("img[data-cid], img[data-remote-src]")) {
       const cid = image.getAttribute("data-cid");
       const remote = image.getAttribute("data-remote-src");
-      const src = cid && Object.hasOwn(inlineImages, cid) ? inlineImages[cid] : !cid && showRemoteImages ? remote : null;
+      const src = cid && Object.hasOwn(inlineImages, cid) ? inlineImages[cid] : !cid && showRemoteImages && remote ? `${REMOTE_IMAGE_PROXY}?url=${encodeURIComponent(remote)}` : null;
       image.referrerPolicy = "no-referrer";
       if (src) { image.addEventListener("load", fit, { once: true }); image.src = src; }
       else image.removeAttribute("src");
