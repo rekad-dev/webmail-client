@@ -71,3 +71,11 @@ test("keeps button backgrounds so light link text stays visible", () => {
   assert.match(result.html, /border-radius:4px/);
   assert.match(result.html, /display:inline-block/);
 });
+
+test("keeps sizing and layout attributes so avatars and tables render at their intended size", () => {
+  const result = sanitizeEmailHtml('<table width="100%" cellpadding="0" bgcolor="#f8f8f8"><tr><td width="32" valign="middle" style="vertical-align:middle"><img src="https://cdn.example/a.png" width="32" height="32" style="border-radius:50%;width:32px"></td></tr></table>');
+  assert.match(result.html, /<img[^>]*width="32"[^>]*height="32"/);
+  assert.match(result.html, /valign="middle"/);
+  assert.match(result.html, /<table[^>]*width="100%"/);
+  assert.match(result.html, /border-radius:50%/);
+});

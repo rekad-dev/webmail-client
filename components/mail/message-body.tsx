@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
 import { ExternalLinkDialog } from "./external-link-dialog";
 import { MessageHtmlFrame } from "./message-html-frame";
 import type { EmailDetail } from "./types";
@@ -14,7 +13,6 @@ export function MessageBody({
   accountId?: string | null;
 }) {
   const [pendingLink, setPendingLink] = useState<string | null>(null);
-  const [showRemoteImages, setShowRemoteImages] = useState(false);
   const [inlineSources, setInlineSources] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -51,13 +49,7 @@ export function MessageBody({
     <section className="message-body-section" aria-label="Message body">
       {detail.htmlBody ? (
         <>
-          <MessageHtmlFrame html={detail.htmlBody} inlineImages={inlineSources} showRemoteImages={showRemoteImages} onLinkClick={setPendingLink} />
-          {detail.htmlBody.includes("data-remote-src=") && !showRemoteImages ? (
-            <div className="message-remote-images">
-              <span>Remote images are blocked to protect your privacy.</span>
-              <Button onClick={() => setShowRemoteImages(true)} size="sm" variant="outline">Show images</Button>
-            </div>
-          ) : null}
+          <MessageHtmlFrame html={detail.htmlBody} inlineImages={inlineSources} showRemoteImages onLinkClick={setPendingLink} />
         </>
       ) : detail.textBody ? (
         <pre className="message-plain-body">{detail.textBody}</pre>
