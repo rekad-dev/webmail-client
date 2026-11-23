@@ -89,7 +89,10 @@ function imageReference(value: string): { cid?: string; remote?: string } {
   return {};
 }
 
-const color = /^(?:#[0-9a-f]{3,8}|(?:black|white|red|blue|green|gray|grey|yellow|orange|purple|transparent)|rgba?\(\s*[\d.,%\s]+\))$/i;
+const importantSuffix = "(?:\\s*!important)?";
+const colorBody = "(?:#[0-9a-f]{3,8}|(?:black|white|red|blue|green|gray|grey|yellow|orange|purple|transparent|inherit)|(?:rgba?|hsla?)\\(\\s*[\\d.,%\\s/deg]+\\))";
+const color = new RegExp(`^${colorBody}${importantSuffix}$`, "i");
+const solidBorder = new RegExp(`^(?:0|\\d{1,2}px)\\s+(?:solid|none)\\s+${colorBody}${importantSuffix}$`, "i");
 const length = /^(?:0|\d{1,4}(?:\.\d{1,2})?(?:px|pt|em|rem|%))(?:\s+(?:0|\d{1,4}(?:\.\d{1,2})?(?:px|pt|em|rem|%))){0,3}$/i;
 
 export function sanitizeEmailHtml(dirtyHtml: string): SanitizedEmailHtml {
@@ -112,7 +115,9 @@ export function sanitizeEmailHtml(dirtyHtml: string): SanitizedEmailHtml {
     disallowedTagsMode: "discard",
     nestingLimit: 50,
     allowedStyles: { "*": {
-      color: [color], "background-color": [color], "font-size": [length],
+      color: [color], "background-color": [color], background: [color],
+      display: [/^(?:inline|inline-block|block|table|table-cell)$/i], "border-radius": [length],
+      border: [solidBorder, /^none$/i], "font-size": [length],
       "font-weight": [/^(?:normal|bold|[1-9]00)$/i], "font-style": [/^(?:normal|italic)$/i],
       "text-align": [/^(?:left|right|center|justify)$/i], "text-decoration": [/^(?:none|underline|line-through)$/i],
       "line-height": [/^(?:normal|\d{1,3}(?:\.\d{1,2})?(?:px|pt|em|%)?)$/i],

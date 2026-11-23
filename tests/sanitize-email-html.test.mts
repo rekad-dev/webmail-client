@@ -64,3 +64,10 @@ test("keeps only a bounded number of distinct destinations", () => {
 
   assert.equal(result.externalLinks.length, 50);
 });
+
+test("keeps button backgrounds so light link text stays visible", () => {
+  const result = sanitizeEmailHtml('<a href="https://linear.app/x" style="display:inline-block;padding:12px 16px;color:#fff !important;background:#5E6AD2;border-radius:4px;border:1px solid #5E6AD2">Get invite link</a>');
+  assert.match(result.html, /background:#5E6AD2/i);
+  assert.match(result.html, /border-radius:4px/);
+  assert.match(result.html, /display:inline-block/);
+});
